@@ -1,0 +1,379 @@
+/**
+ * ai.ts — InfinityCN Multi-Provider AI Engine (V12)
+ *
+ * Providers:
+ *   • 'none'   → fast offline algorithms only (no API calls)
+ *   • 'chrome' → window.ai.languageModel (Gemini Nano, in-browser)
+ *   • 'gemini' → Google Generative Language REST API
+ *   • 'ollama' → local Ollama server
+ *
+ * All public functions fall back gracefully to algorithms.ts on any failure.
+ */
+
+import {
+    extractCharacters,
+    textRankSummarise,
+    computeTfIdf,
+} from './algorithms';
+import type {
+    Character,
+    StyleAnalysis,
+    ChapterInsight,
+    AIConnectionStatus,
+} from '../types';
+
+// ─── PUBLIC CONFIG TYPE ────────────────────────────────────────────────────────
+
+export interface AIConfig {
+    provider: 'none' | 'chrome' | 'gemini' | 'ollama';
+    geminiKey: string;
+    ollamaUrl: string;
+    ollamaModel: string;
+}
+
+// ─── CHROME NANO GLOBAL TYPINGS ────────────────────────────────────────────────
+
+declare global {
+    interface Window {
+        ai?: {
+            languageModel: {
+                capabilities: () => Promise<{ available: 'readily' | 'after-download' | 'no' }>;
+                create: (options?: Record<string, unknown>) => Promise<{
+                    prompt: (text: string) => Promise<string>;
+                    destroy: () => void;
+                }>;
+            };
+        };
+    }
+}
+
+// ═══════════════════════════════════════════════════════════
+// ── RETRY HELPER (transient errors: 429, 503, network) ─────
+// ═══════════════════════════════════════════════════════════
+
+async function withRetry<T>(fn: () => Promise<T>, retries = 1, delayMs = 2000): Promise<T> {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+            return await fn();
+        } catch (err: unknown) {
+            const isRetryable = err instanceof Error &&
+                (err.message.includes('429') || err.message.includes('503') || err.message.includes('Failed to fetch'));
+            if (attempt < retries && isRetryable) {
+                await new Promise(r => setTimeout(r, delayMs * (attempt + 1)));
+                continue;
+            }
+            throw err;
+        }
+    }
+    throw new Error('Unreachable');
+}
+
+// ═══════════════════════════════════════════════════════════
+// ── BASE ROUTER (single source of truth for all providers) ─
+// ═══════════════════════════════════════════════════════════
+
+async function callAI(prompt: string, config: AIConfig): Promise<string> {
+    if (config.provider === 'none') throw new Error('AI_DISABLED');
+
+    // ── CHROME NANO ──────────────────────────────────────────
+    if (config.provider === 'chrome') {
+        if (!window.ai?.languageModel) {
+            throw new Error('Chrome AI is not available in this browser. Enable it in chrome://flags.');
+        }
+        const caps = await window.ai.languageModel.capabilities();
+        if (caps.available === 'no') throw new Error('Chrome AI model is unavailable (may need to download).');
+
+        const session = await window.ai.languageModel.create({
+            systemPrompt: 'You are a literary analyst. Output strictly valid JSON only — no markdown blocks, no surrounding text.'
+        });
+        try {
+            return await session.prompt(prompt);
+        } finally {
+            session.destroy();
+        }
+    }
+
+    // ── GEMINI ────────────────────────────────────────────────
+    if (config.provider === 'gemini') {
+        if (!config.geminiKey) throw new Error('Gemini API key is not set.');
+        const res = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-goog-api-key': config.geminiKey,
+                },
+                signal: AbortSignal.timeout(30_000),
+                body: JSON.stringify({
+                    system_instruction: {
+                        parts: [{ text: 'You are a precise literary analyst. Output strictly valid JSON only — no markdown, no explanation.' }]
+                    },
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: { response_mime_type: 'application/json', temperature: 0.4 }
+                })
+            }
+        );
+        if (!res.ok) {
+            const errBody = await res.text();
+            throw new Error(`Gemini API error ${res.status}: ${errBody.slice(0, 200)}`);
+        }
+        const data = await res.json();
+        return data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+    }
+
+    // ── OLLAMA ────────────────────────────────────────────────
+    if (config.provider === 'ollama') {
+        const url = `${config.ollamaUrl.replace(/\/$/, '')}/api/generate`;
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: AbortSignal.timeout(30_000),
+            body: JSON.stringify({
+                model: config.ollamaModel || 'llama3',
+                prompt: `You are a precise literary analyst. Output strictly valid JSON only — no markdown, no explanation.\n\n${prompt}`,
+                stream: false,
+                format: 'json',
+            })
+        });
+        if (!res.ok) throw new Error(`Ollama error ${res.status}: ${res.statusText}`);
+        const data = await res.json();
+        return data.response ?? '';
+    }
+
+    throw new Error(`Unknown provider: ${config.provider}`);
+}
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
+
+/** Strip accidental markdown code fences from LLM output */
+function stripFences(text: string): string {
+    return text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+}
+
+/** Parse JSON from LLM output, tolerating markdown code fences */
+function parseJSON<T>(raw: string): T {
+    return JSON.parse(stripFences(raw)) as T;
+}
+
+// ═══════════════════════════════════════════════════════════
+// ── PUBLIC TASK FUNCTIONS ───────────────────────────────────
+// ═══════════════════════════════════════════════════════════
+
+/**
+ * Test whether the configured AI provider is reachable.
+ * Returns a status object — does NOT throw.
+ */
+export async function testConnection(config: AIConfig): Promise<AIConnectionStatus> {
+    if (config.provider === 'none') {
+        return { ok: false, provider: 'none', message: 'AI is disabled — using algorithms.' };
+    }
+
+    const t0 = performance.now();
+    try {
+        const testPrompt = 'Reply with exactly this JSON: {"ok":true}';
+        const raw = await callAI(testPrompt, config);
+        const parsed = parseJSON<{ ok?: boolean }>(raw);
+        const latencyMs = Math.round(performance.now() - t0);
+
+        if (parsed.ok) {
+            return {
+                ok: true, provider: config.provider,
+                message: `Connected successfully.`,
+                latencyMs,
+            };
+        }
+        return { ok: false, provider: config.provider, message: 'Unexpected response from model.', latencyMs };
+    } catch (err) {
+        return {
+            ok: false, provider: config.provider,
+            message: err instanceof Error ? err.message : 'Unknown error.',
+        };
+    }
+}
+
+/**
+ * AI-Enhanced Character Codex.
+ * Generates rich narrative character descriptions merged with algorithmic stats.
+ * Falls back to pure NER on failure.
+ */
+export async function enhanceCharacters(text: string, config: AIConfig): Promise<Character[]> {
+    const algoStats = extractCharacters(text, 20);
+
+    const toCharacter = (c: { name: string; firstContext?: string; frequency?: number; sentiment?: number; honorific?: string }): Character => ({
+        name: c.name,
+        description: c.firstContext ? `First appears: "${c.firstContext}"` : '',
+        frequency: c.frequency,
+        sentiment: c.sentiment,
+        honorific: c.honorific,
+    });
+
+    if (config.provider === 'none') {
+        return algoStats.slice(0, 10).map(toCharacter);
+    }
+
+    try {
+        const prompt = `Analyze the following story excerpt and extract the 3-8 most important recurring characters.
+For each provide a 'description': 2-3 vivid sentences detailing personality, role, and current situation.
+
+Text (first 15000 chars):
+${text.substring(0, 15000)}
+
+Return a JSON array ONLY:
+[{"name":"Character Name","description":"Rich narrative description."}]`;
+
+        const raw = await withRetry(() => callAI(prompt, config));
+        const parsed = parseJSON<{ name: string; description?: string }[]>(raw);
+        if (!Array.isArray(parsed)) throw new Error('Expected JSON array');
+
+        return parsed.map((char) => {
+            const stats = algoStats.find(a =>
+                a.name.toLowerCase().includes(char.name.toLowerCase()) ||
+                char.name.toLowerCase().includes(a.name.toLowerCase())
+            );
+            return {
+                name: char.name,
+                description: char.description ?? 'No description available.',
+                frequency: stats?.frequency,
+                sentiment: stats?.sentiment,
+                honorific: stats?.honorific,
+            };
+        });
+    } catch (err) {
+        console.warn('[AI] enhanceCharacters fallback:', err);
+        return algoStats.slice(0, 10).map(toCharacter);
+    }
+}
+
+/**
+ * AI-Enhanced Story Recap.
+ * Writes a cinematic narrative summary. Falls back to TextRank.
+ */
+export async function enhanceRecap(text: string, config: AIConfig): Promise<string> {
+    if (config.provider === 'none') {
+        return textRankSummarise(text, 3).summary;
+    }
+
+    try {
+        const prompt = `Write a gripping, cinematic 2-3 paragraph summary of the following story excerpt.
+Focus on atmosphere, drama, and character tension. Do NOT start with "In this chapter" or "The text".
+
+Text (first 15000 chars):
+${text.substring(0, 15000)}
+
+Return JSON ONLY:
+{"summary":"Your cinematic recap here."}`;
+
+        const raw = await withRetry(() => callAI(prompt, config));
+        const parsed = parseJSON<{ summary?: string }>(raw);
+        if (typeof parsed.summary !== 'string') throw new Error('Invalid shape');
+        return parsed.summary;
+    } catch (err) {
+        console.warn('[AI] enhanceRecap fallback:', err);
+        return textRankSummarise(text, 3).summary;
+    }
+}
+
+/**
+ * AI Genre & Style Analysis.
+ * Returns genre, narrative voice, pacing style, themes, and an iconic quote.
+ * Falls back to keyword extraction.
+ */
+export async function analyseStyle(text: string, config: AIConfig): Promise<StyleAnalysis> {
+    const fallback = (): StyleAnalysis => {
+        const sentences = text.substring(0, 8000).split(/(?<=[.!?])\s+/).filter(s => s.length > 10);
+        const topTerms = computeTfIdf(sentences.slice(0, 20), 5)
+            .flat()
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 5)
+            .map(r => r.term);
+        return {
+            genre: 'Unknown',
+            narrativeVoice: 'Third-person',
+            pacingStyle: 'Standard',
+            iconicQuote: '',
+            themes: topTerms,
+        };
+    };
+
+    if (config.provider === 'none') return fallback();
+
+    try {
+        const prompt = `Analyze the writing style of the following story excerpt.
+
+Text (first 12000 chars):
+${text.substring(0, 12000)}
+
+Return a JSON object ONLY:
+{
+  "genre": "e.g. Dark Fantasy / Literary Fiction",
+  "narrativeVoice": "e.g. Third-person omniscient",
+  "pacingStyle": "e.g. Deliberate with explosive action bursts",
+  "iconicQuote": "The single most memorable line from the text, verbatim.",
+  "themes": ["theme1", "theme2", "theme3"]
+}`;
+
+        const raw = await withRetry(() => callAI(prompt, config));
+        const parsed = parseJSON<StyleAnalysis>(raw);
+        if (typeof parsed.genre !== 'string') throw new Error('Invalid shape');
+        return parsed;
+    } catch (err) {
+        console.warn('[AI] analyseStyle fallback:', err);
+        return fallback();
+    }
+}
+
+/**
+ * AI Mood Enhancement.
+ * Produces a vivid, atmospheric prose description of the chapter's mood.
+ * Falls back to the existing atmosphere keyword description.
+ */
+export async function enhanceMood(text: string, config: AIConfig): Promise<string> {
+    if (config.provider === 'none') return '';
+
+    try {
+        const prompt = `Write a single evocative, atmospheric paragraph (3-5 sentences) that captures the overall mood, setting, and emotional register of this story excerpt. Use literary, sensory language.
+
+Text (first 8000 chars):
+${text.substring(0, 8000)}
+
+Return JSON ONLY:
+{"mood":"Your atmospheric paragraph here."}`;
+
+        const raw = await withRetry(() => callAI(prompt, config));
+        const parsed = parseJSON<{ mood?: string }>(raw);
+        if (typeof parsed.mood !== 'string') throw new Error('Invalid shape');
+        return parsed.mood;
+    } catch (err) {
+        console.warn('[AI] enhanceMood fallback:', err);
+        return '';
+    }
+}
+
+/**
+ * AI Key Insights.
+ * Generates 4-6 thematic bullet insights about the chapter.
+ * Falls back to an empty array.
+ */
+export async function generateInsights(text: string, config: AIConfig): Promise<ChapterInsight[]> {
+    if (config.provider === 'none') return [];
+
+    try {
+        const prompt = `Read the following story excerpt and identify 4-6 key literary insights: recurring themes, motifs, tone shifts, or notable narrative techniques.
+Each insight should be 1-2 concise sentences.
+
+Text (first 12000 chars):
+${text.substring(0, 12000)}
+
+Return JSON ONLY:
+{"insights":["Insight one text.","Insight two text."]}`;
+
+        const raw = await withRetry(() => callAI(prompt, config));
+        const parsed = parseJSON<{ insights?: string[] }>(raw);
+        if (!Array.isArray(parsed.insights)) throw new Error('Invalid shape');
+        return parsed.insights.map((text: string) => ({ text }));
+    } catch (err) {
+        console.warn('[AI] generateInsights fallback:', err);
+        return [];
+    }
+}
