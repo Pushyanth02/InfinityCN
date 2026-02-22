@@ -8,6 +8,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Trash2, Clock, Sparkles } from 'lucide-react';
 import { Analytics } from '@vercel/analytics/react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import './App.css';
 
 const AI_LABELS: Record<string, string> = { none: 'Setup AI', chrome: 'Nano', gemini: 'Gemini', ollama: 'Ollama' };
@@ -274,6 +275,7 @@ function App() {
         </Suspense>
       )}
       <Analytics />
+      <SpeedInsights />
     </div>
   );
 }
