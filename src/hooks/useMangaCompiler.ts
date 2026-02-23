@@ -2,18 +2,12 @@ import { extractTextFromPDF } from '../lib/pdfWorker';
 import {
     processTextToManga,
     processCharacters,
-    processRecap,
     processAtmosphere,
-    processAnalytics,
 } from '../lib/parser';
 import {
     enhanceCharacters,
-    enhanceRecap,
-    analyseStyle,
-    enhanceMood,
-    generateInsights,
+    type AIConfig
 } from '../lib/ai';
-import type { AIConfig } from '../lib/ai';
 import { useStore } from '../store';
 import { db } from '../lib/db';
 
@@ -21,13 +15,12 @@ import { db } from '../lib/db';
 const sel = {
     rawText: (s: ReturnType<typeof useStore.getState>) => s.rawText,
     chapterId: (s: ReturnType<typeof useStore.getState>) => s.currentChapterId,
-    analytics: (s: ReturnType<typeof useStore.getState>) => s.analytics,
 };
 
-/** Build an AIConfig snapshot from the current store state — does NOT trigger re-renders */
+/** Build an config snapshot from the current store state — does NOT trigger re-renders */
 function getAIConfig(): AIConfig {
-    const { aiProvider, geminiKey, ollamaUrl, ollamaModel } = useStore.getState();
-    return { provider: aiProvider, geminiKey, ollamaUrl, ollamaModel };
+    const { aiProvider, geminiKey, useSearchGrounding, openAiKey, anthropicKey, groqKey, deepseekKey, ollamaUrl, ollamaModel } = useStore.getState();
+    return { provider: aiProvider, geminiKey, useSearchGrounding, openAiKey, anthropicKey, groqKey, deepseekKey, ollamaUrl, ollamaModel } as AIConfig;
 }
 
 export const useMangaCompiler = () => {
@@ -77,30 +70,40 @@ export const useMangaCompiler = () => {
             );
             setProgress(72);
 
-            // Phase 3: Analytics + Atmosphere (parallel)
-            setProgressLabel('Running analytics…');
-            const [analytics, atmosphere] = await Promise.all([
-                processAnalytics(text, newPanels),
+            // Phase 3: Atmosphere extraction & Title extraction (parallel)
+            setProgressLabel('Analysing atmosphere…');
+            const [atmosphere] = await Promise.all([
                 processAtmosphere(text),
             ]);
+
+            // Basic title extraction (first non-empty line or "Chapter X")
+            const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+            let parsedTitle = file.name.replace(/\.[^/.]+$/, '');
+            if (lines.length > 0) {
+                const firstLine = lines[0];
+                if (firstLine.length < 50) {
+                    parsedTitle = firstLine;
+                }
+            }
+
             setProgress(90);
 
-            // Phase 4: Persist to IndexedDB
-            setProgressLabel('Saving chapter…');
+            // Phase 4: Save to IndexedDB
+            setProgressLabel('Saving to library…');
             const chapterId = await db.chapters.add({
-                title: file.name.replace(/\.[^/.]+$/, ''),
+                title: parsedTitle,
                 createdAt: Date.now(),
                 panels: newPanels,
                 characters: [],
                 recap: null,
                 atmosphere,
-                analytics,
+                // Removed analytics
                 rawText: text,
             });
             setChapterId(chapterId as number);
 
             // Phase 5: Commit to store
-            setMangaData({ panels: newPanels, atmosphere, analytics });
+            setMangaData({ panels: newPanels, atmosphere, chapterTitle: parsedTitle });
             setProgress(100);
             setProgressLabel('Done');
             setProcessing(false);
@@ -121,19 +124,18 @@ export const useMangaCompiler = () => {
             setProgressLabel('Generating Character Codex & Recap…');
             const config = getAIConfig();
 
-            const [newChars, newRecap, newAtmosphere] = await Promise.all([
+            const [newChars, newAtmosphere] = await Promise.all([
                 enhanceCharacters(rawText, config).catch(() => processCharacters(rawText)),
-                enhanceRecap(rawText, config).catch(() => processRecap(rawText)),
                 processAtmosphere(rawText).catch(() => null),
             ]);
 
-            setMangaData({ characters: newChars, recap: newRecap, atmosphere: newAtmosphere ?? undefined });
+            setMangaData({ characters: newChars, recap: null, atmosphere: newAtmosphere ?? undefined });
             setProgressLabel('');
 
             if (currentChapterId) {
                 await db.chapters.update(currentChapterId, {
                     characters: newChars,
-                    recap: newRecap,
+                    recap: null,
                     atmosphere: newAtmosphere,
                 });
             }
@@ -143,39 +145,5 @@ export const useMangaCompiler = () => {
         }
     };
 
-    /**
-     * On-demand: run the extended AI intelligence suite.
-     * Style Analysis + Key Insights + Mood Enhancement.
-     */
-    const generateIntelligence = async () => {
-        try {
-            setError(null);
-            setProgressLabel('Analysing style & generating insights…');
-            const config = getAIConfig();
-
-            const [style, insights, aiMoodDescription] = await Promise.all([
-                analyseStyle(rawText, config).catch(() => undefined),
-                generateInsights(rawText, config).catch(() => []),
-                enhanceMood(rawText, config).catch(() => ''),
-            ]);
-
-            // Read analytics via getState() to avoid stale closure
-            const currentAnalytics = useStore.getState().analytics;
-            const updatedAnalytics = currentAnalytics
-                ? { ...currentAnalytics, style, insights, aiMoodDescription }
-                : null;
-
-            setMangaData({ analytics: updatedAnalytics });
-            setProgressLabel('');
-
-            if (currentChapterId && updatedAnalytics) {
-                await db.chapters.update(currentChapterId, { analytics: updatedAnalytics });
-            }
-        } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : 'Intelligence generation failed.';
-            setErrorAndStop(msg);
-        }
-    };
-
-    return { compileToManga, generateBonusTools, generateIntelligence };
+    return { compileToManga, generateBonusTools };
 };

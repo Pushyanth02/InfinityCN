@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Sparkles, CheckCircle, XCircle, Loader, Globe, Cpu, Zap, Ban, BookOpen, FileText, Theater, Lightbulb, CloudFog } from 'lucide-react';
+import { X, Sparkles, CheckCircle, XCircle, Loader, Globe, Cpu, Ban, BookOpen, FileText, Theater, Lightbulb, CloudFog, Brain, MessageSquare, Zap, Search } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '../store';
 import { testConnection } from '../lib/ai';
@@ -11,7 +11,7 @@ interface AISettingsProps {
 }
 
 type Tab = 'engine' | 'features';
-type Provider = 'none' | 'chrome' | 'gemini' | 'ollama';
+type Provider = 'none' | 'chrome' | 'gemini' | 'ollama' | 'openai' | 'anthropic' | 'groq' | 'deepseek';
 
 const PROVIDERS: {
     id: Provider;
@@ -27,15 +27,31 @@ const PROVIDERS: {
             desc: 'Fast algorithms. No AI. Always available.',
             icon: <Ban size={20} />, color: '#6b7280', glow: 'rgba(107,114,128,0.2)',
         },
-        {
-            id: 'chrome', label: 'Chrome AI', short: 'Nano',
-            desc: 'Built-in Gemini Nano. No API key. Requires Chrome 127+.',
-            icon: <Zap size={20} />, color: '#60a5fa', glow: 'rgba(96,165,250,0.2)',
-        },
+
         {
             id: 'gemini', label: 'Google Gemini', short: 'Gemini',
             desc: 'Gemini 2.5 Flash via REST API. Best quality.',
             icon: <Globe size={20} />, color: '#f87171', glow: 'rgba(248,113,113,0.2)',
+        },
+        {
+            id: 'openai', label: 'OpenAI (ChatGPT)', short: 'OpenAI',
+            desc: 'GPT-4o and other OpenAI models.',
+            icon: <Brain size={20} />, color: '#10a37f', glow: 'rgba(16,163,127,0.2)',
+        },
+        {
+            id: 'anthropic', label: 'Anthropic Claude', short: 'Claude',
+            desc: 'Claude 3.5 Sonnet and Opus models.',
+            icon: <MessageSquare size={20} />, color: '#d97757', glow: 'rgba(217,119,87,0.2)',
+        },
+        {
+            id: 'groq', label: 'Groq Cloud', short: 'Groq',
+            desc: 'Ultra-fast LPU inference for open models.',
+            icon: <Zap size={20} />, color: '#f55036', glow: 'rgba(245,80,54,0.2)',
+        },
+        {
+            id: 'deepseek', label: 'DeepSeek', short: 'DeepSeek',
+            desc: 'High-performance coder and chat models.',
+            icon: <Cpu size={20} />, color: '#4d6bfe', glow: 'rgba(77,107,254,0.2)',
         },
         {
             id: 'ollama', label: 'Ollama', short: 'Local',
@@ -58,6 +74,11 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
     const ollamaUrl = useStore(s => s.ollamaUrl);
     const ollamaModel = useStore(s => s.ollamaModel);
     const setAiConfig = useStore(s => s.setAiConfig);
+    const useSearchGrounding = useStore(s => s.useSearchGrounding);
+    const openAiKey = useStore(s => s.openAiKey);
+    const anthropicKey = useStore(s => s.anthropicKey);
+    const groqKey = useStore(s => s.groqKey);
+    const deepseekKey = useStore(s => s.deepseekKey);
 
     const [tab, setTab] = useState<Tab>('engine');
     const [testStatus, setTest] = useState<AIConnectionStatus | null>(null);
@@ -68,7 +89,17 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
     const handleTest = async () => {
         setTesting(true);
         setTest(null);
-        const result = await testConnection({ provider: aiProvider, geminiKey, ollamaUrl, ollamaModel });
+        const result = await testConnection({
+            provider: aiProvider,
+            geminiKey,
+            useSearchGrounding,
+            openAiKey,
+            anthropicKey,
+            groqKey,
+            deepseekKey,
+            ollamaUrl,
+            ollamaModel
+        });
         setTest(result);
         setTesting(false);
     };
@@ -111,11 +142,11 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                                 <div>
                                     <h2 id="ai-title" className="ai-modal-title font-display">AI Intelligence</h2>
                                     <p className="ai-modal-subtitle">
-                                        Provider: <span style={{ color: activeProvider.color }}>{activeProvider.label}</span>
+                                        Provider: <span className="active-provider-label" style={{ '--provider-color': activeProvider.color } as React.CSSProperties}>{activeProvider.label}</span>
                                     </p>
                                 </div>
                             </div>
-                            <button className="ai-modal-close" onClick={handleClose} aria-label="Close AI settings">
+                            <button type="button" className="ai-modal-close" onClick={handleClose} aria-label="Close AI settings">
                                 <X size={16} />
                             </button>
                         </div>
@@ -124,7 +155,7 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                         <div className="ai-modal-tabs" role="tablist">
                             {(['engine', 'features'] as Tab[]).map(t => (
                                 <button
-                                    key={t} role="tab" aria-selected={tab === t}
+                                    key={t} type="button" role="tab" aria-selected={tab === t}
                                     className={`ai-modal-tab ${tab === t ? 'ai-modal-tab--active' : ''}`}
                                     onClick={() => setTab(t)}
                                 >
@@ -144,6 +175,7 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                                             return (
                                                 <button
                                                     key={p.id}
+                                                    type="button"
                                                     className={`ai-provider-card ${active ? 'ai-provider-card--active' : ''}`}
                                                     style={active ? { '--card-color': p.color, '--card-glow': p.glow } as React.CSSProperties : undefined}
                                                     onClick={() => { setTest(null); setAiConfig({ aiProvider: p.id }); }}
@@ -158,17 +190,74 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                                         })}
                                     </div>
 
-                                    {/* Gemini Key */}
                                     {aiProvider === 'gemini' && (
+                                        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
+                                            <div className="ai-input-group">
+                                                <label className="ai-input-label" htmlFor="gemini-key">Gemini API Key</label>
+                                                <input
+                                                    id="gemini-key" type="password"
+                                                    className="ai-input" placeholder="AIzaSy..."
+                                                    value={geminiKey}
+                                                    onChange={e => setAiConfig({ geminiKey: e.target.value })}
+                                                />
+                                                <p className="ai-input-hint">Stored in your browser only. Get one at <a href="https://ai.google.dev" target="_blank" rel="noopener noreferrer" className="ai-link">ai.google.dev</a></p>
+                                            </div>
+                                        </motion.div>
+                                    )}
+
+                                    {/* OpenAI */}
+                                    {aiProvider === 'openai' && (
                                         <motion.div className="ai-input-group" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
-                                            <label className="ai-input-label" htmlFor="gemini-key">Gemini API Key</label>
+                                            <label className="ai-input-label" htmlFor="openai-key">OpenAI API Key</label>
                                             <input
-                                                id="gemini-key" type="password"
-                                                className="ai-input" placeholder="AIzaSy..."
-                                                value={geminiKey}
-                                                onChange={e => setAiConfig({ geminiKey: e.target.value })}
+                                                id="openai-key" type="password"
+                                                className="ai-input" placeholder="sk-..."
+                                                value={openAiKey}
+                                                onChange={e => setAiConfig({ openAiKey: e.target.value })}
                                             />
-                                            <p className="ai-input-hint">Stored in your browser only. Get one at <a href="https://ai.google.dev" target="_blank" rel="noreferrer" className="ai-link">ai.google.dev</a></p>
+                                            <p className="ai-input-hint">Stored securely in browser. Get one at <a href="https://platform.openai.com" target="_blank" rel="noopener noreferrer" className="ai-link">platform.openai.com</a></p>
+                                        </motion.div>
+                                    )}
+
+                                    {/* Anthropic */}
+                                    {aiProvider === 'anthropic' && (
+                                        <motion.div className="ai-input-group" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
+                                            <label className="ai-input-label" htmlFor="anthropic-key">Anthropic API Key</label>
+                                            <input
+                                                id="anthropic-key" type="password"
+                                                className="ai-input" placeholder="sk-ant-..."
+                                                value={anthropicKey}
+                                                onChange={e => setAiConfig({ anthropicKey: e.target.value })}
+                                            />
+                                            <p className="ai-input-hint">Get one at <a href="https://console.anthropic.com" target="_blank" rel="noopener noreferrer" className="ai-link">console.anthropic.com</a></p>
+                                        </motion.div>
+                                    )}
+
+                                    {/* Groq */}
+                                    {aiProvider === 'groq' && (
+                                        <motion.div className="ai-input-group" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
+                                            <label className="ai-input-label" htmlFor="groq-key">Groq API Key</label>
+                                            <input
+                                                id="groq-key" type="password"
+                                                className="ai-input" placeholder="gsk_..."
+                                                value={groqKey}
+                                                onChange={e => setAiConfig({ groqKey: e.target.value })}
+                                            />
+                                            <p className="ai-input-hint">Get one at <a href="https://console.groq.com" target="_blank" rel="noopener noreferrer" className="ai-link">console.groq.com</a></p>
+                                        </motion.div>
+                                    )}
+
+                                    {/* DeepSeek */}
+                                    {aiProvider === 'deepseek' && (
+                                        <motion.div className="ai-input-group" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
+                                            <label className="ai-input-label" htmlFor="deepseek-key">DeepSeek API Key</label>
+                                            <input
+                                                id="deepseek-key" type="password"
+                                                className="ai-input" placeholder="sk-..."
+                                                value={deepseekKey}
+                                                onChange={e => setAiConfig({ deepseekKey: e.target.value })}
+                                            />
+                                            <p className="ai-input-hint">Get one at <a href="https://platform.deepseek.com" target="_blank" rel="noopener noreferrer" className="ai-link">platform.deepseek.com</a></p>
                                         </motion.div>
                                     )}
 
@@ -182,7 +271,7 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                                             </div>
                                             <div className="ai-input-group">
                                                 <label className="ai-input-label" htmlFor="ollama-model">
-                                                    <Cpu size={12} style={{ display: 'inline', marginRight: '0.35rem' }} />
+                                                    <Cpu size={12} className="ai-input-label-icon" />
                                                     Model Name
                                                 </label>
                                                 <input id="ollama-model" type="text" className="ai-input" placeholder="llama3"
@@ -192,10 +281,30 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                                         </motion.div>
                                     )}
 
+                                    {/* Global Search Grounding */}
+                                    {aiProvider !== 'none' && aiProvider !== 'chrome' && aiProvider !== 'ollama' && (
+                                        <div className="ai-test-section ai-grounding-section">
+                                            <div className="ai-input-group ai-grounding-row">
+                                                <input
+                                                    id="global-grounding" type="checkbox"
+                                                    className="ai-checkbox"
+                                                    checked={useSearchGrounding}
+                                                    onChange={e => setAiConfig({ useSearchGrounding: e.target.checked })}
+                                                />
+                                                <label className="ai-input-label ai-grounding-label" htmlFor="global-grounding">
+                                                    <Search size={14} className="ai-grounding-icon" /> Ground with Web Search
+                                                </label>
+                                                <p className="ai-input-hint ai-grounding-hint">
+                                                    If supported by the API/model, this injects live web search data to improve context.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    )}
                                     {/* Test Connection */}
                                     {aiProvider !== 'none' && (
                                         <div className="ai-test-section">
                                             <button
+                                                type="button"
                                                 className="ai-test-btn"
                                                 onClick={handleTest}
                                                 disabled={isTesting}

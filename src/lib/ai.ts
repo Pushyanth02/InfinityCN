@@ -25,8 +25,13 @@ import type {
 // ─── PUBLIC CONFIG TYPE ────────────────────────────────────────────────────────
 
 export interface AIConfig {
-    provider: 'none' | 'chrome' | 'gemini' | 'ollama';
+    provider: 'none' | 'chrome' | 'gemini' | 'ollama' | 'openai' | 'anthropic' | 'groq' | 'deepseek';
     geminiKey: string;
+    useSearchGrounding: boolean;
+    openAiKey: string;
+    anthropicKey: string;
+    groqKey: string;
+    deepseekKey: string;
     ollamaUrl: string;
     ollamaModel: string;
 }
@@ -96,6 +101,11 @@ async function callAI(prompt: string, config: AIConfig): Promise<string> {
     // ── GEMINI ────────────────────────────────────────────────
     if (config.provider === 'gemini') {
         if (!config.geminiKey) throw new Error('Gemini API key is not set.');
+
+        const tools = config.useSearchGrounding
+            ? [{ googleSearchRetrieval: { dynamicRetrievalConfig: { mode: "MODE_DYNAMIC", dynamicThreshold: 0.3 } } }]
+            : undefined;
+
         const res = await fetch(
             `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`,
             {
@@ -110,6 +120,7 @@ async function callAI(prompt: string, config: AIConfig): Promise<string> {
                         parts: [{ text: 'You are a precise literary analyst. Output strictly valid JSON only — no markdown, no explanation.' }]
                     },
                     contents: [{ parts: [{ text: prompt }] }],
+                    tools: tools,
                     generationConfig: { response_mime_type: 'application/json', temperature: 0.4 }
                 })
             }
@@ -120,6 +131,115 @@ async function callAI(prompt: string, config: AIConfig): Promise<string> {
         }
         const data = await res.json();
         return data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+    }
+
+    // Non-Gemini System Prompt
+    const baseSystemPrompt = 'You are a precise literary analyst. Output strictly valid JSON only — no markdown, no explanation.';
+    const systemPrompt = config.useSearchGrounding
+        ? `${baseSystemPrompt}\n\nIMPORTANT: The user has requested Google Search Grounding. If you have active web browsing or search tools, immediately use them to search for any real-world knowledge, literary contexts, or factual verification before responding.`
+        : baseSystemPrompt;
+
+    // ── OPENAI ────────────────────────────────────────────────
+    if (config.provider === 'openai') {
+        if (!config.openAiKey) throw new Error('OpenAI API key is not set.');
+        const res = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${config.openAiKey}`,
+            },
+            signal: AbortSignal.timeout(30_000),
+            body: JSON.stringify({
+                model: 'gpt-4o-mini',
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: prompt }
+                ],
+                response_format: { type: 'json_object' },
+                temperature: 0.4
+            })
+        });
+        if (!res.ok) throw new Error(`OpenAI error ${res.status}: ${res.statusText}`);
+        const data = await res.json();
+        return data.choices?.[0]?.message?.content ?? '';
+    }
+
+    // ── ANTHROPIC ─────────────────────────────────────────────
+    if (config.provider === 'anthropic') {
+        if (!config.anthropicKey) throw new Error('Anthropic API key is not set.');
+        const res = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': config.anthropicKey,
+                'anthropic-version': '2023-06-01',
+                'anthropic-dangerous-direct-browser-access': 'true',
+            },
+            signal: AbortSignal.timeout(30_000),
+            body: JSON.stringify({
+                model: 'claude-3-5-sonnet-latest',
+                max_tokens: 4000,
+                system: systemPrompt,
+                messages: [{ role: 'user', content: prompt }],
+                temperature: 0.4
+            })
+        });
+        if (!res.ok) {
+            const errText = await res.text();
+            throw new Error(`Anthropic error ${res.status}: ${errText.substring(0, 100)}`);
+        }
+        const data = await res.json();
+        return data.content?.[0]?.text ?? '';
+    }
+
+    // ── GROQ ──────────────────────────────────────────────────
+    if (config.provider === 'groq') {
+        if (!config.groqKey) throw new Error('Groq API key is not set.');
+        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${config.groqKey}`,
+            },
+            signal: AbortSignal.timeout(30_000),
+            body: JSON.stringify({
+                model: 'llama-3.3-70b-versatile',
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: prompt }
+                ],
+                response_format: { type: 'json_object' },
+                temperature: 0.4
+            })
+        });
+        if (!res.ok) throw new Error(`Groq error ${res.status}: ${res.statusText}`);
+        const data = await res.json();
+        return data.choices?.[0]?.message?.content ?? '';
+    }
+
+    // ── DEEPSEEK ──────────────────────────────────────────────
+    if (config.provider === 'deepseek') {
+        if (!config.deepseekKey) throw new Error('DeepSeek API key is not set.');
+        const res = await fetch('https://api.deepseek.com/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${config.deepseekKey}`,
+            },
+            signal: AbortSignal.timeout(30_000),
+            body: JSON.stringify({
+                model: 'deepseek-chat',
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: prompt }
+                ],
+                response_format: { type: 'json_object' },
+                temperature: 0.4
+            })
+        });
+        if (!res.ok) throw new Error(`DeepSeek error ${res.status}: ${res.statusText}`);
+        const data = await res.json();
+        return data.choices?.[0]?.message?.content ?? '';
     }
 
     // ── OLLAMA ────────────────────────────────────────────────

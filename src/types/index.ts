@@ -25,35 +25,6 @@ export interface Atmosphere {
     description: string;
 }
 
-// ─── Analytics ────────────────────────────────────────────
-
-export interface ReadabilityMetrics {
-    fleschEase: number;
-    gradeLevel: number;
-    label: string;
-    wordCount: number;
-    sentenceCount: number;
-    avgWordsPerSentence: number;
-    avgSyllablesPerWord: number;
-}
-
-export interface VocabularyMetrics {
-    ttr: number;
-    mattr: number;
-    uniqueWords: number;
-    totalWords: number;
-    richness: 'Very High' | 'High' | 'Moderate' | 'Low' | 'Very Low';
-}
-
-export interface PacingMetrics {
-    label: 'breakneck' | 'brisk' | 'measured' | 'contemplative' | 'languid';
-    dialogueRatio: number;
-    narrationRatio: number;
-    avgTension: number;
-    peakTensionIndex: number;
-    dominantSentiment: 'positive' | 'negative' | 'neutral';
-    emotionalSwings: number;
-}
 
 // ─── AI Enriched Types ─────────────────────────────────────
 
@@ -79,25 +50,6 @@ export interface AIConnectionStatus {
     latencyMs?: number;
 }
 
-export interface ChapterAnalytics {
-    readability: ReadabilityMetrics;
-    vocabulary: VocabularyMetrics;
-    pacing: PacingMetrics;
-    estimatedReadingTime: number;
-    overallSentiment: 'positive' | 'negative' | 'neutral';
-    sentimentScore: number;
-    emotionalArc: number[];
-    sceneBoundaryCount: number;
-    textRankSummary: string;
-    // V16: New algorithmic metrics
-    hapaxRatio?: { ratio: number; count: number; label: string };
-    sentenceComplexity?: { avg: number; max: number; label: string };
-    paragraphRhythm?: { score: number; avgVariance: number; label: string };
-    // AI-enriched (optional — only present when AI is enabled)
-    style?: StyleAnalysis;
-    insights?: ChapterInsight[];
-    aiMoodDescription?: string;
-}
 
 // ─── App State ────────────────────────────────────────────
 
@@ -109,13 +61,19 @@ export interface AppState {
     characters: Character[];
     recap: string | null;
     atmosphere: Atmosphere | null;
-    analytics: ChapterAnalytics | null;
+    // Removed analytics
     error: string | null;
     currentChapterId: number | null;
+    chapterTitle: string | null;
 
     // AI Settings
-    aiProvider: 'none' | 'chrome' | 'gemini' | 'ollama';
+    aiProvider: 'none' | 'chrome' | 'gemini' | 'ollama' | 'openai' | 'anthropic' | 'groq' | 'deepseek';
     geminiKey: string;
+    useSearchGrounding: boolean;
+    openAiKey: string;
+    anthropicKey: string;
+    groqKey: string;
+    deepseekKey: string;
     ollamaUrl: string;
     ollamaModel: string;
 
@@ -129,8 +87,8 @@ export interface AppState {
     setErrorAndStop: (error: string | null) => void;
     setProcessing: (isProcessing: boolean) => void;
     setRawText: (text: string) => void;
-    setMangaData: (data: Partial<Pick<AppState, 'panels' | 'characters' | 'recap' | 'atmosphere' | 'analytics'>>) => void;
     setCurrentChapterId: (id: number | null) => void;
-    setAiConfig: (config: Partial<Pick<AppState, 'aiProvider' | 'geminiKey' | 'ollamaUrl' | 'ollamaModel'>>) => void;
+    setMangaData: (data: Partial<Pick<AppState, Extract<keyof AppState, 'panels' | 'characters' | 'recap' | 'atmosphere' | 'chapterTitle'>>>) => void;
+    setAiConfig: (config: Partial<Pick<AppState, 'aiProvider' | 'geminiKey' | 'useSearchGrounding' | 'openAiKey' | 'anthropicKey' | 'groqKey' | 'deepseekKey' | 'ollamaUrl' | 'ollamaModel'>>) => void;
     resetReader: () => void;
 }

@@ -78,20 +78,6 @@ export const ThemeStudio: React.FC = () => {
         localStorage.setItem('infinitycn-theme-color', colorTheme);
     }, [mode, colorTheme]);
 
-    const triggerStyle: React.CSSProperties = {
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: '32px',
-        height: '32px',
-        borderRadius: '50%',
-        background: 'transparent',
-        border: '1px solid var(--line-color)',
-        color: 'var(--text-secondary)',
-        cursor: 'pointer',
-        transition: 'all 120ms ease',
-    };
-
     const panelStyle: React.CSSProperties = {
         position: 'absolute',
         right: 0,
@@ -123,63 +109,43 @@ export const ThemeStudio: React.FC = () => {
     return (
         <div style={{ position: 'relative' }} ref={panelRef}>
             <button
+                type="button"
+                className={`theme-trigger ${isOpen ? 'theme-trigger--open' : ''}`}
                 style={{
-                    ...triggerStyle,
-                    color: isOpen ? THEMES[colorTheme].color : triggerStyle.color,
-                    border: isOpen ? `1px solid ${THEMES[colorTheme].color}` : triggerStyle.border,
-                    boxShadow: isOpen ? `0 0 12px ${THEMES[colorTheme].color}40` : 'none'
-                }}
+                    '--trigger-theme-color': THEMES[colorTheme].color
+                } as React.CSSProperties}
                 onClick={() => setIsOpen(!isOpen)}
                 title="Theme Studio"
                 aria-label="Open Theme Studio"
+                aria-expanded={isOpen}
             >
                 <Palette size={16} />
-                <div style={{
-                    position: 'absolute',
-                    right: '0px',
-                    bottom: '0px',
-                    width: '8px',
-                    height: '8px',
-                    borderRadius: '50%',
-                    background: THEMES[colorTheme].color,
-                    boxShadow: `0 0 6px ${THEMES[colorTheme].color}`
-                }} />
+                <div
+                    className="theme-trigger-dot"
+                    style={{ '--dot-color': THEMES[colorTheme].color } as React.CSSProperties}
+                />
             </button>
 
             {isOpen && (
                 <>
                     <div style={{ ...panelStyle }}>
                         {/* Mode */}
-                        <div style={{ marginBottom: '1.25rem' }}>
-                            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem', fontWeight: 600, color: 'var(--text-secondary)', letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: '0.75rem' }}>
-                                Mode
-                            </div>
-                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <div className="theme-panel-section">
+                            <div className="theme-section-title">Mode</div>
+                            <div className="theme-mode-grid">
                                 <button
+                                    type="button"
                                     onClick={() => setMode('dark')}
-                                    style={{
-                                        flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem',
-                                        padding: '0.5rem', background: 'transparent',
-                                        border: `1px solid ${mode === 'dark' ? 'var(--accent-crimson)' : 'var(--line-strong)'}`,
-                                        color: mode === 'dark' ? 'var(--accent-crimson)' : 'var(--text-secondary)', cursor: 'pointer',
-                                        fontFamily: 'var(--font-mono)', fontSize: '0.65rem', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase',
-                                        transition: 'all 120ms ease',
-                                        borderRadius: '4px'
-                                    }}
+                                    aria-pressed={mode === 'dark'}
+                                    className={`theme-mode-btn ${mode === 'dark' ? 'theme-mode-btn--active' : ''}`}
                                 >
                                     <Moon size={11} /> Dark
                                 </button>
                                 <button
+                                    type="button"
                                     onClick={() => setMode('light')}
-                                    style={{
-                                        flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem',
-                                        padding: '0.5rem', background: 'transparent',
-                                        border: `1px solid ${mode === 'light' ? 'var(--accent-crimson)' : 'var(--line-strong)'}`,
-                                        color: mode === 'light' ? 'var(--accent-crimson)' : 'var(--text-secondary)', cursor: 'pointer',
-                                        fontFamily: 'var(--font-mono)', fontSize: '0.65rem', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase',
-                                        transition: 'all 120ms ease',
-                                        borderRadius: '4px'
-                                    }}
+                                    aria-pressed={mode === 'light'}
+                                    className={`theme-mode-btn ${mode === 'light' ? 'theme-mode-btn--active' : ''}`}
                                 >
                                     <Sun size={11} /> Light
                                 </button>
@@ -187,25 +153,27 @@ export const ThemeStudio: React.FC = () => {
                         </div>
 
                         {/* Accent */}
-                        <div>
-                            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem', fontWeight: 600, color: 'var(--text-secondary)', letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: '0.75rem' }}>
-                                Accent
-                            </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                        <div className="theme-panel-section">
+                            <div className="theme-section-title">Accent</div>
+                            <div className="theme-accent-list">
                                 {Object.entries(THEMES).map(([key, config]) => (
                                     <button
                                         key={key}
+                                        type="button"
                                         onClick={() => setColorTheme(key as ColorTheme)}
-                                        style={{
-                                            display: 'flex', alignItems: 'center', gap: '0.75rem',
-                                            padding: '0.5rem', background: 'transparent', border: 'none', cursor: 'pointer',
-                                            fontFamily: 'var(--font-mono)', fontSize: '0.7rem', fontWeight: colorTheme === key ? 700 : 500, color: colorTheme === key ? 'var(--text-primary)' : 'var(--text-secondary)',
-                                            textAlign: 'left', transition: 'color 120ms ease', letterSpacing: '0.05em',
-                                        }}
+                                        aria-pressed={colorTheme === key}
+                                        aria-label={`Theme: ${config.name}`}
+                                        className={`theme-accent-btn ${colorTheme === key ? 'theme-accent-btn--active' : ''}`}
                                     >
-                                        <div style={{ width: '10px', height: '10px', background: config.color, flexShrink: 0, boxShadow: colorTheme === key ? `0 0 8px ${config.color}` : 'none' }} />
+                                        <div
+                                            className="theme-accent-dot"
+                                            style={{
+                                                '--config-color': config.color,
+                                                boxShadow: colorTheme === key ? `0 0 8px ${config.color}` : 'none'
+                                            } as React.CSSProperties}
+                                        />
                                         {config.name}
-                                        {colorTheme === key && <Check size={10} style={{ marginLeft: 'auto', color: 'var(--accent-crimson)' }} />}
+                                        {colorTheme === key && <Check size={10} className="theme-check-icon" />}
                                     </button>
                                 ))}
                             </div>

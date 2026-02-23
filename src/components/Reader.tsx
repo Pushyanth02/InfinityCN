@@ -1,16 +1,15 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { Users, Info, ChevronRight, BookOpen, Download, Play, Square, X, BarChart2, MessageSquare, Lock } from 'lucide-react';
+import { Users, Info, ChevronRight, BookOpen, Download, Play, Square, X, MessageSquare, Lock } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import { motion } from 'framer-motion';
-import type { MangaPanel, Character, Atmosphere, ChapterAnalytics } from '../types';
+import type { MangaPanel, Character, Atmosphere } from '../types';
 import { useStore } from '../store';
 import {
     detectNarrativeArc,
     buildCharacterGraph,
-    computeSymbolicDensity,
     extractDialogueLines,
 } from '../lib/narrativeEngine';
-import type { NarrativeArcResult, CharacterGraphResult, DialogueLine } from '../lib/narrativeEngine';
+import type { CharacterGraphResult, DialogueLine } from '../lib/narrativeEngine';
 import type { NamedCharacter } from '../lib/algorithms';
 
 interface ReaderProps {
@@ -18,78 +17,11 @@ interface ReaderProps {
     characters?: Character[];
     recap?: string | null;
     atmosphere?: Atmosphere | null;
-    analytics?: ChapterAnalytics | null;
+    chapterTitle?: string | null;
     onClose: () => void;
     onGenerateBonus: () => void;
     isGeneratingBonus?: boolean;
-    onGenerateIntelligence?: () => void;
-    isGeneratingIntelligence?: boolean;
 }
-
-// ── EMOTIONAL ARC SVG CHART ──────────────────────────────────────────────────
-const EmotionalArc = React.memo(function EmotionalArc({ arc, height = 48 }: { arc: number[]; height?: number }) {
-    if (!arc.length) return null;
-    const w = 240; const h = height; const mid = h / 2;
-    const xStep = w / (arc.length - 1 || 1);
-    const pts = arc.map((v, i) => `${i * xStep},${mid - v * (mid * 0.9)}`).join(' ');
-    const fill = [`0,${mid}`, ...arc.map((v, i) => `${i * xStep},${mid - v * (mid * 0.9)}`), `${w},${mid}`].join(' ');
-
-    return (
-        <svg width={w} height={h} aria-label="Emotional arc" role="img">
-            <defs>
-                <linearGradient id="arcGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--accent-crimson)" stopOpacity="0.35" />
-                    <stop offset="100%" stopColor="var(--accent-crimson)" stopOpacity="0.02" />
-                </linearGradient>
-            </defs>
-            <line x1="0" y1={mid} x2={w} y2={mid} stroke="var(--line-color)" strokeWidth="1" />
-            <polygon points={fill} fill="url(#arcGrad)" />
-            <polyline points={pts} fill="none" stroke="var(--accent-crimson)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-    );
-});
-
-// ── NARRATIVE ARC BAR ────────────────────────────────────────────────────────
-const STAGE_COLORS: Record<string, string> = {
-    exposition: '#60a5fa',
-    rising_action: '#fbbf24',
-    climax: '#ef4444',
-    falling_action: '#a78bfa',
-    resolution: '#34d399',
-};
-
-const NarrativeArcBar = React.memo(function NarrativeArcBar({ result }: { result: NarrativeArcResult }) {
-    return (
-        <div className="narrative-arc-bar" aria-label="Narrative arc structure">
-            <div className="narrative-arc-segments">
-                {result.stages.map(stage => (
-                    <div
-                        key={stage.stage}
-                        className="narrative-arc-segment"
-                        style={{ width: `${stage.endPercent - stage.startPercent}%`, background: STAGE_COLORS[stage.stage] || '#888' }}
-                        title={`${stage.label} (avg tension: ${(stage.avgTension * 100).toFixed(0)}%)`}
-                        aria-label={stage.label}
-                    />
-                ))}
-            </div>
-            <div className="narrative-arc-labels">
-                {result.stages.map(stage => (
-                    <div
-                        key={stage.stage}
-                        className="narrative-arc-label"
-                        style={{ width: `${stage.endPercent - stage.startPercent}%`, color: STAGE_COLORS[stage.stage] }}
-                    >
-                        {stage.label}
-                    </div>
-                ))}
-            </div>
-            <div className="narrative-arc-meta">
-                <span>Climax at {result.climaxPercent.toFixed(0)}%</span>
-                <span className="narrative-arc-shape">■ {result.arcShape.replace('_', ' ')}</span>
-            </div>
-        </div>
-    );
-});
 
 // ── CHARACTER GRAPH (SVG FORCE-INSPIRED) ─────────────────────────────────────
 const CharacterGraphView = React.memo(function CharacterGraphView({ graph }: { graph: CharacterGraphResult }) {
@@ -125,7 +57,8 @@ const CharacterGraphView = React.memo(function CharacterGraphView({ graph }: { g
                     <g key={node.id}>
                         <circle cx={pos.x} cy={pos.y} r={nodeR} fill={fill} fillOpacity={0.25} stroke={fill} strokeWidth="1.5" />
                         <text x={pos.x} y={pos.y + nodeR + 9} textAnchor="middle"
-                            fontSize="8" fill="var(--text-muted)" fontFamily="var(--font-mono)">
+                            className="char-graph-text"
+                            fontSize="8">
                             {node.name.split(' ')[0].slice(0, 8)}
                         </text>
                     </g>
@@ -135,25 +68,14 @@ const CharacterGraphView = React.memo(function CharacterGraphView({ graph }: { g
     );
 });
 
-// ── STAT BLOCK ───────────────────────────────────────────────────────────────
-const Stat = React.memo(function Stat({ label, value, sub, accent }: { label: string; value: string | number; sub?: string; accent?: boolean }) {
-    return (
-        <div className="analytics-stat">
-            <div className={`analytics-stat-value ${accent ? 'analytics-stat-value--accent' : ''}`}>{value}</div>
-            <div className="analytics-stat-label">{label}</div>
-            {sub && <div className="analytics-stat-sub">{sub}</div>}
-        </div>
-    );
-});
-
 // ── READER PANEL ─────────────────────────────────────────────────────────────
-const ReaderPanel = React.memo(function ReaderPanel({ panel, index }: { panel: MangaPanel; index: number }) {
+const ReaderPanel = React.memo(function ReaderPanel({ panel, index, isActive }: { panel: MangaPanel; index: number; isActive: boolean }) {
     const intensityClass = panel.intensity ? `intensity-${panel.intensity}` : '';
     const alignClass = panel.alignment ? `align-${panel.alignment}` : '';
 
     return (
         <motion.article
-            className={`panel panel-${panel.type} ${intensityClass} ${alignClass}`}
+            className={`panel panel-${panel.type} ${intensityClass} ${alignClass} ${isActive ? 'panel-audio-active' : ''}`}
             initial={{ opacity: 0, y: 60, filter: 'blur(12px)' }}
             whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
             viewport={{ once: true, margin: '-10% 0px -10% 0px' }}
@@ -178,31 +100,39 @@ export const Reader: React.FC<ReaderProps> = ({
     characters = [],
     recap,
     atmosphere,
-    analytics,
+    chapterTitle,
     onClose,
     onGenerateBonus,
     isGeneratingBonus,
-    onGenerateIntelligence,
-    isGeneratingIntelligence,
 }) => {
     const contentRef = useRef<HTMLDivElement>(null);
     const [showCodex, setShowCodex] = useState(false);
-    const [showAnalytics, setShowAnalytics] = useState(false);
     const [codexTab, setCodexTab] = useState<'characters' | 'dialogue'>('characters');
     const [isExporting, setIsExporting] = useState(false);
     const [isPlaying, setIsPlaying] = useState(false);
-    const [currentAudioIndex, setCurrentAudioIndex] = useState(-1);
+    const [activePanelIndex, setActivePanelIndex] = useState(-1);
     const [readingProgress, setReadingProgress] = useState(0);
     const isPlayingRef = useRef(false);
+    const timeoutRef = useRef<number | null>(null); // For audio delays
+    const utterRef = useRef<SpeechSynthesisUtterance | null>(null); // To cancel current utterance
     const synth = window.speechSynthesis;
 
+    // Load voices proactively
+    useEffect(() => {
+        const loadVoices = () => synth.getVoices();
+        loadVoices();
+        if (speechSynthesis.onvoiceschanged !== undefined) {
+            speechSynthesis.onvoiceschanged = loadVoices;
+        }
+    }, [synth]);
+
     // ── ADVANCED ANALYTICS (memo — only recalculate when panels/characters change) ──
-    const narrativeArc = useMemo(() => detectNarrativeArc(panels), [panels]);
+    const narrativeArc = detectNarrativeArc(panels);
     const charGraph = useMemo(
         () => buildCharacterGraph(panels.map(p => p.content).join('\n'), characters as unknown as NamedCharacter[]),
         [panels, characters]
     );
-    const symbolic = useMemo(() => computeSymbolicDensity(panels.map(p => p.content).join('\n')), [panels]);
+    // const symbolic = computeSymbolicDensity(panels.map(p => p.content).join('\n')); // Removed as per previous instructions
     const dialogueLines = useMemo(() => extractDialogueLines(panels), [panels]);
 
     // ── SCROLL PROGRESS ──────────────────────────────────────────────────────
@@ -218,22 +148,86 @@ export const Reader: React.FC<ReaderProps> = ({
 
     // ── AUDIO ────────────────────────────────────────────────────────────────
     const stopAudio = useCallback(() => {
-        synth.cancel(); isPlayingRef.current = false;
-        setIsPlaying(false); setCurrentAudioIndex(-1);
+        if (utterRef.current) {
+            utterRef.current.onend = null; // Prevent onend from triggering next panel
+            utterRef.current.onerror = null;
+        }
+        synth.cancel();
+        isPlayingRef.current = false;
+        setIsPlaying(false);
+        setActivePanelIndex(-1);
+        if (timeoutRef.current) {
+            window.clearTimeout(timeoutRef.current);
+            timeoutRef.current = null;
+        }
     }, [synth]);
 
     const readPanel = useCallback((index: number) => {
-        if (index >= panels.length) { stopAudio(); return; }
+        if (index >= panels.length) {
+            stopAudio(); // Use the unified stopAudio
+            return;
+        }
+
+        setActivePanelIndex(index);
         const panel = panels[index];
-        setCurrentAudioIndex(index);
-        document.getElementById(panel.id)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        const utter = new SpeechSynthesisUtterance(panel.content);
-        if (panel.type === 'dialogue') { utter.pitch = 1.2; utter.rate = 1.05; }
-        else if (panel.type === 'sound_effect') { utter.pitch = 0.5; utter.rate = 0.8; }
-        else { utter.pitch = 1.0; utter.rate = 0.92; }
-        utter.onend = () => { if (isPlayingRef.current) readPanel(index + 1); };
-        utter.onerror = () => stopAudio();
-        synth.speak(utter);
+
+        if (contentRef.current) {
+            const panelEl = contentRef.current.children[index] as HTMLElement;
+            if (panelEl) {
+                panelEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
+
+        // Delay narrating by pacing based on type
+        const delayMs = panel.type === 'scene_transition' ? 1200 : panel.type === 'sound_effect' ? 300 : 600;
+
+        timeoutRef.current = window.setTimeout(() => {
+            if (!isPlayingRef.current) return;
+
+            const utter = new SpeechSynthesisUtterance(panel.content);
+            const voices = synth.getVoices();
+            let voiceAssigned = false;
+
+            if (panel.type === 'dialogue' && panel.speaker && voices.length > 0) {
+                // Simple hash function for character names
+                let hash = 0;
+                for (let i = 0; i < panel.speaker.length; i++) {
+                    hash = panel.speaker.charCodeAt(i) + ((hash << 5) - hash);
+                }
+                const voiceIndex = Math.abs(hash) % voices.length;
+                utter.voice = voices[voiceIndex];
+                utter.pitch = 1.0;
+                utter.rate = 1.0;
+                voiceAssigned = true;
+            }
+
+            if (!voiceAssigned) {
+                if (panel.type === 'dialogue') {
+                    utter.pitch = 1.2;
+                    utter.rate = 1.05;
+                }
+                else if (panel.type === 'sound_effect') {
+                    utter.pitch = 0.5;
+                    utter.rate = 0.8;
+                }
+                else {
+                    utter.pitch = 1.0;
+                    utter.rate = 0.92;
+                }
+            }
+
+            utter.onend = () => {
+                if (isPlayingRef.current) readPanel(index + 1);
+            };
+
+            utter.onerror = () => {
+                if (isPlayingRef.current) readPanel(index + 1);
+            };
+
+            synth.speak(utter);
+            utterRef.current = utter;
+        }, delayMs);
+
     }, [panels, synth, stopAudio]);
 
     const playAudio = useCallback((startIndex = 0) => {
@@ -243,7 +237,9 @@ export const Reader: React.FC<ReaderProps> = ({
         readPanel(startIndex);
     }, [synth, readPanel]);
 
-    useEffect(() => { return () => { synth.cancel(); }; }, []); // eslint-disable-line
+    useEffect(() => {
+        return () => { stopAudio(); };
+    }, [stopAudio]);
 
     useEffect(() => { window.scrollTo({ top: 0, behavior: 'smooth' }); }, [panels]);
 
@@ -261,9 +257,18 @@ export const Reader: React.FC<ReaderProps> = ({
 
     const moodClass = atmosphere ? `mood-${atmosphere.mood}` : '';
     const hasCodexData = characters.length > 0 || !!recap;
-    const activeSidebar = showCodex ? 'codex' : showAnalytics ? 'analytics' : null;
+    const activeSidebar = showCodex ? 'codex' : null;
     const aiProvider = useStore(s => s.aiProvider);
     const hasAI = aiProvider !== 'none';
+
+    // STAGE_COLORS for narrative arc display
+    const STAGE_COLORS: Record<string, string> = {
+        exposition: '#60a5fa',
+        rising_action: '#fbbf24',
+        climax: '#ef4444',
+        falling_action: '#a78bfa',
+        resolution: '#34d399',
+    };
 
     return (
         <div className={`reader-root ${moodClass}`} aria-label="Chapter reader">
@@ -272,7 +277,7 @@ export const Reader: React.FC<ReaderProps> = ({
                 role="progressbar" aria-label="Reading progress"
                 aria-valuenow={Math.round(readingProgress)} aria-valuemin={0} aria-valuemax={100}
                 className="reading-progress-bar"
-                style={{ width: `${readingProgress}%` }}
+                style={{ '--progress-width': `${readingProgress}%` } as React.CSSProperties}
             />
 
             {atmosphere && <div className="reader-atmosphere-vignette" aria-hidden="true" />}
@@ -282,15 +287,14 @@ export const Reader: React.FC<ReaderProps> = ({
                 <div className="reader-nav-inner">
                     <div className="reader-nav-left">
                         <span className="reader-nav-title font-display">
-                            {atmosphere?.mood ? atmosphere.mood.replace(/_/g, ' ') : 'Chapter'}
+                            {chapterTitle || (atmosphere?.mood ? atmosphere.mood.replace(/_/g, ' ') : 'Chapter')}
                         </span>
                         <span className="reader-nav-count">{panels.length} panels</span>
-                        {analytics && <span className="reader-nav-count">{analytics.estimatedReadingTime} min read</span>}
                         {/* Live narrative stage */}
                         {(() => {
                             const stage = narrativeArc.stages.find(s => readingProgress >= s.startPercent && readingProgress <= s.endPercent) || narrativeArc.stages[0];
                             return (
-                                <span className="reader-nav-stage" style={{ color: STAGE_COLORS[stage.stage] }}>
+                                <span className="reader-nav-stage" style={{ '--stage-color': STAGE_COLORS[stage.stage] } as React.CSSProperties}>
                                     {stage.label}
                                 </span>
                             );
@@ -303,48 +307,20 @@ export const Reader: React.FC<ReaderProps> = ({
                             className={`reader-btn ${isPlaying ? 'reader-btn--active' : ''}`}
                             onClick={isPlaying ? stopAudio : () => playAudio(0)}
                             aria-label={isPlaying ? 'Stop narration' : 'Narrate chapter'}
+                            aria-pressed={isPlaying ? "true" : "false"}
                         >
                             {isPlaying ? <Square size={14} fill="currentColor" /> : <Play size={14} fill="currentColor" />}
                             <span>{isPlaying ? 'Stop' : 'Narrate'}</span>
                         </button>
 
-                        {/* Analytics */}
-                        {analytics && (
-                            <button
-                                className={`reader-btn ${showAnalytics ? 'reader-btn--active' : ''}`}
-                                onClick={() => { setShowAnalytics(v => !v); setShowCodex(false); }}
-                                aria-pressed={showAnalytics} aria-label="Toggle analytics"
-                            >
-                                <BarChart2 size={14} aria-hidden="true" /><span>Analytics</span>
-                            </button>
-                        )}
-
-                        {/* AI Intelligence */}
-                        {onGenerateIntelligence && analytics && (
-                            hasAI ? (
-                                <button
-                                    className="reader-btn reader-btn--gold"
-                                    onClick={onGenerateIntelligence}
-                                    disabled={isGeneratingIntelligence}
-                                    aria-busy={isGeneratingIntelligence}
-                                >
-                                    {isGeneratingIntelligence
-                                        ? <><div className="spinner" aria-hidden="true" /><span>Analysing…</span></>
-                                        : <><span aria-hidden="true">✦</span><span>Analyse</span></>}
-                                </button>
-                            ) : (
-                                <button className="reader-btn reader-btn--locked" aria-disabled="true" title="Enable AI in settings">
-                                    <Lock size={13} aria-hidden="true" /><span>Analyse</span>
-                                </button>
-                            )
-                        )}
+                        {/* Removed analytics buttons */}
 
                         {/* Codex */}
                         {!hasCodexData ? (
                             hasAI ? (
                                 <button
                                     className="reader-btn reader-btn--accent"
-                                    onClick={onGenerateBonus} disabled={isGeneratingBonus} aria-busy={isGeneratingBonus}
+                                    onClick={onGenerateBonus} disabled={isGeneratingBonus} aria-busy={isGeneratingBonus ? "true" : "false"}
                                 >
                                     {isGeneratingBonus
                                         ? <><div className="spinner" aria-hidden="true" /><span>Generating…</span></>
@@ -358,8 +334,9 @@ export const Reader: React.FC<ReaderProps> = ({
                         ) : (
                             <button
                                 className={`reader-btn ${showCodex ? 'reader-btn--active' : ''}`}
-                                onClick={() => { setShowCodex(v => !v); setShowAnalytics(false); }}
-                                aria-pressed={showCodex}
+                                onClick={() => { setShowCodex(v => !v); }}
+                                aria-expanded={showCodex ? "true" : "false"}
+                                aria-controls="codex-sidebar"
                             >
                                 <Users size={14} aria-hidden="true" /><span>Codex</span>
                             </button>
@@ -399,15 +376,14 @@ export const Reader: React.FC<ReaderProps> = ({
                 <div className={`reader-panels-layout ${activeSidebar ? 'with-codex' : ''}`}>
                     {/* Panel stream */}
                     <div className="reader-panels" role="region" aria-label="Story panels">
-                        {panels.map((panel, index) => (
+                        {panels.map((panel, i) => (
                             <div
-                                key={panel.id || index} id={panel.id}
+                                key={panel.id || i} id={panel.id}
                                 className={[
-                                    currentAudioIndex === index ? 'panel-audio-active' : '',
                                     panel.isSceneBoundary ? 'panel-scene-boundary' : '',
                                 ].filter(Boolean).join(' ')}
                             >
-                                <ReaderPanel panel={panel} index={index} />
+                                <ReaderPanel panel={panel} index={i} isActive={activePanelIndex === i} />
                             </div>
                         ))}
                         <motion.div
@@ -424,6 +400,7 @@ export const Reader: React.FC<ReaderProps> = ({
                     {/* ── CHARACTER CODEX SIDEBAR ── */}
                     {showCodex && (
                         <motion.aside
+                            id="codex-sidebar"
                             initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }}
                             transition={{ duration: 0.35 }}
                             className="reader-codex" aria-label="Character codex"
@@ -437,12 +414,14 @@ export const Reader: React.FC<ReaderProps> = ({
                             </div>
 
                             <div className="codex-tabs" role="tablist">
-                                <button role="tab" aria-selected={codexTab === 'characters'}
+                                <button role="tab" aria-selected={codexTab === 'characters' ? "true" : "false"}
+                                    aria-controls="tabpanel-characters" id="tab-characters"
                                     className={`codex-tab ${codexTab === 'characters' ? 'codex-tab--active' : ''}`}
                                     onClick={() => setCodexTab('characters')}>
                                     <Users size={11} /> Characters
                                 </button>
-                                <button role="tab" aria-selected={codexTab === 'dialogue'}
+                                <button role="tab" aria-selected={codexTab === 'dialogue' ? "true" : "false"}
+                                    aria-controls="tabpanel-dialogue" id="tab-dialogue"
                                     className={`codex-tab ${codexTab === 'dialogue' ? 'codex-tab--active' : ''}`}
                                     onClick={() => setCodexTab('dialogue')}>
                                     <MessageSquare size={11} /> Dialogue
@@ -450,7 +429,7 @@ export const Reader: React.FC<ReaderProps> = ({
                             </div>
 
                             {codexTab === 'characters' && (
-                                <>
+                                <div id="tabpanel-characters" role="tabpanel" aria-labelledby="tab-characters" className="codex-tabpanel">
                                     {charGraph.edges.length > 0 && (
                                         <div className="codex-graph-section">
                                             <div className="analytics-section-label">Relationship Graph</div>
@@ -470,7 +449,7 @@ export const Reader: React.FC<ReaderProps> = ({
                                                         <div className="codex-entry-meta">
                                                             ×{char.frequency} mentions
                                                             {char.sentiment !== undefined && (
-                                                                <span className="codex-sentiment" style={{ color: char.sentiment > 0 ? '#4ade80' : char.sentiment < 0 ? 'var(--accent-crimson)' : 'var(--text-muted)' }}>
+                                                                <span className="codex-sentiment" style={{ '--sentiment-color': char.sentiment > 0 ? '#4ade80' : char.sentiment < 0 ? 'var(--accent-crimson)' : 'var(--text-muted)' } as React.CSSProperties}>
                                                                     {char.sentiment > 0.1 ? '▲' : char.sentiment < -0.1 ? '▼' : '◆'} affect
                                                                 </span>
                                                             )}
@@ -483,11 +462,11 @@ export const Reader: React.FC<ReaderProps> = ({
                                     ) : (
                                         <p className="codex-empty">No recurring characters detected. Try a longer chapter.</p>
                                     )}
-                                </>
+                                </div>
                             )}
 
                             {codexTab === 'dialogue' && (
-                                <div className="codex-dialogue">
+                                <div id="tabpanel-dialogue" role="tabpanel" aria-labelledby="tab-dialogue" className="codex-dialogue">
                                     {dialogueLines.length > 0 ? (
                                         <ul className="dialogue-list" role="list">
                                             {dialogueLines.map((dl: DialogueLine, i) => (
@@ -495,7 +474,7 @@ export const Reader: React.FC<ReaderProps> = ({
                                                     <div className="dialogue-speaker">{dl.speaker}</div>
                                                     <blockquote className="dialogue-line">"{dl.line}"</blockquote>
                                                     <div className="dialogue-tension" aria-label={`Tension ${(dl.tension * 100).toFixed(0)}%`}>
-                                                        <div className="dialogue-tension-bar" style={{ width: `${dl.tension * 100}%` }} />
+                                                        <div className="dialogue-tension-bar" style={{ '--tension-width': `${dl.tension * 100}%` } as React.CSSProperties} />
                                                     </div>
                                                 </li>
                                             ))}
@@ -508,106 +487,7 @@ export const Reader: React.FC<ReaderProps> = ({
                         </motion.aside>
                     )}
 
-                    {/* ── ANALYTICS SIDEBAR ── */}
-                    {showAnalytics && analytics && (
-                        <motion.aside
-                            initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }}
-                            transition={{ duration: 0.35 }}
-                            className="reader-codex" aria-label="Text analytics"
-                        >
-                            <div className="codex-header">
-                                <BarChart2 size={16} aria-hidden="true" />
-                                <h2 className="font-display">Analytics</h2>
-                                <button className="codex-close-btn" onClick={() => setShowAnalytics(false)} aria-label="Close analytics">
-                                    <X size={14} />
-                                </button>
-                            </div>
-
-                            {/* Narrative Arc */}
-                            <div className="analytics-section">
-                                <div className="analytics-section-label">Narrative Arc</div>
-                                <NarrativeArcBar result={narrativeArc} />
-                            </div>
-
-                            {/* Emotional Arc */}
-                            <div className="analytics-section">
-                                <div className="analytics-section-label">Emotional Arc</div>
-                                <div className="analytics-arc-wrapper">
-                                    <EmotionalArc arc={analytics.emotionalArc} height={48} />
-                                </div>
-                                <div className="analytics-arc-meta">
-                                    <span>Start</span>
-                                    <span className={`analytics-tone analytics-tone--${analytics.overallSentiment}`}>{analytics.overallSentiment} tone</span>
-                                    <span>End</span>
-                                </div>
-                            </div>
-
-                            {/* Symbolic Density */}
-                            <div className="analytics-section">
-                                <div className="analytics-section-label">Literary Richness</div>
-                                <div className="analytics-symbolic">
-                                    <div className="analytics-symbolic-score">
-                                        <div className="analytics-symbolic-fill" style={{ width: `${symbolic.overallScore * 100}%` }} />
-                                    </div>
-                                    <div className="analytics-stats-grid" style={{ marginTop: '0.5rem' }}>
-                                        <Stat label="Similes" value={symbolic.similes} />
-                                        <Stat label="Metaphors" value={symbolic.metaphors} />
-                                        <Stat label="Style" value={symbolic.label} />
-                                    </div>
-                                    {symbolic.topMotifs.length > 0 && (
-                                        <div className="analytics-motifs">
-                                            {symbolic.topMotifs.map((m: string) => <span key={m} className="analytics-motif-chip">{m}</span>)}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Readability */}
-                            <div className="analytics-section">
-                                <div className="analytics-section-label">Readability</div>
-                                <div className="analytics-stats-grid">
-                                    <Stat label="Flesch" value={analytics.readability.fleschEase} sub={analytics.readability.label} accent />
-                                    <Stat label="Grade" value={`G${analytics.readability.gradeLevel}`} />
-                                    <Stat label="Avg Sent" value={`${analytics.readability.avgWordsPerSentence}w`} />
-                                    <Stat label="Syl/w" value={analytics.readability.avgSyllablesPerWord} />
-                                </div>
-                            </div>
-
-                            {/* Vocabulary */}
-                            <div className="analytics-section">
-                                <div className="analytics-section-label">Vocabulary</div>
-                                <div className="analytics-stats-grid">
-                                    <Stat label="Words" value={analytics.vocabulary.totalWords.toLocaleString()} />
-                                    <Stat label="Unique" value={analytics.vocabulary.uniqueWords.toLocaleString()} />
-                                    <Stat label="Richness" value={analytics.vocabulary.richness} accent />
-                                    <Stat label="MATTR" value={(analytics.vocabulary.mattr * 100).toFixed(0) + '%'} sub="Lexical density" />
-                                </div>
-                            </div>
-
-                            {/* Pacing */}
-                            <div className="analytics-section">
-                                <div className="analytics-section-label">Pacing & Structure</div>
-                                <div className="analytics-stats-grid">
-                                    <Stat label="Pacing" value={analytics.pacing.label} accent />
-                                    <Stat label="Tension" value={(analytics.pacing.avgTension * 100).toFixed(0) + '%'} sub="avg" />
-                                    <Stat label="Dialogue" value={(analytics.pacing.dialogueRatio * 100).toFixed(0) + '%'} />
-                                    <Stat label="Scenes" value={analytics.sceneBoundaryCount} />
-                                </div>
-                                <div className="analytics-swings">
-                                    {analytics.pacing.emotionalSwings} emotional swing{analytics.pacing.emotionalSwings !== 1 ? 's' : ''} detected
-                                </div>
-                            </div>
-
-                            {/* Reading Time */}
-                            <div className="analytics-section">
-                                <div className="analytics-section-label">Reading Time</div>
-                                <div className="analytics-time-display">
-                                    {analytics.estimatedReadingTime} <span>min</span>
-                                </div>
-                                <div className="analytics-time-sub">at 200 words per minute</div>
-                            </div>
-                        </motion.aside>
-                    )}
+                    {/* Removed analytics sidebar */}
                 </div>
             </div>
         </div>

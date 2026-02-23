@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { MangaPanel, Character, Atmosphere, ChapterAnalytics } from '../types';
+import type { MangaPanel, Character, Atmosphere } from '../types';
 
 export interface SavedChapter {
     id?: number;
@@ -9,7 +9,7 @@ export interface SavedChapter {
     characters: Character[];
     recap: string | null;
     atmosphere: Atmosphere | null;
-    analytics: ChapterAnalytics | null;
+    // Removed analytics
     rawText: string;
 }
 

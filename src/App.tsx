@@ -19,7 +19,6 @@ const sel = {
   characters: (s: ReturnType<typeof useStore.getState>) => s.characters,
   recap: (s: ReturnType<typeof useStore.getState>) => s.recap,
   atmosphere: (s: ReturnType<typeof useStore.getState>) => s.atmosphere,
-  analytics: (s: ReturnType<typeof useStore.getState>) => s.analytics,
   error: (s: ReturnType<typeof useStore.getState>) => s.error,
   isProcessing: (s: ReturnType<typeof useStore.getState>) => s.isProcessing,
   progress: (s: ReturnType<typeof useStore.getState>) => s.progress,
@@ -27,7 +26,7 @@ const sel = {
   resetReader: (s: ReturnType<typeof useStore.getState>) => s.resetReader,
   setMangaData: (s: ReturnType<typeof useStore.getState>) => s.setMangaData,
   setRawText: (s: ReturnType<typeof useStore.getState>) => s.setRawText,
-  setChapterId: (s: ReturnType<typeof useStore.getState>) => s.setCurrentChapterId,
+  setCurrentChapterId: (s: ReturnType<typeof useStore.getState>) => s.setCurrentChapterId,
   aiProvider: (s: ReturnType<typeof useStore.getState>) => s.aiProvider,
 };
 
@@ -94,7 +93,7 @@ function App() {
   const characters = useStore(sel.characters);
   const recap = useStore(sel.recap);
   const atmosphere = useStore(sel.atmosphere);
-  const analytics = useStore(sel.analytics);
+  const chapterTitle = useStore(s => s.chapterTitle);
   const error = useStore(sel.error);
   const isProcessing = useStore(sel.isProcessing);
   const progress = useStore(sel.progress);
@@ -102,13 +101,10 @@ function App() {
   const resetReader = useStore(sel.resetReader);
   const setPanels = useStore(sel.setMangaData);
   const setRawText = useStore(sel.setRawText);
-  const setChapter = useStore(sel.setChapterId);
+  const setChapter = useStore(sel.setCurrentChapterId);
   const aiProvider = useStore(sel.aiProvider);
 
-  const { compileToManga, generateBonusTools, generateIntelligence } = useMangaCompiler();
-
-  const [isGeneratingBonus, setIsGeneratingBonus] = useState(false);
-  const [isGeneratingIntel, setIsGeneratingIntel] = useState(false);
+  const { compileToManga, generateBonusTools } = useMangaCompiler(); const [isGeneratingBonus, setIsGeneratingBonus] = useState(false);
   const [isAIOpen, setIsAIOpen] = useState(false);
 
   const savedChapters = useLiveQuery(() => db.chapters.orderBy('createdAt').reverse().toArray());
@@ -121,7 +117,7 @@ function App() {
         characters: chapter.characters,
         recap: chapter.recap,
         atmosphere: chapter.atmosphere,
-        analytics: chapter.analytics ?? null,
+        chapterTitle: chapter.title,
       });
       setRawText(chapter.rawText);
       setChapter(id);
@@ -139,11 +135,7 @@ function App() {
     finally { setIsGeneratingBonus(false); }
   }, [generateBonusTools]);
 
-  const handleGenerateIntelligence = useCallback(async () => {
-    setIsGeneratingIntel(true);
-    try { await generateIntelligence(); }
-    finally { setIsGeneratingIntel(false); }
-  }, [generateIntelligence]);
+
 
   const aiLabel = AI_LABELS[aiProvider] || 'AI Off';
   const hasReader = panels.length > 0;
@@ -163,6 +155,8 @@ function App() {
                 className="ai-trigger-button"
                 onClick={() => setIsAIOpen(true)}
                 aria-label={`AI Settings: ${aiLabel}`}
+                aria-expanded={isAIOpen ? "true" : "false"}
+                aria-haspopup="dialog"
                 title="AI Settings"
               >
                 <Sparkles size={16} strokeWidth={2.5} className="ai-trigger-icon" aria-hidden="true" />
@@ -188,9 +182,9 @@ function App() {
             <motion.div key="reader" className="reader-wrapper" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.5 }}>
               <Suspense fallback={
                 <div className="reader-loading">
-                  <div className="skeleton-block" style={{ width: '80%', height: 24, marginBottom: 12 }} />
-                  <div className="skeleton-block" style={{ width: '60%', height: 16, marginBottom: 8 }} />
-                  <div className="skeleton-block" style={{ width: '90%', height: 200 }} />
+                  <div className="skeleton-block skeleton-block-title" />
+                  <div className="skeleton-block skeleton-block-subtitle" />
+                  <div className="skeleton-block skeleton-block-main" />
                 </div>
               }>
                 <Reader
@@ -198,12 +192,10 @@ function App() {
                   characters={characters}
                   recap={recap}
                   atmosphere={atmosphere}
-                  analytics={analytics}
+                  chapterTitle={chapterTitle}
                   onClose={resetReader}
                   onGenerateBonus={handleGenerateBonus}
                   isGeneratingBonus={isGeneratingBonus}
-                  onGenerateIntelligence={handleGenerateIntelligence}
-                  isGeneratingIntelligence={isGeneratingIntel}
                 />
               </Suspense>
             </motion.div>
@@ -231,7 +223,7 @@ function App() {
                 {isProcessing && (
                   <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="progress-container" role="status" aria-live="polite" aria-label={`Processing: ${progress}%`}>
                     <div className="progress-bar" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}>
-                      <motion.div className="progress-fill" initial={{ width: 0 }} animate={{ width: `${progress}%` }} transition={{ ease: 'easeOut' }} />
+                      <motion.div className="progress-fill" initial={{ width: 0 }} animate={{ width: `${progress}%` }} transition={{ ease: 'easeOut' }} style={{ '--progress-pct': `${progress}%` } as React.CSSProperties} />
                     </div>
                     <motion.span className="progress-label" animate={{ opacity: [0.4, 1, 0.4] }} transition={{ repeat: Infinity, duration: 2 }}>
                       {progress}% — {progressLabel || 'Processing…'}

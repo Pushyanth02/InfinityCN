@@ -28,32 +28,114 @@
     top: 0;
     left: 0;
     right: 0;
-    height: 50vh;
+    height: 65vh;
     pointer-events: none;
     z-index: 1;
-    opacity: 0.35;
+    opacity: 0.45;
     mix-blend-mode: screen;
+    transition: background var(--transition-slow), filter var(--transition-slow), opacity var(--transition-slow);
+}
+
+/* Light Mode inversions for vignettes */
+[data-theme='light'] .reader-atmosphere-vignette {
+    mix-blend-mode: multiply;
+    opacity: 0.6;
+}
+
+/* Stormy Mood */
+@keyframes stormy-pulse {
+    0% {
+        opacity: 0.3;
+    }
+
+    50% {
+        opacity: 0.7;
+        filter: brightness(1.2);
+    }
+
+    100% {
+        opacity: 0.3;
+    }
 }
 
 .mood-dark_stormy .reader-atmosphere-vignette {
-    background: radial-gradient(ellipse at top, rgba(56, 100, 200, 0.3) 0%, transparent 70%);
+    background: radial-gradient(ellipse at top, rgba(56, 100, 200, 0.45) 0%, transparent 75%);
+    animation: stormy-pulse 7s ease-in-out infinite alternate;
+}
+
+/* Sunny Mood */
+@keyframes sun-drifting {
+    0% {
+        transform: scale(1) translateY(0);
+    }
+
+    100% {
+        transform: scale(1.05) translateY(10px);
+    }
 }
 
 .mood-bright_sunny .reader-atmosphere-vignette {
-    background: radial-gradient(ellipse at top, rgba(255, 200, 80, 0.2) 0%, transparent 70%);
+    background: radial-gradient(ellipse at top, rgba(255, 200, 80, 0.35) 0%, transparent 75%);
+    animation: sun-drifting 12s ease-in-out infinite alternate;
+}
+
+[data-theme='light'] .mood-bright_sunny .reader-atmosphere-vignette {
+    background: radial-gradient(ellipse at top, rgba(230, 160, 40, 0.3) 0%, transparent 75%);
+}
+
+/* Fog Mood */
+@keyframes fog-rolling {
+    0% {
+        filter: blur(20px) contrast(1);
+        opacity: 0.4;
+    }
+
+    100% {
+        filter: blur(30px) contrast(0.9);
+        opacity: 0.6;
+    }
 }
 
 .mood-mysterious_fog .reader-atmosphere-vignette {
-    background: radial-gradient(ellipse at top, rgba(80, 180, 130, 0.2) 0%, transparent 70%);
-    filter: blur(20px);
+    background: radial-gradient(ellipse at top, rgba(80, 180, 130, 0.3) 0%, transparent 75%);
+    animation: fog-rolling 10s ease-in-out infinite alternate;
+}
+
+/* Tense Mood */
+@keyframes tense-flicker {
+    0% {
+        opacity: 0.4;
+        filter: brightness(1) saturate(1);
+    }
+
+    50% {
+        opacity: 0.55;
+        filter: brightness(1.2) saturate(1.2);
+    }
+
+    51% {
+        opacity: 0.3;
+    }
+
+    53% {
+        opacity: 0.6;
+        filter: brightness(1.3) saturate(1.4);
+    }
+
+    100% {
+        opacity: 0.4;
+    }
 }
 
 .mood-tense_battle .reader-atmosphere-vignette {
-    background: radial-gradient(ellipse at top, rgba(220, 40, 40, 0.25) 0%, transparent 70%);
+    background: radial-gradient(ellipse at top, rgba(220, 20, 20, 0.4) 0%, transparent 75%);
+    animation: tense-flicker 6s ease-in-out infinite;
 }
 
+/* Quiet Mood */
 .mood-quiet_indoor .reader-atmosphere-vignette {
-    background: radial-gradient(ellipse at top, rgba(201, 162, 39, 0.12) 0%, transparent 70%);
+    background: radial-gradient(ellipse at top, rgba(201, 162, 39, 0.2) 0%, transparent 65%);
+    transition: opacity 2s ease;
 }
 
 /* ── READER STICKY NAV ── */

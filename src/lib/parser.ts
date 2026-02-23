@@ -8,20 +8,14 @@
  *  - Expanded scene-transition keywords
  *  - Improved speaker detection (said/whispered/shouted/muttered + Name)
  */
-import type { MangaPanel, Character, Atmosphere, ChapterAnalytics } from '../types';
+import type { MangaPanel, Character, Atmosphere } from '../types';
 import {
     splitSentences,
     scoreTension,
     analyseSentiment,
     detectSceneBoundaries,
-    analyseDocument,
-    analysePacing,
     extractCharacters,
-    textRankSummarise,
     tokenise,
-    computeHapaxRatio,
-    computeSentenceComplexity,
-    computeParagraphRhythm,
 } from './algorithms';
 
 // ─── Session epoch for stable IDs across a page load ──────
@@ -154,14 +148,7 @@ export const processCharacters = async (text: string): Promise<Character[]> => {
     }));
 };
 
-// ═══════════════════════════════════════════════════════════
-// RECAP — TextRank extractive summarisation
-// ═══════════════════════════════════════════════════════════
 
-export const processRecap = async (text: string): Promise<string> => {
-    const { summary } = textRankSummarise(text, 4);
-    return summary;
-};
 
 // ═══════════════════════════════════════════════════════════
 // ATMOSPHERE — Tiered weighted keyword scoring (V15)
@@ -249,41 +236,3 @@ export const processAtmosphere = async (text: string): Promise<Atmosphere> => {
     return { mood: topMood, description: ATMO_DESCRIPTIONS[topMood] };
 };
 
-// ═══════════════════════════════════════════════════════════
-// ANALYTICS — Full document analytics pipeline
-// ═══════════════════════════════════════════════════════════
-
-export const processAnalytics = async (
-    text: string,
-    panels: MangaPanel[]
-): Promise<ChapterAnalytics> => {
-    const doc = analyseDocument(text);
-    const pacing = analysePacing(panels.map(p => ({
-        type: p.type,
-        content: p.content,
-        tension: p.tension,
-        sentiment: p.sentiment,
-    })));
-
-    // V16: New algorithms run in parallel
-    const [hapaxRatio, sentenceComplexity, paragraphRhythm] = [
-        computeHapaxRatio(text),
-        computeSentenceComplexity(text),
-        computeParagraphRhythm(text),
-    ];
-
-    return {
-        readability: doc.readability,
-        vocabulary: doc.vocabulary,
-        pacing,
-        estimatedReadingTime: doc.estimatedReadingTime,
-        overallSentiment: doc.overallSentiment.label,
-        sentimentScore: doc.overallSentiment.score,
-        emotionalArc: doc.emotionalArc,
-        sceneBoundaryCount: doc.sceneBoundaries.length,
-        textRankSummary: doc.textRankSummary,
-        hapaxRatio,
-        sentenceComplexity,
-        paragraphRhythm,
-    };
-};

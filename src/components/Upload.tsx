@@ -67,7 +67,8 @@ export const Upload: React.FC<UploadProps> = ({ onFileSelect, isLoading }) => {
                 onDragLeave={handleDrag}
                 onDragOver={handleDrag}
                 onDrop={handleDrop}
-                aria-disabled={isBusy}
+                role="button"
+                aria-disabled={isBusy ? "true" : "false"}
                 tabIndex={isBusy ? -1 : 0}
                 onKeyDown={e => {
                     if (!isBusy && (e.key === 'Enter' || e.key === ' ')) {
@@ -97,7 +98,7 @@ export const Upload: React.FC<UploadProps> = ({ onFileSelect, isLoading }) => {
                 <input
                     id="file-upload-input"
                     type="file"
-                    style={{ display: 'none' }}
+                    className="upload-input-hidden"
                     aria-hidden="true"
                     tabIndex={-1}
                     accept="application/pdf,text/plain,.pdf,.txt"
