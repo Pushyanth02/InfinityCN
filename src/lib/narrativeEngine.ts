@@ -8,28 +8,28 @@
  *   extractDialogueLines — clean speaker-attributed quotes
  */
 
-import { splitSentences, tokenise, scoreTension } from './algorithms';
+import { splitSentences, scoreTension } from './algorithms';
 import type { NamedCharacter } from './algorithms';
 
 // ═══════════════════════════════════════════════════════════
 // 1. NARRATIVE ARC DETECTION
 // ═══════════════════════════════════════════════════════════
 
-export type NarrativeStage =
+type NarrativeStage =
     | 'exposition'
     | 'rising_action'
     | 'climax'
     | 'falling_action'
     | 'resolution';
 
-export interface NarrativeArcResult {
+interface NarrativeArcResult {
     stages: NarrativeStageSegment[];
     climaxIndex: number;       // index of the panel at peak tension
     climaxPercent: number;     // 0-100: where in the chapter the climax falls
     arcShape: 'mountain' | 'plateau' | 'rising' | 'falling' | 'flat';
 }
 
-export interface NarrativeStageSegment {
+interface NarrativeStageSegment {
     stage: NarrativeStage;
     startPercent: number;     // 0-100
     endPercent: number;
@@ -208,86 +208,6 @@ export function buildCharacterGraph(
     return { nodes, edges: edges.slice(0, 12) };
 }
 
-// ═══════════════════════════════════════════════════════════
-// 3. SYMBOLIC DENSITY ANALYSER
-// ═══════════════════════════════════════════════════════════
-
-export interface SymbolicDensityResult {
-    similes: number;   // count of "like a", "as if", "as ... as" patterns
-    metaphors: number;   // count of metaphor-indicator patterns
-    motifScore: number;   // 0-1: how much the text repeats key motif words
-    overallScore: number;   // composite literary richness 0-1
-    topMotifs: string[]; // top repeated symbolic words
-    label: 'Highly Symbolic' | 'Moderately Symbolic' | 'Literal' | 'Sparse';
-}
-
-const SIMILE_PATTERNS = [
-    /\blike\s+a[n]?\s+\w+/gi,
-    /\bas\s+\w+\s+as/gi,
-    /\bas\s+if\b/gi,
-    /\bas\s+though\b/gi,
-    /\bjust\s+as\b/gi,
-];
-
-const METAPHOR_INDICATORS = [
-    /\bwas\s+a[n]?\s+[A-Z][a-z]+/gi,  // "was a Storm" / "was a storm"
-    /\bbecame?\s+a[n]?\s+\w+/gi,
-    /\bis\s+a[n]?\s+(sea|storm|fire|shadow|ghost|blade|wall|river|light|darkness)/gi,
-    /\bthe\s+(storm|fire|shadow|silence|darkness|void)\s+(of|inside|within)\b/gi,
-];
-
-// Words that carry strong symbolic weight
-const SYMBOLIC_WORDS = new Set([
-    'shadow', 'darkness', 'light', 'storm', 'silence', 'void', 'fire', 'blood',
-    'chains', 'crown', 'sword', 'mirror', 'mask', 'bridge', 'door', 'gate',
-    'moon', 'sun', 'star', 'dawn', 'dusk', 'echo', 'ghost', 'dust',
-    'heart', 'soul', 'fate', 'curse', 'serpent', 'lion', 'wolf', 'raven',
-]);
-
-export function computeSymbolicDensity(text: string): SymbolicDensityResult {
-    let similes = 0;
-    for (const pattern of SIMILE_PATTERNS) {
-        const matches = text.match(pattern);
-        similes += matches?.length ?? 0;
-    }
-
-    let metaphors = 0;
-    for (const pattern of METAPHOR_INDICATORS) {
-        const matches = text.match(pattern);
-        metaphors += matches?.length ?? 0;
-    }
-
-    // Motif detection: symbolic words that appear ≥3 times
-    const tokens = tokenise(text);
-    const symbolFreq = new Map<string, number>();
-    for (const t of tokens) {
-        if (SYMBOLIC_WORDS.has(t)) symbolFreq.set(t, (symbolFreq.get(t) ?? 0) + 1);
-    }
-
-    const topMotifs = Array.from(symbolFreq.entries())
-        .filter(([, c]) => c >= 2)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 5)
-        .map(([w]) => w);
-
-    const motifScore = Math.min(1, (topMotifs.length * 0.15) + (symbolFreq.size ? Math.min(0.4, symbolFreq.size / 20) : 0));
-    const wordCount = Math.max(1, tokens.length);
-    const simileRate = similes / (wordCount / 100);
-    const metaphorRate = metaphors / (wordCount / 100);
-
-    const overallScore = Math.min(1, (simileRate * 0.3 + metaphorRate * 0.4 + motifScore * 0.3));
-
-    const label: SymbolicDensityResult['label'] =
-        overallScore > 0.55 ? 'Highly Symbolic' :
-            overallScore > 0.3 ? 'Moderately Symbolic' :
-                overallScore > 0.1 ? 'Literal' : 'Sparse';
-
-    return {
-        similes, metaphors, motifScore: parseFloat(motifScore.toFixed(3)),
-        overallScore: parseFloat(overallScore.toFixed(3)),
-        topMotifs, label,
-    };
-}
 
 // ═══════════════════════════════════════════════════════════
 // 4. DIALOGUE LINE EXTRACTION

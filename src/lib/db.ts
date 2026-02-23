@@ -1,7 +1,7 @@
 import Dexie, { type Table } from 'dexie';
 import type { MangaPanel, Character, Atmosphere } from '../types';
 
-export interface SavedChapter {
+interface SavedChapter {
     id?: number;
     title: string;
     createdAt: number;
@@ -13,7 +13,7 @@ export interface SavedChapter {
     rawText: string;
 }
 
-export class InfinityDatabase extends Dexie {
+class InfinityDatabase extends Dexie {
     chapters!: Table<SavedChapter>;
 
     constructor() {

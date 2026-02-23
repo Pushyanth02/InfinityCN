@@ -28,19 +28,7 @@ export interface Atmosphere {
 
 // ─── AI Enriched Types ─────────────────────────────────────
 
-/** Result of AI genre & style analysis */
-export interface StyleAnalysis {
-    genre: string;
-    narrativeVoice: string;
-    pacingStyle: string;
-    iconicQuote: string;
-    themes: string[];
-}
 
-/** A single thematic insight bullet point */
-export interface ChapterInsight {
-    text: string;
-}
 
 /** AI connection test result */
 export interface AIConnectionStatus {
