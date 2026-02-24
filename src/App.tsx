@@ -11,7 +11,7 @@ import { Analytics } from '@vercel/analytics/react';
 import { SpeedInsights } from '@vercel/speed-insights/react';
 import './App.css';
 
-const AI_LABELS: Record<string, string> = { none: 'Setup AI', chrome: 'Nano', gemini: 'Gemini', ollama: 'Ollama' };
+const AI_LABELS: Record<string, string> = { none: 'Setup AI', chrome: 'Nano', gemini: 'Gemini', ollama: 'Ollama', openai: 'OpenAI', anthropic: 'Claude', groq: 'Groq', deepseek: 'DeepSeek' };
 
 // ── Module-level store selectors (stable refs, no inline closures) ──
 const sel = {
@@ -93,6 +93,7 @@ function App() {
   const characters = useStore(sel.characters);
   const recap = useStore(sel.recap);
   const atmosphere = useStore(sel.atmosphere);
+  const insights = useStore(s => s.insights);
   const chapterTitle = useStore(s => s.chapterTitle);
   const error = useStore(sel.error);
   const isProcessing = useStore(sel.isProcessing);
@@ -104,7 +105,8 @@ function App() {
   const setChapter = useStore(sel.setCurrentChapterId);
   const aiProvider = useStore(sel.aiProvider);
 
-  const { compileToManga, generateBonusTools } = useMangaCompiler(); const [isGeneratingBonus, setIsGeneratingBonus] = useState(false);
+  const { compileToManga, generateBonusTools } = useMangaCompiler();
+  const [isGeneratingBonus, setIsGeneratingBonus] = useState(false);
   const [isAIOpen, setIsAIOpen] = useState(false);
 
   const savedChapters = useLiveQuery(() => db.chapters.orderBy('createdAt').reverse().toArray());
@@ -118,6 +120,7 @@ function App() {
         recap: chapter.recap,
         atmosphere: chapter.atmosphere,
         chapterTitle: chapter.title,
+        insights: chapter.insights ?? null,
       });
       setRawText(chapter.rawText);
       setChapter(id);
@@ -192,6 +195,7 @@ function App() {
                   characters={characters}
                   recap={recap}
                   atmosphere={atmosphere}
+                  insights={insights}
                   chapterTitle={chapterTitle}
                   onClose={resetReader}
                   onGenerateBonus={handleGenerateBonus}

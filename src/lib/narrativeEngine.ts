@@ -4,12 +4,22 @@
  * Functions:
  *   detectNarrativeArc   — 5-act structure from tension curve
  *   buildCharacterGraph  — co-occurrence edge graph between characters
- *   computeSymbolicDensity — simile / metaphor / motif density per paragraph
  *   extractDialogueLines — clean speaker-attributed quotes
  */
 
-import { splitSentences, scoreTension } from './algorithms';
+import {
+    splitSentences,
+    scoreTension,
+    computeReadability,
+    extractKeywords,
+    computeVocabRichness,
+    analysePacing,
+    computeEmotionalArc,
+    generateExtractiveRecap,
+} from './algorithms';
 import type { NamedCharacter } from './algorithms';
+import type { ChapterInsights } from '../types';
+import type { MangaPanel } from '../types';
 
 // ═══════════════════════════════════════════════════════════
 // 1. NARRATIVE ARC DETECTION
@@ -260,4 +270,34 @@ export function extractDialogueLines(
     return results
         .sort((a, b) => b.tension - a.tension)
         .slice(0, maxLines);
+}
+
+
+// ═══════════════════════════════════════════════════════════
+// 5. CHAPTER INSIGHTS ORCHESTRATOR
+// ═══════════════════════════════════════════════════════════
+
+/**
+ * Compute all chapter-level analytics in a single pass.
+ * Orchestrates every algorithm into a ChapterInsights bundle.
+ */
+export function computeChapterInsights(
+    rawText: string,
+    panels: MangaPanel[],
+): ChapterInsights {
+    const readability = computeReadability(rawText);
+    const keywords = extractKeywords(rawText, 12);
+    const vocabRichness = computeVocabRichness(rawText);
+    const pacing = analysePacing(rawText, panels);
+    const emotionalArc = computeEmotionalArc(panels);
+    const extractiveRecap = generateExtractiveRecap(rawText);
+
+    return {
+        readability,
+        keywords,
+        vocabRichness,
+        pacing,
+        emotionalArc,
+        extractiveRecap,
+    };
 }

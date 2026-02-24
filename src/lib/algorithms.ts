@@ -4,7 +4,8 @@
  * All pure functions. No external dependencies.
  * Implements: TF-IDF, TextRank, AFINN Sentiment, Flesch-Kincaid,
  *             Vocabulary Richness (TTR/MTLD), Tension Scoring,
- *             Scene Segmentation, Named Entity Recognition.
+ *             Scene Segmentation, Named Entity Recognition,
+ *             Pacing Analysis, Emotional Arc, Extractive Recap.
  */
 
 // ═══════════════════════════════════════════════════════════
@@ -119,6 +120,8 @@ export function analyseSentiment(text: string): SentimentResult {
  *  - All-caps word ratio (shouting/SFX)
  * Accepts optional pre-computed sentiment to avoid redundant work.
  */
+export type { SentimentResult };
+
 export function scoreTension(sentence: string, precomputedSentiment?: SentimentResult): number {
     const words = sentence.split(/\s+/);
     const wordCount = words.length;
@@ -259,3 +262,360 @@ export function extractCharacters(text: string, maxChars = 10): NamedCharacter[]
 }
 
 // ═══════════════════════════════════════════════════════════
+// 11. SCENE BOUNDARY DETECTION
+// ═══════════════════════════════════════════════════════════
+
+export interface SceneBoundary {
+    startIndex: number;
+    tensionDelta: number;
+}
+
+/**
+ * Detect scene boundaries using tension shift analysis.
+ * Compares adjacent sliding windows of the given size; a boundary
+ * is detected where the absolute tension delta exceeds the threshold.
+ */
+export function detectSceneBoundaries(
+    sentences: string[],
+    windowSize = 4,
+    threshold = 0.2
+): SceneBoundary[] {
+    if (sentences.length < windowSize * 2) return [];
+
+    const tensions = sentences.map(s => scoreTension(s));
+    const boundaries: SceneBoundary[] = [];
+
+    const avg = (arr: number[]) =>
+        arr.length > 0 ? arr.reduce((s, v) => s + v, 0) / arr.length : 0;
+
+    for (let i = windowSize; i <= sentences.length - windowSize; i++) {
+        const before = avg(tensions.slice(i - windowSize, i));
+        const after = avg(tensions.slice(i, i + windowSize));
+        const delta = Math.abs(after - before);
+
+        if (delta >= threshold) {
+            // Avoid marking boundaries too close together
+            if (boundaries.length === 0 || i - boundaries[boundaries.length - 1].startIndex >= windowSize) {
+                boundaries.push({ startIndex: i, tensionDelta: parseFloat(delta.toFixed(4)) });
+            }
+        }
+    }
+
+    return boundaries;
+}
+
+// ═══════════════════════════════════════════════════════════
+// 12. FLESCH-KINCAID READABILITY
+// ═══════════════════════════════════════════════════════════
+
+export interface ReadabilityResult {
+    fleschKincaid: number;    // grade level (US school grade)
+    readingEase: number;      // 0-100 (higher = easier)
+    avgWordsPerSentence: number;
+    avgSyllablesPerWord: number;
+    label: string;            // e.g. "College", "High School"
+}
+
+/** Estimate syllable count for an English word */
+function countSyllables(word: string): number {
+    const w = word.toLowerCase().replace(/[^a-z]/g, '');
+    if (w.length <= 2) return 1;
+    let count = 0;
+    const vowels = 'aeiouy';
+    let prevVowel = false;
+    for (const ch of w) {
+        const isVowel = vowels.includes(ch);
+        if (isVowel && !prevVowel) count++;
+        prevVowel = isVowel;
+    }
+    // Silent 'e' at end
+    if (w.endsWith('e') && count > 1) count--;
+    return Math.max(1, count);
+}
+
+function readabilityLabel(ease: number): string {
+    if (ease >= 90) return 'Very Easy';
+    if (ease >= 70) return 'Easy';
+    if (ease >= 50) return 'Moderate';
+    if (ease >= 30) return 'Difficult';
+    return 'Very Difficult';
+}
+
+export function computeReadability(text: string): ReadabilityResult {
+    const sentences = splitSentences(text);
+    const words = tokenise(text);
+    if (sentences.length === 0 || words.length === 0) {
+        return { fleschKincaid: 0, readingEase: 100, avgWordsPerSentence: 0, avgSyllablesPerWord: 0, label: 'N/A' };
+    }
+
+    const totalSyllables = words.reduce((sum, w) => sum + countSyllables(w), 0);
+    const avgWordsPerSentence = words.length / sentences.length;
+    const avgSyllablesPerWord = totalSyllables / words.length;
+
+    // Flesch Reading Ease
+    const readingEase = 206.835 - 1.015 * avgWordsPerSentence - 84.6 * avgSyllablesPerWord;
+    const clampedEase = Math.max(0, Math.min(100, readingEase));
+
+    // Flesch-Kincaid Grade Level
+    const gradeLevel = 0.39 * avgWordsPerSentence + 11.8 * avgSyllablesPerWord - 15.59;
+    const clampedGrade = Math.max(0, Math.min(20, gradeLevel));
+
+    return {
+        fleschKincaid: parseFloat(clampedGrade.toFixed(1)),
+        readingEase: parseFloat(clampedEase.toFixed(1)),
+        avgWordsPerSentence: parseFloat(avgWordsPerSentence.toFixed(1)),
+        avgSyllablesPerWord: parseFloat(avgSyllablesPerWord.toFixed(2)),
+        label: readabilityLabel(clampedEase),
+    };
+}
+
+// ═══════════════════════════════════════════════════════════
+// 13. TF-IDF KEYWORD EXTRACTION
+// ═══════════════════════════════════════════════════════════
+
+const KEYWORD_STOP_WORDS = new Set([
+    ...GLOBAL_STOP_WORDS,
+    'been', 'being', 'does', 'did', 'has', 'have', 'having', 'will', 'shall',
+    'very', 'much', 'only', 'also', 'too', 'like', 'well', 'way', 'than',
+    'each', 'every', 'such', 'both', 'own', 'same', 'about', 'through',
+    'during', 'against', 'between', 'under', 'above', 'once', 'again',
+    'other', 'any', 'many', 'few', 'most', 'along', 'around', 'upon',
+    'while', 'until', 'since', 'though', 'because', 'enough', 'almost',
+    'already', 'often', 'perhaps', 'really', 'quite', 'might', 'must',
+    'shall', 'may', 'let', 'yet', 'seem', 'seemed', 'seems',
+]);
+
+export interface Keyword {
+    word: string;
+    score: number;   // TF-IDF score, normalised 0-1
+    count: number;
+}
+
+/**
+ * Extract top keywords using TF-IDF within paragraph-level documents.
+ * Splits text into ~500 word paragraphs as pseudo-documents.
+ */
+export function extractKeywords(text: string, maxKeywords = 12): Keyword[] {
+    const words = tokenise(text);
+    if (words.length < 10) return [];
+
+    // Build paragraph documents (~500 words each)
+    const PARA_SIZE = 500;
+    const docs: string[][] = [];
+    for (let i = 0; i < words.length; i += PARA_SIZE) {
+        docs.push(words.slice(i, i + PARA_SIZE));
+    }
+    if (docs.length < 2) docs.push(words.slice(Math.floor(words.length / 2)));
+
+    // Term frequency across entire text
+    const tf = new Map<string, number>();
+    for (const w of words) {
+        if (KEYWORD_STOP_WORDS.has(w) || w.length < 3) continue;
+        tf.set(w, (tf.get(w) ?? 0) + 1);
+    }
+
+    // Document frequency (how many docs contain this word)
+    const df = new Map<string, number>();
+    for (const doc of docs) {
+        const seen = new Set<string>();
+        for (const w of doc) {
+            if (!seen.has(w) && tf.has(w)) {
+                df.set(w, (df.get(w) ?? 0) + 1);
+                seen.add(w);
+            }
+        }
+    }
+
+    // Compute TF-IDF
+    const numDocs = docs.length;
+    const scores: { word: string; score: number; count: number }[] = [];
+    for (const [word, freq] of tf) {
+        const docFreq = df.get(word) ?? 1;
+        const idf = Math.log((numDocs + 1) / (docFreq + 1)) + 1;
+        const tfidf = (freq / words.length) * idf;
+        scores.push({ word, score: tfidf, count: freq });
+    }
+
+    scores.sort((a, b) => b.score - a.score);
+    const top = scores.slice(0, maxKeywords);
+    const maxScore = top[0]?.score ?? 1;
+
+    return top.map(s => ({
+        word: s.word,
+        score: parseFloat((s.score / maxScore).toFixed(3)),
+        count: s.count,
+    }));
+}
+
+// ═══════════════════════════════════════════════════════════
+// 14. VOCABULARY RICHNESS (Type-Token Ratio)
+// ═══════════════════════════════════════════════════════════
+
+export interface VocabRichnessResult {
+    ttr: number;              // Type-Token Ratio (0-1)
+    uniqueWords: number;
+    totalWords: number;
+    label: string;            // "Rich", "Moderate", "Simple"
+}
+
+export function computeVocabRichness(text: string): VocabRichnessResult {
+    const words = tokenise(text);
+    if (words.length === 0) {
+        return { ttr: 0, uniqueWords: 0, totalWords: 0, label: 'N/A' };
+    }
+
+    const unique = new Set(words);
+    // Use root TTR (RTTR) to normalise for text length
+    const rttr = unique.size / Math.sqrt(words.length);
+    // Normalise to 0-1 range (typical RTTR range is 3-10)
+    const normalised = Math.min(1, rttr / 10);
+
+    const label = normalised > 0.6 ? 'Rich' : normalised > 0.35 ? 'Moderate' : 'Simple';
+
+    return {
+        ttr: parseFloat(normalised.toFixed(3)),
+        uniqueWords: unique.size,
+        totalWords: words.length,
+        label,
+    };
+}
+
+// ═══════════════════════════════════════════════════════════
+// 15. PACING ANALYSIS
+// ═══════════════════════════════════════════════════════════
+
+export interface PacingResult {
+    avgSentenceLength: number;
+    shortSentenceRatio: number;  // % of sentences under 8 words
+    longSentenceRatio: number;   // % of sentences over 25 words
+    dialogueRatio: number;       // % of panels that are dialogue
+    sceneCount: number;
+    label: 'Fast' | 'Moderate' | 'Slow';
+}
+
+export function analysePacing(text: string, panels: Array<{ type: string }>): PacingResult {
+    const sentences = splitSentences(text);
+    if (sentences.length === 0) {
+        return { avgSentenceLength: 0, shortSentenceRatio: 0, longSentenceRatio: 0, dialogueRatio: 0, sceneCount: 0, label: 'Moderate' };
+    }
+
+    const lengths = sentences.map(s => s.split(/\s+/).length);
+    const avg = lengths.reduce((s, v) => s + v, 0) / lengths.length;
+    const short = lengths.filter(l => l < 8).length / lengths.length;
+    const long = lengths.filter(l => l > 25).length / lengths.length;
+    const dialogueCount = panels.filter(p => p.type === 'dialogue').length;
+    const dialogueRatio = panels.length > 0 ? dialogueCount / panels.length : 0;
+    const boundaries = detectSceneBoundaries(sentences, 4, 0.2);
+
+    // Fast pacing = short sentences + high dialogue + many scene changes
+    const pacingScore = short * 0.4 + dialogueRatio * 0.3 + Math.min(1, boundaries.length / 10) * 0.3;
+    const label: PacingResult['label'] = pacingScore > 0.45 ? 'Fast' : pacingScore > 0.25 ? 'Moderate' : 'Slow';
+
+    return {
+        avgSentenceLength: parseFloat(avg.toFixed(1)),
+        shortSentenceRatio: parseFloat(short.toFixed(3)),
+        longSentenceRatio: parseFloat(long.toFixed(3)),
+        dialogueRatio: parseFloat(dialogueRatio.toFixed(3)),
+        sceneCount: boundaries.length + 1,
+        label,
+    };
+}
+
+// ═══════════════════════════════════════════════════════════
+// 16. EMOTIONAL ARC (Sentiment over time)
+// ═══════════════════════════════════════════════════════════
+
+export interface EmotionalArcPoint {
+    position: number;   // 0-100 percentage through the text
+    sentiment: number;  // -1 to 1
+    tension: number;    // 0 to 1
+}
+
+/**
+ * Computes a smoothed emotional arc by sampling sentiment & tension
+ * at regular intervals through the text. Returns ~20 data points.
+ */
+export function computeEmotionalArc(
+    panels: Array<{ content: string; tension: number; sentiment: number }>
+): EmotionalArcPoint[] {
+    if (panels.length < 5) return [];
+
+    const NUM_POINTS = Math.min(20, panels.length);
+    const chunkSize = Math.floor(panels.length / NUM_POINTS);
+    const points: EmotionalArcPoint[] = [];
+
+    for (let i = 0; i < NUM_POINTS; i++) {
+        const start = i * chunkSize;
+        const end = i === NUM_POINTS - 1 ? panels.length : start + chunkSize;
+        const chunk = panels.slice(start, end);
+
+        const avgSentiment = chunk.reduce((s, p) => s + p.sentiment, 0) / chunk.length;
+        const avgTension = chunk.reduce((s, p) => s + p.tension, 0) / chunk.length;
+
+        points.push({
+            position: parseFloat(((i / (NUM_POINTS - 1)) * 100).toFixed(1)),
+            sentiment: parseFloat(avgSentiment.toFixed(3)),
+            tension: parseFloat(avgTension.toFixed(3)),
+        });
+    }
+
+    return points;
+}
+
+// ═══════════════════════════════════════════════════════════
+// 17. EXTRACTIVE RECAP (TextRank-inspired)
+// ═══════════════════════════════════════════════════════════
+
+/**
+ * Generate an extractive summary by scoring sentences on:
+ *  1. Position (first & last sentences score higher)
+ *  2. Keyword overlap with top TF-IDF terms
+ *  3. Sentence length (prefer medium-length)
+ *  4. Named entity presence
+ * Returns the top 3-5 sentences joined as a recap paragraph.
+ */
+export function generateExtractiveRecap(text: string, maxSentences = 4): string {
+    const sentences = splitSentences(text);
+    if (sentences.length < 5) return sentences.join(' ');
+
+    const keywords = new Set(extractKeywords(text, 20).map(k => k.word));
+    const charNames = new Set(extractCharacters(text, 8).map(c => c.name.toLowerCase()));
+
+    const scored = sentences.map((sentence, idx) => {
+        const words = tokenise(sentence);
+        let score = 0;
+
+        // Position bonus: first 10% and last 10% get a boost
+        const position = idx / sentences.length;
+        if (position < 0.1) score += 0.3;
+        else if (position > 0.9) score += 0.2;
+
+        // Keyword overlap
+        const keywordHits = words.filter(w => keywords.has(w)).length;
+        score += Math.min(0.5, keywordHits * 0.08);
+
+        // Named entity presence
+        const entityHits = words.filter(w => charNames.has(w)).length;
+        score += Math.min(0.3, entityHits * 0.15);
+
+        // Prefer medium sentences (10-30 words)
+        if (words.length >= 10 && words.length <= 30) score += 0.15;
+        else if (words.length < 5 || words.length > 50) score -= 0.1;
+
+        // Informational punctuation
+        if (sentence.includes(':') || sentence.includes('—')) score += 0.05;
+
+        return { sentence, score, idx };
+    });
+
+    scored.sort((a, b) => b.score - a.score);
+
+    // Pick top sentences but maintain original order
+    const selected = scored
+        .slice(0, maxSentences)
+        .sort((a, b) => a.idx - b.idx)
+        .map(s => s.sentence);
+
+    return selected.join(' ');
+}
+

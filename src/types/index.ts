@@ -1,5 +1,3 @@
-// SavedChapter is defined and exported from '../lib/db'
-
 export interface MangaPanel {
     id: string;
     type: 'narration' | 'dialogue' | 'scene_transition' | 'sound_effect';
@@ -28,7 +26,23 @@ export interface Atmosphere {
 
 // ─── AI Enriched Types ─────────────────────────────────────
 
+import type {
+    ReadabilityResult,
+    Keyword,
+    VocabRichnessResult,
+    PacingResult,
+    EmotionalArcPoint,
+} from '../lib/algorithms';
 
+/** Aggregated analytics for a compiled chapter */
+export interface ChapterInsights {
+    readability: ReadabilityResult;
+    keywords: Keyword[];
+    vocabRichness: VocabRichnessResult;
+    pacing: PacingResult;
+    emotionalArc: EmotionalArcPoint[];
+    extractiveRecap: string;
+}
 
 /** AI connection test result */
 export interface AIConnectionStatus {
@@ -49,7 +63,7 @@ export interface AppState {
     characters: Character[];
     recap: string | null;
     atmosphere: Atmosphere | null;
-    // Removed analytics
+    insights: ChapterInsights | null;
     error: string | null;
     currentChapterId: number | null;
     chapterTitle: string | null;
@@ -76,7 +90,7 @@ export interface AppState {
     setProcessing: (isProcessing: boolean) => void;
     setRawText: (text: string) => void;
     setCurrentChapterId: (id: number | null) => void;
-    setMangaData: (data: Partial<Pick<AppState, Extract<keyof AppState, 'panels' | 'characters' | 'recap' | 'atmosphere' | 'chapterTitle'>>>) => void;
+    setMangaData: (data: Partial<Pick<AppState, Extract<keyof AppState, 'panels' | 'characters' | 'recap' | 'atmosphere' | 'chapterTitle' | 'insights'>>>) => void;
     setAiConfig: (config: Partial<Pick<AppState, 'aiProvider' | 'geminiKey' | 'useSearchGrounding' | 'openAiKey' | 'anthropicKey' | 'groqKey' | 'deepseekKey' | 'ollamaUrl' | 'ollamaModel'>>) => void;
     resetReader: () => void;
 }

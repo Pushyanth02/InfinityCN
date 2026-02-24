@@ -8,6 +8,7 @@ import {
     enhanceCharacters,
     type AIConfig
 } from '../lib/ai';
+import { computeChapterInsights } from '../lib/narrativeEngine';
 import { useStore } from '../store';
 import { db } from '../lib/db';
 
@@ -70,10 +71,11 @@ export const useMangaCompiler = () => {
             );
             setProgress(72);
 
-            // Phase 3: Atmosphere extraction & Title extraction (parallel)
-            setProgressLabel('Analysing atmosphere…');
-            const [atmosphere] = await Promise.all([
+            // Phase 3: Atmosphere + Insights (parallel)
+            setProgressLabel('Analysing atmosphere & insights…');
+            const [atmosphere, insights] = await Promise.all([
                 processAtmosphere(text),
+                Promise.resolve(computeChapterInsights(text, newPanels)),
             ]);
 
             // Basic title extraction (first non-empty line or "Chapter X")
@@ -95,15 +97,15 @@ export const useMangaCompiler = () => {
                 createdAt: Date.now(),
                 panels: newPanels,
                 characters: [],
-                recap: null,
+                recap: insights.extractiveRecap || null,
                 atmosphere,
-                // Removed analytics
+                insights,
                 rawText: text,
             });
             setChapterId(chapterId as number);
 
             // Phase 5: Commit to store
-            setMangaData({ panels: newPanels, atmosphere, chapterTitle: parsedTitle });
+            setMangaData({ panels: newPanels, atmosphere, insights, chapterTitle: parsedTitle, recap: insights.extractiveRecap || null });
             setProgress(100);
             setProgressLabel('Done');
             setProcessing(false);
@@ -123,20 +125,24 @@ export const useMangaCompiler = () => {
             setError(null);
             setProgressLabel('Generating Character Codex & Recap…');
             const config = getAIConfig();
+            const panels = useStore.getState().panels;
 
-            const [newChars, newAtmosphere] = await Promise.all([
+            const [newChars, newAtmosphere, insights] = await Promise.all([
                 enhanceCharacters(rawText, config).catch(() => processCharacters(rawText)),
                 processAtmosphere(rawText).catch(() => null),
+                Promise.resolve(computeChapterInsights(rawText, panels)),
             ]);
 
-            setMangaData({ characters: newChars, recap: null, atmosphere: newAtmosphere ?? undefined });
+            const recap = insights.extractiveRecap || null;
+            setMangaData({ characters: newChars, recap, atmosphere: newAtmosphere ?? undefined, insights });
             setProgressLabel('');
 
             if (currentChapterId) {
                 await db.chapters.update(currentChapterId, {
                     characters: newChars,
-                    recap: null,
+                    recap,
                     atmosphere: newAtmosphere,
+                    insights,
                 });
             }
         } catch (err: unknown) {

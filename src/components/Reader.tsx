@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { Users, Info, ChevronRight, BookOpen, Download, Play, Square, X, MessageSquare, Lock } from 'lucide-react';
+import { Users, Info, ChevronRight, BookOpen, Download, Play, Square, X, MessageSquare, Lock, BarChart3 } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import { motion } from 'framer-motion';
-import type { MangaPanel, Character, Atmosphere } from '../types';
+import type { MangaPanel, Character, Atmosphere, ChapterInsights } from '../types';
 import { useStore } from '../store';
 import {
     detectNarrativeArc,
@@ -17,6 +17,7 @@ interface ReaderProps {
     characters?: Character[];
     recap?: string | null;
     atmosphere?: Atmosphere | null;
+    insights?: ChapterInsights | null;
     chapterTitle?: string | null;
     onClose: () => void;
     onGenerateBonus: () => void;
@@ -92,6 +93,139 @@ const ReaderPanel = React.memo(function ReaderPanel({ panel, index, isActive }: 
     );
 });
 
+// ── EMOTIONAL ARC MINI CHART (SVG) ─────────────────────────────────────────
+const EmotionalArcChart = React.memo(function EmotionalArcChart({ arc }: { arc: ChapterInsights['emotionalArc'] }) {
+    if (arc.length < 3) return null;
+    const w = 220; const h = 80;
+    const pad = { top: 8, bottom: 16, left: 4, right: 4 };
+    const plotW = w - pad.left - pad.right;
+    const plotH = h - pad.top - pad.bottom;
+
+    const sentPath = arc.map((p, i) => {
+        const x = pad.left + (i / (arc.length - 1)) * plotW;
+        const y = pad.top + plotH * (1 - (p.sentiment + 1) / 2);
+        return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(' ');
+
+    const tensPath = arc.map((p, i) => {
+        const x = pad.left + (i / (arc.length - 1)) * plotW;
+        const y = pad.top + plotH * (1 - p.tension);
+        return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(' ');
+
+    return (
+        <svg width={w} height={h} className="emotional-arc-chart" aria-label="Emotional arc" role="img">
+            <line x1={pad.left} y1={pad.top + plotH / 2} x2={w - pad.right} y2={pad.top + plotH / 2}
+                stroke="var(--text-muted)" strokeOpacity={0.15} strokeDasharray="3,3" />
+            <path d={sentPath} fill="none" stroke="#60a5fa" strokeWidth="1.5" strokeLinecap="round" />
+            <path d={tensPath} fill="none" stroke="var(--accent-crimson)" strokeWidth="1.5" strokeLinecap="round" strokeDasharray="4,2" />
+            <text x={pad.left} y={h - 2} fontSize="7" fill="var(--text-muted)">Start</text>
+            <text x={w - pad.right} y={h - 2} fontSize="7" fill="var(--text-muted)" textAnchor="end">End</text>
+            <text x={w - pad.right - 2} y={pad.top + 10} fontSize="7" fill="#60a5fa" textAnchor="end">Sentiment</text>
+            <text x={w - pad.right - 2} y={pad.top + 20} fontSize="7" fill="var(--accent-crimson)" textAnchor="end">Tension</text>
+        </svg>
+    );
+});
+
+// ── INSIGHTS PANEL ──────────────────────────────────────────────────────────
+const InsightsPanel = React.memo(function InsightsPanel({ insights }: { insights: ChapterInsights }) {
+    return (
+        <div className="insights-panel">
+            {/* Readability */}
+            <div className="insights-section">
+                <div className="analytics-section-label">Readability</div>
+                <div className="insights-stat-row">
+                    <div className="insights-stat">
+                        <span className="insights-stat-value">{insights.readability.fleschKincaid}</span>
+                        <span className="insights-stat-label">Grade Level</span>
+                    </div>
+                    <div className="insights-stat">
+                        <span className="insights-stat-value">{insights.readability.readingEase}</span>
+                        <span className="insights-stat-label">Reading Ease</span>
+                    </div>
+                    <div className="insights-stat">
+                        <span className="insights-stat-value">{insights.readability.label}</span>
+                        <span className="insights-stat-label">Difficulty</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* Vocabulary Richness */}
+            <div className="insights-section">
+                <div className="analytics-section-label">Vocabulary</div>
+                <div className="insights-stat-row">
+                    <div className="insights-stat">
+                        <span className="insights-stat-value">{(insights.vocabRichness.ttr * 100).toFixed(0)}%</span>
+                        <span className="insights-stat-label">Richness</span>
+                    </div>
+                    <div className="insights-stat">
+                        <span className="insights-stat-value">{insights.vocabRichness.uniqueWords.toLocaleString()}</span>
+                        <span className="insights-stat-label">Unique Words</span>
+                    </div>
+                    <div className="insights-stat">
+                        <span className="insights-stat-value">{insights.vocabRichness.label}</span>
+                        <span className="insights-stat-label">Level</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* Pacing */}
+            <div className="insights-section">
+                <div className="analytics-section-label">Pacing</div>
+                <div className="insights-stat-row">
+                    <div className="insights-stat">
+                        <span className="insights-stat-value">{insights.pacing.label}</span>
+                        <span className="insights-stat-label">Pace</span>
+                    </div>
+                    <div className="insights-stat">
+                        <span className="insights-stat-value">{insights.pacing.sceneCount}</span>
+                        <span className="insights-stat-label">Scenes</span>
+                    </div>
+                    <div className="insights-stat">
+                        <span className="insights-stat-value">{(insights.pacing.dialogueRatio * 100).toFixed(0)}%</span>
+                        <span className="insights-stat-label">Dialogue</span>
+                    </div>
+                </div>
+                <div className="insights-pacing-bar" aria-label="Sentence composition">
+                    <div className="pacing-seg pacing-seg--short" style={{ width: `${insights.pacing.shortSentenceRatio * 100}%` }} title={`Short: ${(insights.pacing.shortSentenceRatio * 100).toFixed(0)}%`} />
+                    <div className="pacing-seg pacing-seg--medium" style={{ width: `${(1 - insights.pacing.shortSentenceRatio - insights.pacing.longSentenceRatio) * 100}%` }} title="Medium" />
+                    <div className="pacing-seg pacing-seg--long" style={{ width: `${insights.pacing.longSentenceRatio * 100}%` }} title={`Long: ${(insights.pacing.longSentenceRatio * 100).toFixed(0)}%`} />
+                </div>
+            </div>
+
+            {/* Emotional Arc */}
+            {insights.emotionalArc.length > 2 && (
+                <div className="insights-section">
+                    <div className="analytics-section-label">Emotional Arc</div>
+                    <EmotionalArcChart arc={insights.emotionalArc} />
+                </div>
+            )}
+
+            {/* Keywords */}
+            {insights.keywords.length > 0 && (
+                <div className="insights-section">
+                    <div className="analytics-section-label">Key Terms</div>
+                    <div className="insights-keywords">
+                        {insights.keywords.map(kw => (
+                            <span key={kw.word} className="keyword-pill" style={{ opacity: 0.5 + kw.score * 0.5 }}>
+                                {kw.word}<span className="keyword-count">×{kw.count}</span>
+                            </span>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Extractive Recap */}
+            {insights.extractiveRecap && (
+                <div className="insights-section">
+                    <div className="analytics-section-label">Auto-Summary</div>
+                    <p className="insights-recap">{insights.extractiveRecap}</p>
+                </div>
+            )}
+        </div>
+    );
+});
+
 // ══════════════════════════════════════════════════════════════════════════════
 // MAIN READER COMPONENT
 // ══════════════════════════════════════════════════════════════════════════════
@@ -100,6 +234,7 @@ export const Reader: React.FC<ReaderProps> = ({
     characters = [],
     recap,
     atmosphere,
+    insights,
     chapterTitle,
     onClose,
     onGenerateBonus,
@@ -107,14 +242,14 @@ export const Reader: React.FC<ReaderProps> = ({
 }) => {
     const contentRef = useRef<HTMLDivElement>(null);
     const [showCodex, setShowCodex] = useState(false);
-    const [codexTab, setCodexTab] = useState<'characters' | 'dialogue'>('characters');
+    const [codexTab, setCodexTab] = useState<'characters' | 'dialogue' | 'insights'>('characters');
     const [isExporting, setIsExporting] = useState(false);
     const [isPlaying, setIsPlaying] = useState(false);
     const [activePanelIndex, setActivePanelIndex] = useState(-1);
     const [readingProgress, setReadingProgress] = useState(0);
     const isPlayingRef = useRef(false);
-    const timeoutRef = useRef<number | null>(null); // For audio delays
-    const utterRef = useRef<SpeechSynthesisUtterance | null>(null); // To cancel current utterance
+    const timeoutRef = useRef<number | null>(null);
+    const utterRef = useRef<SpeechSynthesisUtterance | null>(null);
     const synth = window.speechSynthesis;
 
     // Load voices proactively
@@ -127,12 +262,11 @@ export const Reader: React.FC<ReaderProps> = ({
     }, [synth]);
 
     // ── ADVANCED ANALYTICS (memo — only recalculate when panels/characters change) ──
-    const narrativeArc = detectNarrativeArc(panels);
+    const narrativeArc = useMemo(() => detectNarrativeArc(panels), [panels]);
     const charGraph = useMemo(
         () => buildCharacterGraph(panels.map(p => p.content).join('\n'), characters as unknown as NamedCharacter[]),
         [panels, characters]
     );
-    // const symbolic = computeSymbolicDensity(panels.map(p => p.content).join('\n')); // Removed as per previous instructions
     const dialogueLines = useMemo(() => extractDialogueLines(panels), [panels]);
 
     // ── SCROLL PROGRESS ──────────────────────────────────────────────────────
@@ -243,6 +377,31 @@ export const Reader: React.FC<ReaderProps> = ({
 
     useEffect(() => { window.scrollTo({ top: 0, behavior: 'smooth' }); }, [panels]);
 
+    // ── KEYBOARD NAVIGATION ──────────────────────────────────────────────────
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'ArrowDown' || e.key === 'j') {
+                e.preventDefault();
+                setActivePanelIndex(prev => {
+                    const next = Math.min(prev + 1, panels.length - 1);
+                    const el = contentRef.current?.querySelector(`[data-panel-idx="${next}"]`) as HTMLElement;
+                    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    return next;
+                });
+            } else if (e.key === 'ArrowUp' || e.key === 'k') {
+                e.preventDefault();
+                setActivePanelIndex(prev => {
+                    const next = Math.max(prev - 1, 0);
+                    const el = contentRef.current?.querySelector(`[data-panel-idx="${next}"]`) as HTMLElement;
+                    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    return next;
+                });
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [panels.length]);
+
     // ── EXPORT ───────────────────────────────────────────────────────────────
     const handleExport = useCallback(async () => {
         if (!contentRef.current) return;
@@ -256,7 +415,7 @@ export const Reader: React.FC<ReaderProps> = ({
     }, []);
 
     const moodClass = atmosphere ? `mood-${atmosphere.mood}` : '';
-    const hasCodexData = characters.length > 0 || !!recap;
+    const hasCodexData = characters.length > 0 || !!recap || !!insights;
     const activeSidebar = showCodex ? 'codex' : null;
     const aiProvider = useStore(s => s.aiProvider);
     const hasAI = aiProvider !== 'none';
@@ -304,6 +463,7 @@ export const Reader: React.FC<ReaderProps> = ({
                     <div className="reader-nav-actions" role="toolbar" aria-label="Reader actions">
                         {/* Narrate */}
                         <button
+                            type="button"
                             className={`reader-btn ${isPlaying ? 'reader-btn--active' : ''}`}
                             onClick={isPlaying ? stopAudio : () => playAudio(0)}
                             aria-label={isPlaying ? 'Stop narration' : 'Narrate chapter'}
@@ -313,12 +473,11 @@ export const Reader: React.FC<ReaderProps> = ({
                             <span>{isPlaying ? 'Stop' : 'Narrate'}</span>
                         </button>
 
-                        {/* Removed analytics buttons */}
-
                         {/* Codex */}
                         {!hasCodexData ? (
                             hasAI ? (
                                 <button
+                                    type="button"
                                     className="reader-btn reader-btn--accent"
                                     onClick={onGenerateBonus} disabled={isGeneratingBonus} aria-busy={isGeneratingBonus ? "true" : "false"}
                                 >
@@ -327,12 +486,13 @@ export const Reader: React.FC<ReaderProps> = ({
                                         : <><BookOpen size={14} aria-hidden="true" /><span>Generate</span></>}
                                 </button>
                             ) : (
-                                <button className="reader-btn reader-btn--locked" aria-disabled="true" title="Enable AI in settings">
+                                <button type="button" className="reader-btn reader-btn--locked" aria-disabled="true" title="Enable AI in settings">
                                     <Lock size={13} aria-hidden="true" /><span>Generate</span>
                                 </button>
                             )
                         ) : (
                             <button
+                                type="button"
                                 className={`reader-btn ${showCodex ? 'reader-btn--active' : ''}`}
                                 onClick={() => { setShowCodex(v => !v); }}
                                 aria-expanded={showCodex ? "true" : "false"}
@@ -343,14 +503,14 @@ export const Reader: React.FC<ReaderProps> = ({
                         )}
 
                         {/* Export */}
-                        <button className="reader-btn" onClick={handleExport} disabled={isExporting} aria-label="Export as image">
+                        <button type="button" className="reader-btn" onClick={handleExport} disabled={isExporting} aria-label="Export as image">
                             {isExporting
                                 ? <><div className="spinner" aria-hidden="true" /><span>Saving…</span></>
                                 : <><Download size={14} aria-hidden="true" /><span>Export</span></>}
                         </button>
 
                         {/* Close */}
-                        <button className="reader-btn" onClick={onClose} aria-label="Close reader">
+                        <button type="button" className="reader-btn" onClick={onClose} aria-label="Close reader">
                             <X size={14} aria-hidden="true" /><span>Close</span>
                         </button>
                     </div>
@@ -379,6 +539,7 @@ export const Reader: React.FC<ReaderProps> = ({
                         {panels.map((panel, i) => (
                             <div
                                 key={panel.id || i} id={panel.id}
+                                data-panel-idx={i}
                                 className={[
                                     panel.isSceneBoundary ? 'panel-scene-boundary' : '',
                                 ].filter(Boolean).join(' ')}
@@ -426,6 +587,14 @@ export const Reader: React.FC<ReaderProps> = ({
                                     onClick={() => setCodexTab('dialogue')}>
                                     <MessageSquare size={11} /> Dialogue
                                 </button>
+                                {insights && (
+                                    <button role="tab" aria-selected={codexTab === 'insights' ? "true" : "false"}
+                                        aria-controls="tabpanel-insights" id="tab-insights"
+                                        className={`codex-tab ${codexTab === 'insights' ? 'codex-tab--active' : ''}`}
+                                        onClick={() => setCodexTab('insights')}>
+                                        <BarChart3 size={11} /> Insights
+                                    </button>
+                                )}
                             </div>
 
                             {codexTab === 'characters' && (
@@ -484,10 +653,15 @@ export const Reader: React.FC<ReaderProps> = ({
                                     )}
                                 </div>
                             )}
+
+                            {codexTab === 'insights' && insights && (
+                                <div id="tabpanel-insights" role="tabpanel" aria-labelledby="tab-insights" className="codex-tabpanel">
+                                    <InsightsPanel insights={insights} />
+                                </div>
+                            )}
                         </motion.aside>
                     )}
 
-                    {/* Removed analytics sidebar */}
                 </div>
             </div>
         </div>

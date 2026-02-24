@@ -68,6 +68,7 @@ export const Upload: React.FC<UploadProps> = ({ onFileSelect, isLoading }) => {
                 onDragOver={handleDrag}
                 onDrop={handleDrop}
                 role="button"
+                aria-label="Upload a PDF or TXT file"
                 aria-disabled={isBusy ? "true" : "false"}
                 tabIndex={isBusy ? -1 : 0}
                 onKeyDown={e => {

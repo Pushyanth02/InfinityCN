@@ -12,11 +12,12 @@ export const useStore = create<AppState>()(
             characters: [],
             recap: null,
             atmosphere: null,
+            insights: null,
             error: null,
             currentChapterId: null,
             chapterTitle: null,
 
-            // AI Settings Defaults
+            // AI settings defaults
             aiProvider: 'none',
             geminiKey: '',
             useSearchGrounding: false,
@@ -36,13 +37,13 @@ export const useStore = create<AppState>()(
             setErrorAndStop: (error) => set({ error, isProcessing: false }),
             setProcessing: (isProcessing) => set({ isProcessing }),
             setRawText: (text: string) => set({ rawText: text }),
-            setMangaData: (data: Partial<Pick<AppState, Extract<keyof AppState, 'panels' | 'characters' | 'recap' | 'atmosphere' | 'chapterTitle'>>>) => set(data as Partial<AppState>),
+            setMangaData: (data: Partial<Pick<AppState, Extract<keyof AppState, 'panels' | 'characters' | 'recap' | 'atmosphere' | 'chapterTitle' | 'insights'>>>) => set(data as Partial<AppState>),
             setCurrentChapterId: (id: number | null) => set({ currentChapterId: id }),
             // setAiConfig can spread because it's a small config sub-object
             setAiConfig: (config) => set(config as Partial<AppState>),
 
             resetReader: () => set({
-                panels: [], characters: [], recap: null, atmosphere: null,
+                panels: [], characters: [], recap: null, atmosphere: null, insights: null,
                 rawText: '', progress: 0, progressLabel: '', error: null, currentChapterId: null, chapterTitle: null,
             }),
         }),

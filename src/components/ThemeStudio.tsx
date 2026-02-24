@@ -95,15 +95,24 @@ export const ThemeStudio: React.FC = () => {
 
     const panelRef = useRef<HTMLDivElement>(null);
 
-    // Close on outside click
+    // Close on outside click or Escape
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
             if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
                 setIsOpen(false);
             }
         };
-        if (isOpen) document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setIsOpen(false);
+        };
+        if (isOpen) {
+            document.addEventListener('mousedown', handleClickOutside);
+            document.addEventListener('keydown', handleKeyDown);
+        }
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('keydown', handleKeyDown);
+        };
     }, [isOpen]);
 
     return (
@@ -128,7 +137,7 @@ export const ThemeStudio: React.FC = () => {
 
             {isOpen && (
                 <>
-                    <div style={{ ...panelStyle }}>
+                    <div style={{ ...panelStyle }} role="region" aria-label="Theme settings">
                         {/* Mode */}
                         <div className="theme-panel-section">
                             <div className="theme-section-title">Mode</div>

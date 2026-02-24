@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { MangaPanel, Character, Atmosphere } from '../types';
+import type { MangaPanel, Character, Atmosphere, ChapterInsights } from '../types';
 
 interface SavedChapter {
     id?: number;
@@ -9,7 +9,7 @@ interface SavedChapter {
     characters: Character[];
     recap: string | null;
     atmosphere: Atmosphere | null;
-    // Removed analytics
+    insights: ChapterInsights | null;
     rawText: string;
 }
 
@@ -19,6 +19,9 @@ class InfinityDatabase extends Dexie {
     constructor() {
         super('InfinityCNDatabase');
         this.version(1).stores({
+            chapters: '++id, title, createdAt'
+        });
+        this.version(2).stores({
             chapters: '++id, title, createdAt'
         });
     }

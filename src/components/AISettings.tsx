@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { X, Sparkles, CheckCircle, XCircle, Loader, Globe, Cpu, Ban, BookOpen, FileText, Theater, Lightbulb, CloudFog, Brain, MessageSquare, Zap, Search } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '../store';
@@ -104,15 +104,22 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
         setTesting(false);
     };
 
-    const handleClose = () => { setTest(null); onClose(); };
+    const handleClose = useCallback(() => { setTest(null); onClose(); }, [onClose]);
 
-    // Lock body scroll when panel is open
+    // Lock body scroll and handle Escape key when panel is open
     useEffect(() => {
         if (isOpen) {
             document.body.style.overflow = 'hidden';
-            return () => { document.body.style.overflow = ''; };
+            const handleKeyDown = (e: KeyboardEvent) => {
+                if (e.key === 'Escape') handleClose();
+            };
+            document.addEventListener('keydown', handleKeyDown);
+            return () => {
+                document.body.style.overflow = '';
+                document.removeEventListener('keydown', handleKeyDown);
+            };
         }
-    }, [isOpen]);
+    }, [isOpen, handleClose]);
 
     return (
         <AnimatePresence>
@@ -124,6 +131,8 @@ export const AISettings: React.FC<AISettingsProps> = ({ isOpen, onClose }) => {
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         onClick={handleClose}
+                        onKeyDown={e => { if (e.key === 'Escape') handleClose(); }}
+                        role="presentation"
                     />
                     <motion.div
                         className="ai-panel"
