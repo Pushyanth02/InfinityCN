@@ -209,7 +209,7 @@ export class AIError extends Error {
 
 function classifyError(err: unknown, provider: string): AIError {
     const msg = err instanceof Error ? err.message : String(err);
-    
+
     if (msg.includes('429') || msg.toLowerCase().includes('rate limit')) {
         return new AIError(msg, 'rate_limit', provider, true, 5000);
     }
@@ -225,7 +225,7 @@ function classifyError(err: unknown, provider: string): AIError {
     if (msg.includes('503') || msg.toLowerCase().includes('unavailable')) {
         return new AIError(msg, 'model_unavailable', provider, true, 10000);
     }
-    
+
     return new AIError(msg, 'unknown', provider, false);
 }
 
@@ -234,28 +234,28 @@ function classifyError(err: unknown, provider: string): AIError {
 // ═══════════════════════════════════════════════════════════
 
 async function withRetry<T>(
-    fn: () => Promise<T>, 
+    fn: () => Promise<T>,
     provider: string,
-    maxRetries = 2, 
+    maxRetries = 2,
     baseDelayMs = 1500
 ): Promise<T> {
     let lastError: AIError | null = null;
-    
+
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
             return await fn();
         } catch (err: unknown) {
             lastError = classifyError(err, provider);
-            
+
             if (!lastError.retryable || attempt >= maxRetries) {
                 throw lastError;
             }
-            
+
             const delay = lastError.retryAfterMs ?? (baseDelayMs * Math.pow(2, attempt));
             await new Promise(r => setTimeout(r, delay));
         }
     }
-    
+
     throw lastError ?? new AIError('Unknown error', 'unknown', provider, false);
 }
 
@@ -269,7 +269,7 @@ async function callAI(prompt: string, config: AIConfig): Promise<string> {
     // Check Cache
     const cacheKey = `${config.provider}:${prompt.length}:${prompt.substring(0, 50)}`;
     if (apiCache.has(cacheKey)) {
-        return apiCache.get(cacheKey)!;
+        return apiCache.get(cacheKey)!.value;
     }
 
     let result = '';
@@ -475,24 +475,24 @@ async function callAI(prompt: string, config: AIConfig): Promise<string> {
  */
 export async function callAIWithDedup(prompt: string, config: AIConfig): Promise<string> {
     const cacheKey = getCacheKey(prompt, config.provider);
-    
+
     // Check cache first
     const cached = getFromCache(cacheKey);
     if (cached) return cached;
-    
+
     // Check for inflight request with same key
     if (inflightRequests.has(cacheKey)) {
         return inflightRequests.get(cacheKey)!;
     }
-    
+
     // Acquire rate limit token
     const limiter = getRateLimiter(config.provider);
     await limiter.acquire();
-    
+
     // Create and track the request
     const requestPromise = withRetry(() => callAI(prompt, config), config.provider);
     inflightRequests.set(cacheKey, requestPromise);
-    
+
     try {
         const result = await requestPromise;
         return result;
@@ -522,12 +522,12 @@ export interface BatchResult {
  * Useful for bulk operations like analyzing multiple chapters.
  */
 export async function batchAIRequests(
-    requests: BatchRequest[], 
+    requests: BatchRequest[],
     config: AIConfig,
     onProgress?: (completed: number, total: number) => void
 ): Promise<BatchResult[]> {
     const results: BatchResult[] = [];
-    
+
     for (let i = 0; i < requests.length; i++) {
         const req = requests[i];
         try {
@@ -539,7 +539,7 @@ export async function batchAIRequests(
         }
         onProgress?.(i + 1, requests.length);
     }
-    
+
     return results;
 }
 
@@ -621,7 +621,7 @@ ${text.substring(0, 8000)}
 Return a JSON array ONLY:
 [{"name":"Character Name","description":"Rich narrative description."}]`;
 
-        const raw = await withRetry(() => callAI(prompt, config));
+        const raw = await withRetry(() => callAI(prompt, config), config.provider);
         const parsed = parseJSON<{ name: string; description?: string }[]>(raw);
         if (!Array.isArray(parsed)) throw new Error('Expected JSON array');
 
@@ -662,7 +662,7 @@ export async function extractThemes(text: string, config: AIConfig): Promise<The
     // Algorithmic fallback using keywords
     const fallback: ThemeAnalysis = {
         themes: extractKeywords(text, 5).map(kw => ({
-            name: kw.term,
+            name: kw.word,
             weight: kw.score,
             evidence: []
         })),
@@ -712,9 +712,9 @@ export interface SynopsisResult {
 export async function generateSynopsis(text: string, config: AIConfig): Promise<SynopsisResult> {
     const readability = computeReadability(text);
     const sentiment = analyseSentiment(text);
-    
+
     const fallback: SynopsisResult = {
-        oneLiner: `A ${sentiment.label} narrative with ${readability.gradeLevel} reading level.`,
+        oneLiner: `A ${sentiment.label} narrative with reading level grade ${readability.fleschKincaid}.`,
         shortSynopsis: `This text contains approximately ${text.split(/\s+/).length} words with a ${sentiment.label} overall tone.`,
         detailedSynopsis: '',
         keyEvents: []
@@ -860,9 +860,9 @@ export interface WritingStyleAnalysis {
  */
 export async function analyzeWritingStyle(text: string, config: AIConfig): Promise<WritingStyleAnalysis> {
     const readability = computeReadability(text);
-    
+
     const fallback: WritingStyleAnalysis = {
-        style: readability.gradeLevel.includes('College') ? 'sophisticated' : 'accessible',
+        style: readability.fleschKincaid >= 13 ? 'sophisticated' : 'accessible',
         tone: 'neutral',
         pacing: 'moderate',
         narrativePOV: 'unknown',
@@ -909,8 +909,8 @@ export interface APIStats {
     providers: string[];
 }
 
-let cacheHits = 0;
-let cacheMisses = 0;
+const cacheHits = 0;
+const cacheMisses = 0;
 
 /**
  * Get current API usage statistics.

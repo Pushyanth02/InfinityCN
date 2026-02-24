@@ -493,7 +493,7 @@ export interface PacingResult {
     label: 'Fast' | 'Moderate' | 'Slow';
 }
 
-export function analysePacing(text: string, panels: Array<{ type: string }>): PacingResult {
+export function analysePacing(text: string, panels: Array<{ type: string }> = []): PacingResult {
     const sentences = splitSentences(text);
     if (sentences.length === 0) {
         return { avgSentenceLength: 0, shortSentenceRatio: 0, longSentenceRatio: 0, dialogueRatio: 0, sceneCount: 0, label: 'Moderate' };
@@ -638,31 +638,31 @@ export function analyzeDialogue(text: string): DialogueStats {
     // Match dialogue patterns: "...", "...", « ... », etc.
     const dialogueRegex = /["「『"«]([^"」』"»]+)["」』"»]/g;
     const dialogueMatches = [...text.matchAll(dialogueRegex)];
-    
+
     const totalChars = text.length;
     const dialogueChars = dialogueMatches.reduce((sum, m) => sum + m[1].length, 0);
-    
+
     // Extract speaker attributions: "..." said X, X said "..."
     const speakerRegex = /["」』"»]\s*(?:said|asked|replied|shouted|whispered|muttered|exclaimed|cried|called|answered|responded|declared|announced|stated)\s+([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)/gi;
     const speakerMatches = [...text.matchAll(speakerRegex)];
-    
+
     const speakerFrequency = new Map<string, number>();
     for (const match of speakerMatches) {
         const speaker = match[1].trim();
         speakerFrequency.set(speaker, (speakerFrequency.get(speaker) || 0) + 1);
     }
-    
+
     const narrationChars = totalChars - dialogueChars;
-    
+
     return {
         totalDialogueLines: dialogueMatches.length,
         dialoguePercentage: totalChars > 0 ? (dialogueChars / totalChars) * 100 : 0,
         speakerFrequency,
-        averageDialogueLength: dialogueMatches.length > 0 
-            ? dialogueChars / dialogueMatches.length 
+        averageDialogueLength: dialogueMatches.length > 0
+            ? dialogueChars / dialogueMatches.length
             : 0,
-        dialogueToNarrationRatio: narrationChars > 0 
-            ? dialogueChars / narrationChars 
+        dialogueToNarrationRatio: narrationChars > 0
+            ? dialogueChars / narrationChars
             : 0
     };
 }
@@ -671,7 +671,7 @@ export function analyzeDialogue(text: string): DialogueStats {
 // ── NARRATIVE STRUCTURE DETECTION ──────────────────────────
 // ═══════════════════════════════════════════════════════════
 
-export type NarrativeStructure = 
+export type NarrativeStructure =
     | 'three-act'
     | 'five-act'
     | 'heros-journey'
@@ -695,9 +695,13 @@ export interface StructureAnalysis {
  */
 export function detectNarrativeStructure(text: string): StructureAnalysis {
     const sentences = splitSentences(text);
-    const sceneBreaks = detectSceneBoundaries(text);
-    const emotionalArc = computeEmotionalArc(text, 10);
-    
+    const sceneBreaks = detectSceneBoundaries(sentences);
+    const emotionalArc = computeEmotionalArc(sentences.map(s => ({
+        content: s,
+        tension: scoreTension(s),
+        sentiment: analyseSentiment(s).score
+    })));
+
     // Find climax position (peak tension/emotion)
     let maxTension = -Infinity;
     let climaxIdx = 0;
@@ -708,19 +712,19 @@ export function detectNarrativeStructure(text: string): StructureAnalysis {
         }
     });
     const climaxPosition = emotionalArc.length > 0 ? climaxIdx / emotionalArc.length : 0.5;
-    
+
     // Detect flashback indicators
     const flashbackIndicators = /\b(remembered|recalled|years ago|back then|in those days|looking back|memory|flashback|earlier that|when [a-z]+ was young)\b/gi;
     const hasFlashback = flashbackIndicators.test(text);
-    
+
     // Detect frame narrative ("I'll tell you a story", "Let me tell you about")
     const frameIndicators = /\b(let me tell you|i['']ll tell you|this is the story|once upon a time|the story begins|as the old man said)\b/gi;
     const hasFrameNarrative = frameIndicators.test(text);
-    
+
     // Determine structure based on patterns
     let structure: NarrativeStructure = 'unknown';
     let confidence = 0.3;
-    
+
     if (hasFrameNarrative) {
         structure = 'frame-narrative';
         confidence = 0.6;
@@ -742,7 +746,7 @@ export function detectNarrativeStructure(text: string): StructureAnalysis {
         structure = 'linear';
         confidence = 0.4;
     }
-    
+
     // Calculate act breaks based on detected structure
     const actBreaks: number[] = [];
     if (structure === 'three-act') {
@@ -754,7 +758,7 @@ export function detectNarrativeStructure(text: string): StructureAnalysis {
         actBreaks.push(Math.floor(sentences.length * 0.6));
         actBreaks.push(Math.floor(sentences.length * 0.8));
     }
-    
+
     return {
         structure,
         confidence,
@@ -782,31 +786,31 @@ export interface CohesionAnalysis {
  */
 export function analyzeCohesion(text: string): CohesionAnalysis {
     const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim().length > 0);
-    
+
     // Cohesive connectives
     const connectives = /\b(however|therefore|moreover|furthermore|consequently|nevertheless|in addition|on the other hand|as a result|in contrast|similarly|likewise|meanwhile|subsequently|finally|firstly|secondly|thus|hence|accordingly)\b/gi;
     const connectiveMatches = text.match(connectives) || [];
-    
+
     // Pronouns that create referential cohesion
     const pronouns = /\b(he|she|it|they|him|her|them|his|hers|their|this|that|these|those)\b/gi;
     const pronounMatches = text.match(pronouns) || [];
-    
+
     const words = tokenise(text);
     const referentialCohesion = words.length > 0 ? pronounMatches.length / words.length : 0;
-    
+
     // Build lexical chains (repeated content words)
     const lexicalChains = new Map<string, number>();
     const contentWords = words.filter(w => w.length > 4 && !/^(which|would|could|should|about|their|there|where|these|those)$/.test(w));
-    
+
     for (const word of contentWords) {
         lexicalChains.set(word, (lexicalChains.get(word) || 0) + 1);
     }
-    
+
     // Filter to only words appearing 3+ times (actual chains)
     for (const [word, count] of lexicalChains) {
         if (count < 3) lexicalChains.delete(word);
     }
-    
+
     // Calculate paragraph-level cohesion
     const paragraphCohesion: number[] = [];
     for (let i = 1; i < paragraphs.length; i++) {
@@ -816,16 +820,16 @@ export function analyzeCohesion(text: string): CohesionAnalysis {
         const cohesion = currWords.length > 0 ? overlap / currWords.length : 0;
         paragraphCohesion.push(cohesion);
     }
-    
+
     // Overall cohesion score
-    const avgParagraphCohesion = paragraphCohesion.length > 0 
-        ? paragraphCohesion.reduce((a, b) => a + b, 0) / paragraphCohesion.length 
+    const avgParagraphCohesion = paragraphCohesion.length > 0
+        ? paragraphCohesion.reduce((a, b) => a + b, 0) / paragraphCohesion.length
         : 0;
     const connectiveDensity = words.length > 0 ? connectiveMatches.length / (words.length / 100) : 0;
     const chainDensity = lexicalChains.size / Math.max(1, words.length / 100);
-    
+
     const overallCohesion = Math.min(1, (avgParagraphCohesion + referentialCohesion * 3 + connectiveDensity * 0.1 + chainDensity * 0.05) / 2);
-    
+
     return {
         overallCohesion,
         paragraphCohesion,
@@ -852,7 +856,7 @@ export interface PlotBeat {
 export function detectPlotBeats(text: string): PlotBeat[] {
     const sentences = splitSentences(text);
     const beats: PlotBeat[] = [];
-    
+
     // Keywords indicating different beat types
     const beatPatterns: Record<string, { regex: RegExp; type: PlotBeat['type'] }> = {
         inciting: {
@@ -880,23 +884,23 @@ export function detectPlotBeats(text: string): PlotBeat[] {
             type: 'revelation'
         }
     };
-    
+
     for (let i = 0; i < sentences.length; i++) {
         const sentence = sentences[i];
         const position = i / sentences.length;
-        
+
         for (const [, pattern] of Object.entries(beatPatterns)) {
             if (pattern.regex.test(sentence)) {
                 // Check if this beat type makes sense at this position
                 let confidence = 0.4;
-                
+
                 // Inciting incidents usually in first 20%
                 if (pattern.type === 'inciting-incident' && position < 0.25) confidence += 0.3;
                 // Climax usually 60-85%
                 if (pattern.type === 'climax' && position > 0.55 && position < 0.9) confidence += 0.3;
                 // Resolution usually last 15%
                 if (pattern.type === 'resolution' && position > 0.8) confidence += 0.3;
-                
+
                 beats.push({
                     position,
                     type: pattern.type,
@@ -907,7 +911,7 @@ export function detectPlotBeats(text: string): PlotBeat[] {
             }
         }
     }
-    
+
     // Deduplicate nearby beats of same type
     return beats.filter((beat, idx) => {
         if (idx === 0) return true;
@@ -933,23 +937,23 @@ export interface Foreshadowing {
 export function detectForeshadowing(text: string): Foreshadowing[] {
     const sentences = splitSentences(text);
     const foreshadowing: Foreshadowing[] = [];
-    
+
     // Ominous language patterns
     const ominousRegex = /\b(little did|if only|would later|would come to|not yet know|soon discover|fate|destined|doom|never imagined|last time|wouldn['']t be long)\b/i;
-    
+
     // Symbolic/prophetic language
     const propheticRegex = /\b(prophecy|foretold|predicted|vision|dream[t]? of|omen|sign|warning|portent|premonition)\b/i;
-    
+
     // Chekhov's gun pattern (explicit mention of weapons, objects)
     const chekovRegex = /\b(noticed|sat|hung|rested|lay)\s+(a|the|an)\s+(gun|knife|sword|weapon|letter|key|ring|locket|photograph)\b/i;
-    
+
     for (let i = 0; i < sentences.length; i++) {
         const sentence = sentences[i];
         const position = i / sentences.length;
-        
+
         // Only look in first 70% for foreshadowing
         if (position > 0.7) continue;
-        
+
         if (ominousRegex.test(sentence)) {
             foreshadowing.push({
                 text: sentence.substring(0, 150),
@@ -970,11 +974,11 @@ export function detectForeshadowing(text: string): Foreshadowing[] {
             });
         }
     }
-    
+
     // Look for repeated motifs (potential symbolic foreshadowing)
     const motifCounts = new Map<string, number[]>();
     const motifRegex = /\b(shadow|light|dark|storm|rain|blood|mirror|clock|door|window|key|ring|fire|water|bird|wolf|snake|moon|sun|star)\b/gi;
-    
+
     for (let i = 0; i < sentences.length; i++) {
         const matches = sentences[i].match(motifRegex);
         if (matches) {
@@ -985,7 +989,7 @@ export function detectForeshadowing(text: string): Foreshadowing[] {
             }
         }
     }
-    
+
     // Motifs appearing 3+ times that span the narrative
     for (const [motif, positions] of motifCounts) {
         if (positions.length >= 3) {
@@ -1000,7 +1004,7 @@ export function detectForeshadowing(text: string): Foreshadowing[] {
             }
         }
     }
-    
+
     return foreshadowing;
 }
 
@@ -1022,26 +1026,26 @@ export function buildCharacterGraph(text: string, windowSize = 100): CharacterEd
     const characters = extractCharacters(text, 15);
     const charNames = characters.map(c => c.name);
     const edges = new Map<string, CharacterEdge>();
-    
+
     // Sliding window co-occurrence
     const words = text.split(/\s+/);
-    
+
     for (let i = 0; i < words.length; i++) {
         const windowEnd = Math.min(i + windowSize, words.length);
         const windowText = words.slice(i, windowEnd).join(' ');
-        
+
         const foundChars: string[] = [];
         for (const name of charNames) {
             if (windowText.toLowerCase().includes(name.toLowerCase())) {
                 foundChars.push(name);
             }
         }
-        
+
         // Create edges between all co-occurring characters
         for (let j = 0; j < foundChars.length; j++) {
             for (let k = j + 1; k < foundChars.length; k++) {
                 const key = [foundChars[j], foundChars[k]].sort().join('|');
-                
+
                 if (!edges.has(key)) {
                     edges.set(key, {
                         character1: foundChars[j],
@@ -1050,10 +1054,10 @@ export function buildCharacterGraph(text: string, windowSize = 100): CharacterEd
                         contexts: []
                     });
                 }
-                
+
                 const edge = edges.get(key)!;
                 edge.weight += 1;
-                
+
                 // Store up to 3 context snippets
                 if (edge.contexts.length < 3) {
                     const context = windowText.substring(0, 100);
@@ -1064,7 +1068,7 @@ export function buildCharacterGraph(text: string, windowSize = 100): CharacterEd
             }
         }
     }
-    
+
     return Array.from(edges.values()).sort((a, b) => b.weight - a.weight);
 }
 
@@ -1085,21 +1089,21 @@ export interface ReadingTime {
 export function estimateReadingTime(text: string, wpm = 200): ReadingTime {
     const words = text.split(/\s+/).filter(w => w.length > 0);
     const wordCount = words.length;
-    
+
     // Get complexity from readability
     const readability = computeReadability(text);
-    
+
     // Adjust WPM based on complexity (harder = slower)
-    const complexityMultiplier = readability.gradeLevel.includes('College') ? 0.8 
-        : readability.gradeLevel.includes('12th') ? 0.85
-        : readability.gradeLevel.includes('11th') ? 0.9
-        : readability.gradeLevel.includes('10th') ? 0.92
-        : readability.gradeLevel.includes('9th') ? 0.95
-        : 1.0;
-    
+    const complexityMultiplier = readability.fleschKincaid >= 13 ? 0.8
+        : readability.fleschKincaid >= 12 ? 0.85
+            : readability.fleschKincaid >= 11 ? 0.9
+                : readability.fleschKincaid >= 10 ? 0.92
+                    : readability.fleschKincaid >= 9 ? 0.95
+                        : 1.0;
+
     const adjustedWpm = wpm * complexityMultiplier;
     const totalMinutes = wordCount / adjustedWpm;
-    
+
     return {
         minutes: Math.floor(totalMinutes),
         seconds: Math.round((totalMinutes - Math.floor(totalMinutes)) * 60),
@@ -1138,11 +1142,11 @@ export function analyzeWordFrequency(text: string, topN = 50): WordFrequency[] {
     const words = tokenise(text);
     const totalWords = words.length;
     const counts = new Map<string, number>();
-    
+
     for (const word of words) {
         counts.set(word, (counts.get(word) || 0) + 1);
     }
-    
+
     const frequencies: WordFrequency[] = [];
     for (const [word, count] of counts) {
         frequencies.push({
@@ -1152,7 +1156,7 @@ export function analyzeWordFrequency(text: string, topN = 50): WordFrequency[] {
             isStopWord: STOP_WORDS.has(word)
         });
     }
-    
+
     return frequencies.sort((a, b) => b.count - a.count).slice(0, topN);
 }
 
@@ -1173,22 +1177,22 @@ export interface SentenceComplexity {
  */
 export function analyzeSentenceComplexity(text: string): SentenceComplexity[] {
     const sentences = splitSentences(text);
-    
+
     return sentences.map(sentence => {
         const words = sentence.split(/\s+/).filter(w => w.length > 0);
         const wordCount = words.length;
         const totalChars = words.reduce((sum, w) => sum + w.replace(/[^a-z]/gi, '').length, 0);
         const avgWordLength = wordCount > 0 ? totalChars / wordCount : 0;
-        
+
         // Estimate clauses by counting conjunctions and punctuation
         const clauseIndicators = sentence.match(/,|;|:|\band\b|\bor\b|\bbut\b|\bwhen\b|\bwhile\b|\bif\b|\bbecause\b|\balthough\b/gi) || [];
         const clauseCount = clauseIndicators.length + 1;
-        
+
         // Complexity score based on multiple factors
-        const complexityScore = (wordCount / 20) * 0.4 + 
-            (avgWordLength / 6) * 0.3 + 
+        const complexityScore = (wordCount / 20) * 0.4 +
+            (avgWordLength / 6) * 0.3 +
             (clauseCount / 4) * 0.3;
-        
+
         return {
             sentence: sentence.length > 100 ? sentence.substring(0, 100) + '...' : sentence,
             wordCount,
@@ -1220,34 +1224,34 @@ export function calculateSceneTiming(text: string, prevSentiment = 0): SceneTimi
     const wordCount = words.length;
     const sentiment = analyseSentiment(text);
     const tension = scoreTension(text);
-    
+
     // Scene duration based on word count
-    const sceneDuration: SceneTiming['sceneDuration'] = 
+    const sceneDuration: SceneTiming['sceneDuration'] =
         wordCount < 20 ? 'short' :
-        wordCount < 60 ? 'medium' :
-        wordCount < 150 ? 'long' : 'extended';
-    
+            wordCount < 60 ? 'medium' :
+                wordCount < 150 ? 'long' : 'extended';
+
     // Pacing beat based on tension and action words
     const actionWords = /\b(ran|jumped|exploded|crashed|screamed|fought|attacked|fled|chased|sprinted|dove|slammed|burst)\b/gi;
     const hasAction = actionWords.test(text);
-    
-    const pacingBeat: SceneTiming['pacingBeat'] = 
+
+    const pacingBeat: SceneTiming['pacingBeat'] =
         hasAction && tension > 0.6 ? 'rapid' :
-        tension > 0.4 ? 'steady' :
-        wordCount < 15 ? 'pause' : 'slow';
-    
+            tension > 0.4 ? 'steady' :
+                wordCount < 15 ? 'pause' : 'slow';
+
     // Transition type based on sentiment shift
     const sentimentShift = Math.abs(sentiment.score - prevSentiment);
-    const transitionType: SceneTiming['transitionType'] = 
+    const transitionType: SceneTiming['transitionType'] =
         sentimentShift > 0.5 ? 'cut' :
-        sentimentShift > 0.3 ? 'dissolve' :
-        text.includes('Meanwhile') || text.includes('Elsewhere') ? 'wipe' :
-        text.toLowerCase().includes('remembered') || text.toLowerCase().includes('flashback') ? 'dissolve' :
-        'fade';
-    
+            sentimentShift > 0.3 ? 'dissolve' :
+                text.includes('Meanwhile') || text.includes('Elsewhere') ? 'wipe' :
+                    text.toLowerCase().includes('remembered') || text.toLowerCase().includes('flashback') ? 'dissolve' :
+                        'fade';
+
     // Hold duration for dramatic effect
     const holdDuration = Math.min(1, (tension * 0.5) + (sentimentShift * 0.3) + (wordCount < 10 ? 0.2 : 0));
-    
+
     return { sceneDuration, pacingBeat, transitionType, holdDuration };
 }
 
@@ -1266,30 +1270,30 @@ export interface VisualRhythm {
 export function detectVisualRhythm(text: string): VisualRhythm {
     const sentences = splitSentences(text);
     const beatStrength: number[] = [];
-    
+
     for (const sentence of sentences) {
         const words = sentence.split(/\s+/).length;
         const hasPunctuation = /[!?—]/.test(sentence);
         const tension = scoreTension(sentence);
-        
+
         // Beat strength: short sentences + punctuation + tension = stronger beats
         const strength = (1 - Math.min(1, words / 30)) * 0.4 +
             (hasPunctuation ? 0.3 : 0) +
             tension * 0.3;
-        
+
         beatStrength.push(strength);
     }
-    
+
     // Analyze rhythm pattern
     const avgStrength = beatStrength.reduce((a, b) => a + b, 0) / Math.max(1, beatStrength.length);
     const variation = beatStrength.reduce((sum, b) => sum + Math.abs(b - avgStrength), 0) / Math.max(1, beatStrength.length);
-    
+
     // Detect trend
     const firstHalf = beatStrength.slice(0, Math.floor(beatStrength.length / 2));
     const secondHalf = beatStrength.slice(Math.floor(beatStrength.length / 2));
     const firstAvg = firstHalf.reduce((a, b) => a + b, 0) / Math.max(1, firstHalf.length);
     const secondAvg = secondHalf.reduce((a, b) => a + b, 0) / Math.max(1, secondHalf.length);
-    
+
     let rhythmPattern: VisualRhythm['rhythmPattern'];
     if (secondAvg - firstAvg > 0.15) {
         rhythmPattern = 'crescendo';
@@ -1300,7 +1304,7 @@ export function detectVisualRhythm(text: string): VisualRhythm {
     } else {
         rhythmPattern = 'legato';
     }
-    
+
     return {
         rhythmPattern,
         beatStrength,
@@ -1324,13 +1328,13 @@ export interface DramaticBeat {
 export function analyzeDramaticBeat(text: string, position: number): DramaticBeat {
     const sentiment = analyseSentiment(text);
     const tension = scoreTension(text);
-    
+
     // Determine emotional charge
-    const emotionalCharge: DramaticBeat['emotionalCharge'] = 
+    const emotionalCharge: DramaticBeat['emotionalCharge'] =
         Math.abs(sentiment.score) < 0.1 ? 'neutral' :
-        sentiment.score > 0.2 ? 'positive' :
-        sentiment.score < -0.2 ? 'negative' : 'mixed';
-    
+            sentiment.score > 0.2 ? 'positive' :
+                sentiment.score < -0.2 ? 'negative' : 'mixed';
+
     // Determine beat type based on position and tension
     let type: DramaticBeat['type'];
     if (position < 0.15) {
@@ -1346,28 +1350,28 @@ export function analyzeDramaticBeat(text: string, position: number): DramaticBea
     } else {
         type = 'transition';
     }
-    
+
     // Emphasis based on tension and emotional intensity
     const intensity = (tension + Math.abs(sentiment.score)) / 2;
-    const suggestedEmphasis: DramaticBeat['suggestedEmphasis'] = 
+    const suggestedEmphasis: DramaticBeat['suggestedEmphasis'] =
         intensity > 0.75 ? 'explosive' :
-        intensity > 0.5 ? 'strong' :
-        intensity > 0.25 ? 'moderate' : 'subtle';
-    
+            intensity > 0.5 ? 'strong' :
+                intensity > 0.25 ? 'moderate' : 'subtle';
+
     return { type, intensity, emotionalCharge, suggestedEmphasis };
 }
 
 // ── CAMERA ANGLE SUGGESTIONS ───────────────────────────────
 
-export type CameraAngle = 
-    | 'extreme-close-up' 
-    | 'close-up' 
-    | 'medium-shot' 
-    | 'wide-shot' 
-    | 'extreme-wide' 
-    | 'birds-eye' 
-    | 'low-angle' 
-    | 'high-angle' 
+export type CameraAngle =
+    | 'extreme-close-up'
+    | 'close-up'
+    | 'medium-shot'
+    | 'wide-shot'
+    | 'extreme-wide'
+    | 'birds-eye'
+    | 'low-angle'
+    | 'high-angle'
     | 'dutch-angle'
     | 'over-shoulder';
 
@@ -1386,19 +1390,19 @@ export function suggestCameraAngle(text: string, panelType: string): CameraSugge
     const tension = scoreTension(text);
     const sentiment = analyseSentiment(text);
     const isDialogue = panelType === 'dialogue';
-    
+
     // Detect emotional content
     const hasEmotion = /\b(tears|crying|laughing|screaming|whispering|stared|gazed|glared)\b/i.test(text);
     const hasAction = /\b(ran|jumped|fought|attacked|exploded|crashed|chased)\b/i.test(text);
     const hasEnvironment = /\b(city|forest|mountain|ocean|sky|room|building|landscape)\b/i.test(text);
     const hasIntimacy = /\b(whispered|softly|gently|held|embraced|touched)\b/i.test(text);
-    
+
     let primaryAngle: CameraAngle;
     let alternativeAngle: CameraAngle;
     let movement: CameraSuggestion['movement'];
     let focus: CameraSuggestion['focus'];
     let reasoning: string;
-    
+
     if (hasEmotion || hasIntimacy) {
         primaryAngle = 'close-up';
         alternativeAngle = 'extreme-close-up';
@@ -1436,7 +1440,7 @@ export function suggestCameraAngle(text: string, panelType: string): CameraSugge
         focus = sentiment.score > 0 ? 'character' : 'environment';
         reasoning = 'Standard narrative framing';
     }
-    
+
     return { primaryAngle, alternativeAngle, movement, focus, reasoning };
 }
 
@@ -1457,39 +1461,39 @@ export function suggestPanelComposition(text: string, importance: number): Panel
     const wordCount = text.split(/\s+/).length;
     const tension = scoreTension(text);
     const isSceneTransition = /\b(meanwhile|later|elsewhere|suddenly|then)\b/i.test(text);
-    
+
     // Layout based on content type
-    const layout: PanelComposition['layout'] = 
+    const layout: PanelComposition['layout'] =
         importance > 0.8 ? 'full-bleed' :
-        isSceneTransition ? 'borderless' :
-        tension > 0.7 ? 'overlapping' :
-        wordCount < 10 ? 'inset' : 'standard';
-    
+            isSceneTransition ? 'borderless' :
+                tension > 0.7 ? 'overlapping' :
+                    wordCount < 10 ? 'inset' : 'standard';
+
     // Visual weight distribution
     const hasDialogue = /"[^"]+"|「[^」]+」/.test(text);
-    const visualWeight: PanelComposition['visualWeight'] = 
+    const visualWeight: PanelComposition['visualWeight'] =
         hasDialogue ? 'center' :
-        importance > 0.5 ? 'balanced' :
-        Math.random() > 0.5 ? 'left' : 'right';
-    
+            importance > 0.5 ? 'balanced' :
+                Math.random() > 0.5 ? 'left' : 'right';
+
     // Aspect ratio based on content
-    const aspectRatio: PanelComposition['aspectRatio'] = 
+    const aspectRatio: PanelComposition['aspectRatio'] =
         importance > 0.9 ? 'panoramic' :
-        wordCount > 80 ? 'landscape' :
-        tension > 0.6 ? 'portrait' :
-        hasDialogue ? 'square' : 'landscape';
-    
+            wordCount > 80 ? 'landscape' :
+                tension > 0.6 ? 'portrait' :
+                    hasDialogue ? 'square' : 'landscape';
+
     // Size based on importance and word count
-    const suggestedSize: PanelComposition['suggestedSize'] = 
+    const suggestedSize: PanelComposition['suggestedSize'] =
         importance > 0.85 ? 'splash' :
-        importance > 0.6 || wordCount > 60 ? 'large' :
-        wordCount < 20 ? 'small' : 'medium';
-    
+            importance > 0.6 || wordCount > 60 ? 'large' :
+                wordCount < 20 ? 'small' : 'medium';
+
     // Whitespace
-    const whitespace: PanelComposition['whitespace'] = 
+    const whitespace: PanelComposition['whitespace'] =
         tension > 0.6 ? 'minimal' :
-        importance > 0.7 ? 'generous' : 'moderate';
-    
+            importance > 0.7 ? 'generous' : 'moderate';
+
     return { layout, visualWeight, aspectRatio, suggestedSize, whitespace };
 }
 
@@ -1511,7 +1515,7 @@ export function analyzeMoodTransition(prevText: string, currentText: string): Mo
     const currSentiment = analyseSentiment(currentText);
     const prevTension = scoreTension(prevText);
     const currTension = scoreTension(currentText);
-    
+
     // Determine mood labels
     const getMood = (sentiment: number, tension: number): string => {
         if (tension > 0.6) return sentiment > 0 ? 'triumphant' : 'intense';
@@ -1520,27 +1524,27 @@ export function analyzeMoodTransition(prevText: string, currentText: string): Mo
         if (sentiment < -0.3) return 'melancholic';
         return 'neutral';
     };
-    
+
     const fromMood = getMood(prevSentiment.score, prevTension);
     const toMood = getMood(currSentiment.score, currTension);
-    
+
     // Calculate transition metrics
     const sentimentDelta = Math.abs(currSentiment.score - prevSentiment.score);
     const tensionDelta = Math.abs(currTension - prevTension);
     const totalDelta = (sentimentDelta + tensionDelta) / 2;
-    
+
     // Transition speed
-    const transitionSpeed: MoodTransition['transitionSpeed'] = 
+    const transitionSpeed: MoodTransition['transitionSpeed'] =
         totalDelta > 0.6 ? 'instant' :
-        totalDelta > 0.4 ? 'quick' :
-        totalDelta > 0.2 ? 'gradual' : 'slow';
-    
+            totalDelta > 0.4 ? 'quick' :
+                totalDelta > 0.2 ? 'gradual' : 'slow';
+
     // Transition style
-    const transitionStyle: MoodTransition['transitionStyle'] = 
+    const transitionStyle: MoodTransition['transitionStyle'] =
         totalDelta > 0.7 ? 'jarring' :
-        totalDelta > 0.5 ? 'dramatic' :
-        totalDelta > 0.25 ? 'smooth' : 'subtle';
-    
+            totalDelta > 0.5 ? 'dramatic' :
+                totalDelta > 0.25 ? 'smooth' : 'subtle';
+
     // Color shift
     let colorShift: MoodTransition['colorShift'] = 'stable';
     if (currSentiment.score > prevSentiment.score + 0.2) {
@@ -1548,7 +1552,7 @@ export function analyzeMoodTransition(prevText: string, currentText: string): Mo
     } else if (currSentiment.score < prevSentiment.score - 0.2) {
         colorShift = currTension > prevTension ? 'bright-to-dark' : 'warm-to-cool';
     }
-    
+
     return { fromMood, toMood, transitionSpeed, transitionStyle, colorShift };
 }
 
@@ -1570,26 +1574,26 @@ export interface TextChunk {
  * Chunks text optimally for panel distribution.
  */
 export function chunkTextOptimally(
-    text: string, 
-    targetChunkSize = 150, 
+    text: string,
+    targetChunkSize = 150,
     maxChunkSize = 300
 ): TextChunk[] {
     const chunks: TextChunk[] = [];
     const paragraphs = text.split(/\n\s*\n/);
     let globalIndex = 0;
-    
+
     for (const paragraph of paragraphs) {
         if (paragraph.trim().length === 0) {
             globalIndex += paragraph.length + 2;
             continue;
         }
-        
+
         // Check if it's a dialogue block
         const isDialogue = /^["「『]|said|asked|replied/i.test(paragraph);
-        
+
         // Check if paragraph is within acceptable size
         const words = paragraph.split(/\s+/);
-        
+
         if (words.length <= maxChunkSize / 5) {
             chunks.push({
                 text: paragraph.trim(),
@@ -1603,10 +1607,10 @@ export function chunkTextOptimally(
             const sentences = splitSentences(paragraph);
             let accumulator = '';
             let sentenceStart = globalIndex;
-            
+
             for (const sentence of sentences) {
                 const wouldExceed = (accumulator + ' ' + sentence).split(/\s+/).length > targetChunkSize / 5;
-                
+
                 if (wouldExceed && accumulator.length > 0) {
                     chunks.push({
                         text: accumulator.trim(),
@@ -1621,7 +1625,7 @@ export function chunkTextOptimally(
                     accumulator = accumulator ? accumulator + ' ' + sentence : sentence;
                 }
             }
-            
+
             if (accumulator.trim().length > 0) {
                 chunks.push({
                     text: accumulator.trim(),
@@ -1632,10 +1636,10 @@ export function chunkTextOptimally(
                 });
             }
         }
-        
+
         globalIndex += paragraph.length + 2;
     }
-    
+
     return chunks;
 }
 
@@ -1654,26 +1658,26 @@ export function deduplicateText(texts: string[], threshold = 0.85): Deduplicatio
     const uniqueChunks: string[] = [];
     const duplicates: Array<{ text: string; positions: number[] }> = [];
     const seen = new Map<string, number[]>();
-    
+
     for (let i = 0; i < texts.length; i++) {
         const text = texts[i].trim();
         if (text.length === 0) continue;
-        
+
         // Fast hash for exact match
         const hash = fastHash(text);
-        
+
         // Check for exact duplicates
         let isDuplicate = false;
         for (const [seenText, positions] of seen) {
             const seenHash = fastHash(seenText);
-            
+
             // Exact match
             if (hash === seenHash && text === seenText) {
                 positions.push(i);
                 isDuplicate = true;
                 break;
             }
-            
+
             // Near-duplicate check for similar lengths
             if (Math.abs(text.length - seenText.length) < text.length * 0.2) {
                 const similarity = jaccardSimilarity(text, seenText);
@@ -1684,20 +1688,20 @@ export function deduplicateText(texts: string[], threshold = 0.85): Deduplicatio
                 }
             }
         }
-        
+
         if (!isDuplicate) {
             uniqueChunks.push(text);
             seen.set(text, [i]);
         }
     }
-    
+
     // Extract duplicates
     for (const [text, positions] of seen) {
         if (positions.length > 1) {
             duplicates.push({ text: text.substring(0, 50) + '...', positions });
         }
     }
-    
+
     return {
         uniqueChunks,
         duplicates,
@@ -1723,11 +1727,11 @@ export async function processBatches<T, R>(
 ): Promise<R[]> {
     const { batchSize = 10, parallelLimit = 3, delayBetweenBatches = 0 } = config;
     const results: R[] = [];
-    
+
     for (let i = 0; i < items.length; i += batchSize) {
         const batch = items.slice(i, i + batchSize);
         const batchResults: R[] = [];
-        
+
         // Process batch with limited parallelism
         for (let j = 0; j < batch.length; j += parallelLimit) {
             const chunk = batch.slice(j, j + parallelLimit);
@@ -1736,15 +1740,15 @@ export async function processBatches<T, R>(
             );
             batchResults.push(...chunkResults);
         }
-        
+
         results.push(...batchResults);
-        
+
         // Delay between batches
         if (delayBetweenBatches > 0 && i + batchSize < items.length) {
             await new Promise(r => setTimeout(r, delayBetweenBatches));
         }
     }
-    
+
     return results;
 }
 
@@ -1772,12 +1776,12 @@ export function fastHash(text: string): number {
 export function jaccardSimilarity(text1: string, text2: string): number {
     const words1 = new Set(text1.toLowerCase().split(/\s+/));
     const words2 = new Set(text2.toLowerCase().split(/\s+/));
-    
+
     let intersection = 0;
     for (const word of words1) {
         if (words2.has(word)) intersection++;
     }
-    
+
     const union = words1.size + words2.size - intersection;
     return union > 0 ? intersection / union : 0;
 }
@@ -1798,31 +1802,31 @@ export function memoize<T extends (...args: unknown[]) => unknown>(
 ): T {
     const { maxSize = 100, ttlMs = 60000, keyFn } = options;
     const cache = new Map<string, MemoEntry<ReturnType<T>>>();
-    
+
     const memoized = ((...args: Parameters<T>): ReturnType<T> => {
         const key = keyFn ? keyFn(...args) : JSON.stringify(args);
         const now = Date.now();
-        
+
         // Check cache
         const cached = cache.get(key);
         if (cached && now - cached.timestamp < ttlMs) {
             return cached.value;
         }
-        
+
         // Compute and cache
         const result = fn(...args) as ReturnType<T>;
-        
+
         // LRU eviction
         if (cache.size >= maxSize) {
             const oldest = Array.from(cache.entries())
                 .sort((a, b) => a[1].timestamp - b[1].timestamp)[0];
             if (oldest) cache.delete(oldest[0]);
         }
-        
+
         cache.set(key, { value: result, timestamp: now });
         return result;
     }) as T;
-    
+
     return memoized;
 }
 
@@ -1848,25 +1852,25 @@ export class StreamingTextAnalyzer {
     private tensionSum = 0;
     private sentimentSum = 0;
     private chunkCount = 0;
-    
+
     /**
      * Process a chunk of text incrementally.
      */
     processChunk(text: string): void {
         const words = text.split(/\s+/).filter(w => w.length > 0);
         const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
-        
+
         this.wordCount += words.length;
         this.sentenceCount += sentences.length;
         this.totalWordLength += words.reduce((sum, w) => sum + w.length, 0);
         this.totalSentenceWords += words.length;
-        
+
         // Running averages for tension/sentiment
         this.tensionSum += scoreTension(text);
         this.sentimentSum += analyseSentiment(text).score;
         this.chunkCount++;
     }
-    
+
     /**
      * Get current analysis state.
      */
@@ -1880,7 +1884,7 @@ export class StreamingTextAnalyzer {
             runningsentiment: this.chunkCount > 0 ? this.sentimentSum / this.chunkCount : 0
         };
     }
-    
+
     /**
      * Reset analyzer state.
      */
@@ -1904,11 +1908,11 @@ export class LazyValue<T> {
     private computed = false;
     private value: T | undefined;
     private readonly compute: () => T;
-    
+
     constructor(compute: () => T) {
         this.compute = compute;
     }
-    
+
     get(): T {
         if (!this.computed) {
             this.value = this.compute();
@@ -1916,11 +1920,11 @@ export class LazyValue<T> {
         }
         return this.value!;
     }
-    
+
     isComputed(): boolean {
         return this.computed;
     }
-    
+
     reset(): void {
         this.computed = false;
         this.value = undefined;
@@ -1937,7 +1941,7 @@ export function debounce<T extends (...args: unknown[]) => unknown>(
     delayMs: number
 ): (...args: Parameters<T>) => void {
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
-    
+
     return (...args: Parameters<T>) => {
         if (timeoutId) {
             clearTimeout(timeoutId);
@@ -1959,11 +1963,11 @@ export function throttle<T extends (...args: unknown[]) => unknown>(
     let lastRun = 0;
     let scheduled = false;
     let lastArgs: Parameters<T> | null = null;
-    
+
     return (...args: Parameters<T>) => {
         const now = Date.now();
         lastArgs = args;
-        
+
         if (now - lastRun >= limitMs) {
             fn(...args);
             lastRun = now;
@@ -1992,10 +1996,6 @@ export interface AnalysisPipelineResult {
  * Run multiple analyses in an optimized pipeline.
  */
 export function runAnalysisPipeline(text: string): AnalysisPipelineResult {
-    // Pre-compute shared data
-    const sentences = splitSentences(text);
-    const words = tokenise(text);
-    
     // Run analyses (could be parallelized with workers)
     return {
         sentiment: analyseSentiment(text),
@@ -2022,14 +2022,14 @@ export interface ContentFingerprint {
 export function generateFingerprint(text: string): ContentFingerprint {
     const words = text.split(/\s+/).filter(w => w.length > 0);
     const hash = fastHash(text);
-    
+
     // Extract key features for fingerprint
     const firstWords = words.slice(0, 5).join(' ');
     const lastWords = words.slice(-5).join(' ');
-    
+
     // Create compact signature: hash + length + first/last word hashes
     const signature = `${hash.toString(36)}-${words.length}-${fastHash(firstWords).toString(36)}-${fastHash(lastWords).toString(36)}`;
-    
+
     return {
         hash,
         wordCount: words.length,
