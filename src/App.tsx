@@ -6,10 +6,11 @@ import { useStore } from './store';
 import { db } from './lib/db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trash2, Clock, Sparkles } from 'lucide-react';
+import { Trash2, Clock, Sparkles, BookOpen } from 'lucide-react';
 import { Analytics } from '@vercel/analytics/react';
 import { SpeedInsights } from '@vercel/speed-insights/react';
 import './App.css';
+import './mangadex.css';
 
 const AI_LABELS: Record<string, string> = { none: 'Setup AI', chrome: 'Nano', gemini: 'Gemini', ollama: 'Ollama', openai: 'OpenAI', anthropic: 'Claude', groq: 'Groq', deepseek: 'DeepSeek' };
 
@@ -33,6 +34,7 @@ const sel = {
 // Heavy components lazy-loaded — only download when actually needed
 const Reader = lazy(() => import('./components/Reader').then(m => ({ default: m.Reader })));
 const AISettings = lazy(() => import('./components/AISettings').then(m => ({ default: m.AISettings })));
+const MangaDexBrowser = lazy(() => import('./components/MangaDexBrowser').then(m => ({ default: m.MangaDexBrowser })));
 
 // ── LIBRARY CARD ──────────────────────────────────────────────────────────────
 
@@ -108,6 +110,7 @@ function App() {
   const { compileToManga, generateBonusTools } = useMangaCompiler();
   const [isGeneratingBonus, setIsGeneratingBonus] = useState(false);
   const [isAIOpen, setIsAIOpen] = useState(false);
+  const [isMangaDexOpen, setIsMangaDexOpen] = useState(false);
 
   const savedChapters = useLiveQuery(() => db.chapters.orderBy('createdAt').reverse().toArray());
 
@@ -153,6 +156,17 @@ function App() {
         <div className="header-island">
           <h1 className="logo font-display">InfinityCN</h1>
           <div className="header-actions">
+            <button
+              className="mangadex-trigger-button"
+              onClick={() => setIsMangaDexOpen(true)}
+              aria-label="Browse MangaDex"
+              aria-expanded={isMangaDexOpen ? "true" : "false"}
+              aria-haspopup="dialog"
+              title="Browse MangaDex"
+            >
+              <BookOpen size={16} strokeWidth={2.5} className="mangadex-trigger-icon" aria-hidden="true" />
+              <span className="mangadex-trigger-label">MangaDex</span>
+            </button>
             <div className="ai-trigger-container">
               <button
                 className="ai-trigger-button"
@@ -268,6 +282,11 @@ function App() {
       {isAIOpen && (
         <Suspense fallback={null}>
           <AISettings isOpen={isAIOpen} onClose={() => setIsAIOpen(false)} />
+        </Suspense>
+      )}
+      {isMangaDexOpen && (
+        <Suspense fallback={null}>
+          <MangaDexBrowser isOpen={isMangaDexOpen} onClose={() => setIsMangaDexOpen(false)} />
         </Suspense>
       )}
       <Analytics />

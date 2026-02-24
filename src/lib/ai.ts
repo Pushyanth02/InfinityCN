@@ -297,7 +297,7 @@ async function callAI(prompt: string, config: AIConfig): Promise<string> {
         if (!config.geminiKey) throw new Error('Gemini API key is not set.');
 
         const tools = config.useSearchGrounding
-            ? [{ googleSearchRetrieval: { dynamicRetrievalConfig: { mode: "MODE_DYNAMIC", dynamicThreshold: 0.3 } } }]
+            ? [{ google_search: {} }]
             : undefined;
 
         const res = await fetch(
