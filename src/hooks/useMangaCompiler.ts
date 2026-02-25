@@ -1,42 +1,37 @@
 import { extractTextFromPDF } from '../lib/pdfWorker';
-import {
-    processTextToManga,
-    processCharacters,
-    processAtmosphere,
-} from '../lib/parser';
-import {
-    enhanceCharacters,
-    type AIConfig
-} from '../lib/ai';
+import { processTextToManga, processCharacters, processAtmosphere } from '../lib/parser';
+import { enhanceCharacters } from '../lib/ai';
 import { computeChapterInsights } from '../lib/narrativeEngine';
-import { useStore } from '../store';
+import { useStore, getAIConfig } from '../store';
 import { db } from '../lib/db';
 
 // ── Atomic store selectors (avoids subscribing to all state) ──
 const sel = {
     rawText: (s: ReturnType<typeof useStore.getState>) => s.rawText,
     chapterId: (s: ReturnType<typeof useStore.getState>) => s.currentChapterId,
+    setProcessing: (s: ReturnType<typeof useStore.getState>) => s.setProcessing,
+    setProgress: (s: ReturnType<typeof useStore.getState>) => s.setProgress,
+    setProgressLabel: (s: ReturnType<typeof useStore.getState>) => s.setProgressLabel,
+    setRawText: (s: ReturnType<typeof useStore.getState>) => s.setRawText,
+    setMangaData: (s: ReturnType<typeof useStore.getState>) => s.setMangaData,
+    setError: (s: ReturnType<typeof useStore.getState>) => s.setError,
+    setErrorAndStop: (s: ReturnType<typeof useStore.getState>) => s.setErrorAndStop,
+    setChapterId: (s: ReturnType<typeof useStore.getState>) => s.setCurrentChapterId,
 };
-
-/** Build an config snapshot from the current store state — does NOT trigger re-renders */
-function getAIConfig(): AIConfig {
-    const { aiProvider, geminiKey, useSearchGrounding, openAiKey, anthropicKey, groqKey, deepseekKey, ollamaUrl, ollamaModel } = useStore.getState();
-    return { provider: aiProvider, geminiKey, useSearchGrounding, openAiKey, anthropicKey, groqKey, deepseekKey, ollamaUrl, ollamaModel } as AIConfig;
-}
 
 export const useMangaCompiler = () => {
     // Atomic selectors — each component only re-renders when its specific slice changes
     const rawText = useStore(sel.rawText);
     const currentChapterId = useStore(sel.chapterId);
 
-    const setProcessing = useStore(s => s.setProcessing);
-    const setProgress = useStore(s => s.setProgress);
-    const setProgressLabel = useStore(s => s.setProgressLabel);
-    const setRawText = useStore(s => s.setRawText);
-    const setMangaData = useStore(s => s.setMangaData);
-    const setError = useStore(s => s.setError);
-    const setErrorAndStop = useStore(s => s.setErrorAndStop);
-    const setChapterId = useStore(s => s.setCurrentChapterId);
+    const setProcessing = useStore(sel.setProcessing);
+    const setProgress = useStore(sel.setProgress);
+    const setProgressLabel = useStore(sel.setProgressLabel);
+    const setRawText = useStore(sel.setRawText);
+    const setMangaData = useStore(sel.setMangaData);
+    const setError = useStore(sel.setError);
+    const setErrorAndStop = useStore(sel.setErrorAndStop);
+    const setChapterId = useStore(sel.setChapterId);
 
     /** Primary: upload PDF or TXT → extract text → generate panels + analytics */
     const compileToManga = async (file: File) => {
@@ -49,7 +44,9 @@ export const useMangaCompiler = () => {
             // Validate file size (50 MB limit)
             const MAX_BYTES = 50 * 1024 * 1024;
             if (file.size > MAX_BYTES) {
-                setErrorAndStop(`File too large (${(file.size / (1024 * 1024)).toFixed(1)} MB). Maximum is 50 MB.`);
+                setErrorAndStop(
+                    `File too large (${(file.size / (1024 * 1024)).toFixed(1)} MB). Maximum is 50 MB.`,
+                );
                 return;
             }
 
@@ -66,8 +63,8 @@ export const useMangaCompiler = () => {
 
             // Phase 2: Parse into panels (async, time-sliced)
             setProgressLabel('Parsing narrative structure…');
-            const newPanels = await processTextToManga(text, (p) =>
-                setProgress(Math.max(15, Math.round(p * 0.55)))
+            const newPanels = await processTextToManga(text, p =>
+                setProgress(Math.max(15, Math.round(p * 0.55))),
             );
             setProgress(72);
 
@@ -79,7 +76,10 @@ export const useMangaCompiler = () => {
             ]);
 
             // Basic title extraction (first non-empty line or "Chapter X")
-            const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+            const lines = text
+                .split('\n')
+                .map(l => l.trim())
+                .filter(l => l.length > 0);
             let parsedTitle = file.name.replace(/\.[^/.]+$/, '');
             if (lines.length > 0) {
                 const firstLine = lines[0];
@@ -105,11 +105,16 @@ export const useMangaCompiler = () => {
             setChapterId(chapterId as number);
 
             // Phase 5: Commit to store
-            setMangaData({ panels: newPanels, atmosphere, insights, chapterTitle: parsedTitle, recap: insights.extractiveRecap || null });
+            setMangaData({
+                panels: newPanels,
+                atmosphere,
+                insights,
+                chapterTitle: parsedTitle,
+                recap: insights.extractiveRecap || null,
+            });
             setProgress(100);
             setProgressLabel('Done');
             setProcessing(false);
-
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : 'An error occurred during processing.';
             setErrorAndStop(msg);
@@ -134,7 +139,12 @@ export const useMangaCompiler = () => {
             ]);
 
             const recap = insights.extractiveRecap || null;
-            setMangaData({ characters: newChars, recap, atmosphere: newAtmosphere ?? undefined, insights });
+            setMangaData({
+                characters: newChars,
+                recap,
+                atmosphere: newAtmosphere ?? undefined,
+                insights,
+            });
             setProgressLabel('');
 
             if (currentChapterId) {

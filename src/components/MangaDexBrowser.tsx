@@ -1,6 +1,6 @@
 /**
  * MangaDexBrowser.tsx — Main MangaDex browsing interface
- * 
+ *
  * Provides:
  * - Search bar with debouncing
  * - Manga grid display
@@ -8,27 +8,36 @@
  * - Detail panel integration
  */
 
-import React, { useState, useCallback, useEffect, memo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-    Search, X, Wifi, WifiOff, Database, BookOpen,
-    Loader, AlertCircle, ChevronLeft, RefreshCw
+    Search,
+    X,
+    Wifi,
+    WifiOff,
+    Database,
+    BookOpen,
+    Loader,
+    AlertCircle,
+    ChevronLeft,
+    RefreshCw,
 } from 'lucide-react';
 import { useMangaDex } from '../hooks/useMangaDex';
 import { MangaCard } from './MangaCard';
 import { MangaDetail } from './MangaDetail';
+import { useScrollLock } from './ui/useScrollLock';
 
 interface MangaDexBrowserProps {
     isOpen: boolean;
     onClose: () => void;
 }
 
-type ViewMode = 'search' | 'cached' | 'trending';
+type ViewMode = 'search' | 'cached';
 
 const MangaDexBrowserComponent: React.FC<MangaDexBrowserProps> = ({ isOpen, onClose }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [viewMode, setViewMode] = useState<ViewMode>('search');
-    
+
     const {
         searchResults,
         searchTotal,
@@ -52,35 +61,31 @@ const MangaDexBrowserComponent: React.FC<MangaDexBrowserProps> = ({ isOpen, onCl
         generateCodex,
         refreshCache,
     } = useMangaDex();
-    
+
     // Lock body scroll when browser is open
-    useEffect(() => {
-        if (isOpen) {
-            document.body.style.overflow = 'hidden';
-            return () => {
-                document.body.style.overflow = '';
-            };
-        }
-    }, [isOpen]);
-    
+    useScrollLock(isOpen);
+
     // Handle search input
-    const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-        const value = e.target.value;
-        setSearchQuery(value);
-        setViewMode('search');
-        search(value);
-    }, [search]);
-    
+    const handleSearchChange = useCallback(
+        (e: React.ChangeEvent<HTMLInputElement>) => {
+            const value = e.target.value;
+            setSearchQuery(value);
+            setViewMode('search');
+            search(value);
+        },
+        [search],
+    );
+
     // Clear search
     const handleClearSearch = useCallback(() => {
         setSearchQuery('');
         clearSearch();
     }, [clearSearch]);
-    
+
     // Handle escape key
     useEffect(() => {
         if (!isOpen) return;
-        
+
         const handleKey = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {
                 if (selectedManga) {
@@ -93,20 +98,28 @@ const MangaDexBrowserComponent: React.FC<MangaDexBrowserProps> = ({ isOpen, onCl
         document.addEventListener('keydown', handleKey);
         return () => document.removeEventListener('keydown', handleKey);
     }, [isOpen, selectedManga, clearSelection, onClose]);
-    
+
     // Get display manga based on view mode
-    const displayManga = viewMode === 'cached' ? 
-        cachedManga.map(c => ({
-            manga: c.data,
-            coverUrl: c.coverUrl,
-            title: c.data.attributes.title['en'] || Object.values(c.data.attributes.title)[0] || 'Untitled',
-            synopsis: c.generatedSynopsis || '',
-            codex: c.generatedCodex || null,
-            isEnriched: !!(c.generatedSynopsis || c.generatedCodex),
-        })) : searchResults;
-    
+    const displayManga = useMemo(
+        () =>
+            viewMode === 'cached'
+                ? cachedManga.map(c => ({
+                      manga: c.data,
+                      coverUrl: c.coverUrl,
+                      title:
+                          c.data.attributes.title['en'] ||
+                          Object.values(c.data.attributes.title)[0] ||
+                          'Untitled',
+                      synopsis: c.generatedSynopsis || '',
+                      codex: c.generatedCodex || null,
+                      isEnriched: !!(c.generatedSynopsis || c.generatedCodex),
+                  }))
+                : searchResults,
+        [viewMode, cachedManga, searchResults],
+    );
+
     if (!isOpen) return null;
-    
+
     return (
         <AnimatePresence>
             <motion.div
@@ -131,17 +144,17 @@ const MangaDexBrowserComponent: React.FC<MangaDexBrowserProps> = ({ isOpen, onCl
                         >
                             <ChevronLeft size={20} />
                         </button>
-                        
+
                         <div className="mangadex-browser-title-row">
-                            <h1 className="mangadex-browser-title font-display">
-                                MangaDex
-                            </h1>
-                            <span className={`mangadex-browser-status ${online ? 'online' : 'offline'}`}>
+                            <h1 className="mangadex-browser-title font-display">MangaDex</h1>
+                            <span
+                                className={`mangadex-browser-status ${online ? 'online' : 'offline'}`}
+                            >
                                 {online ? <Wifi size={14} /> : <WifiOff size={14} />}
                                 {online ? 'Online' : 'Offline'}
                             </span>
                         </div>
-                        
+
                         <button
                             className="mangadex-browser-refresh"
                             onClick={refreshCache}
@@ -151,7 +164,7 @@ const MangaDexBrowserComponent: React.FC<MangaDexBrowserProps> = ({ isOpen, onCl
                             <RefreshCw size={16} />
                         </button>
                     </header>
-                    
+
                     {/* Search Bar */}
                     <div className="mangadex-browser-search">
                         <div className="mangadex-browser-search-input-wrap">
@@ -174,11 +187,14 @@ const MangaDexBrowserComponent: React.FC<MangaDexBrowserProps> = ({ isOpen, onCl
                                 </button>
                             )}
                             {isSearching && (
-                                <Loader size={16} className="mangadex-browser-search-loading spin-icon" />
+                                <Loader
+                                    size={16}
+                                    className="mangadex-browser-search-loading spin-icon"
+                                />
                             )}
                         </div>
                     </div>
-                    
+
                     {/* View Mode Tabs */}
                     <div className="mangadex-browser-tabs">
                         <button
@@ -198,11 +214,13 @@ const MangaDexBrowserComponent: React.FC<MangaDexBrowserProps> = ({ isOpen, onCl
                             <Database size={14} />
                             Cached
                             {cachedManga.length > 0 && (
-                                <span className="mangadex-browser-tab-count">{cachedManga.length}</span>
+                                <span className="mangadex-browser-tab-count">
+                                    {cachedManga.length}
+                                </span>
                             )}
                         </button>
                     </div>
-                    
+
                     {/* Content */}
                     <div className="mangadex-browser-content">
                         {/* Error State */}
@@ -212,7 +230,7 @@ const MangaDexBrowserComponent: React.FC<MangaDexBrowserProps> = ({ isOpen, onCl
                                 <span>{searchError}</span>
                             </div>
                         )}
-                        
+
                         {/* Empty States */}
                         {viewMode === 'search' && !searchQuery && displayManga.length === 0 && (
                             <div className="mangadex-browser-empty">
@@ -220,31 +238,37 @@ const MangaDexBrowserComponent: React.FC<MangaDexBrowserProps> = ({ isOpen, onCl
                                 <h3>Search MangaDex</h3>
                                 <p>
                                     Enter a title, author, or genre to search the MangaDex catalog.
-                                    {!online && ' You are offline — only cached manga will be shown.'}
+                                    {!online &&
+                                        ' You are offline — only cached manga will be shown.'}
                                 </p>
                             </div>
                         )}
-                        
+
                         {viewMode === 'cached' && cachedManga.length === 0 && (
                             <div className="mangadex-browser-empty">
                                 <Database size={48} strokeWidth={1} />
                                 <h3>No Cached Manga</h3>
                                 <p>
-                                    Browse and view manga while online to cache them for offline access.
+                                    Browse and view manga while online to cache them for offline
+                                    access.
                                 </p>
                             </div>
                         )}
-                        
-                        {searchQuery && displayManga.length === 0 && !isSearching && !searchError && (
-                            <div className="mangadex-browser-empty">
-                                <Search size={48} strokeWidth={1} />
-                                <h3>No Results</h3>
-                                <p>
-                                    No manga found for "{searchQuery}". Try a different search term.
-                                </p>
-                            </div>
-                        )}
-                        
+
+                        {searchQuery &&
+                            displayManga.length === 0 &&
+                            !isSearching &&
+                            !searchError && (
+                                <div className="mangadex-browser-empty">
+                                    <Search size={48} strokeWidth={1} />
+                                    <h3>No Results</h3>
+                                    <p>
+                                        No manga found for "{searchQuery}". Try a different search
+                                        term.
+                                    </p>
+                                </div>
+                            )}
+
                         {/* Manga Grid */}
                         {displayManga.length > 0 && (
                             <motion.div
@@ -257,12 +281,12 @@ const MangaDexBrowserComponent: React.FC<MangaDexBrowserProps> = ({ isOpen, onCl
                                         key={manga.manga.id}
                                         manga={manga}
                                         index={index}
-                                        onClick={() => selectManga(manga.manga.id)}
+                                        onSelect={selectManga}
                                     />
                                 ))}
                             </motion.div>
                         )}
-                        
+
                         {/* Loading More Indicator */}
                         {isSearching && displayManga.length > 0 && (
                             <div className="mangadex-browser-loading-more">
@@ -270,7 +294,7 @@ const MangaDexBrowserComponent: React.FC<MangaDexBrowserProps> = ({ isOpen, onCl
                                 <span>Loading more...</span>
                             </div>
                         )}
-                        
+
                         {/* Results Count */}
                         {viewMode === 'search' && searchTotal > 0 && (
                             <div className="mangadex-browser-results-info">
@@ -278,7 +302,7 @@ const MangaDexBrowserComponent: React.FC<MangaDexBrowserProps> = ({ isOpen, onCl
                             </div>
                         )}
                     </div>
-                    
+
                     {/* Detail Panel */}
                     <AnimatePresence>
                         {selectedManga && (

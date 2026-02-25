@@ -19,10 +19,7 @@ class InfinityDatabase extends Dexie {
     constructor() {
         super('InfinityCNDatabase');
         this.version(1).stores({
-            chapters: '++id, title, createdAt'
-        });
-        this.version(2).stores({
-            chapters: '++id, title, createdAt'
+            chapters: '++id, title, createdAt',
         });
     }
 }

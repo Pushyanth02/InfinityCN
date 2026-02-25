@@ -6,12 +6,17 @@
 
 export const extractTextFromPDF = async (file: File): Promise<string> => {
     // Dynamic import: pdfjs-dist (~400KB) downloads only when this runs
-    const [pdfjsLib, { default: workerSrc }] = await Promise.all([
-        import('pdfjs-dist'),
-        import('pdfjs-dist/build/pdf.worker.min.mjs?url'),
-    ]);
-
-    pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
+    let pdfjsLib: Awaited<typeof import('pdfjs-dist')>;
+    try {
+        const [lib, { default: workerSrc }] = await Promise.all([
+            import('pdfjs-dist'),
+            import('pdfjs-dist/build/pdf.worker.min.mjs?url'),
+        ]);
+        pdfjsLib = lib;
+        pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
+    } catch {
+        throw new Error('Failed to load PDF library. Please reload the page and try again.');
+    }
 
     try {
         const arrayBuffer = await file.arrayBuffer();
@@ -25,12 +30,12 @@ export const extractTextFromPDF = async (file: File): Promise<string> => {
             const batch = [];
             for (let i = start; i <= end; i++) {
                 batch.push(
-                    pdf.getPage(i).then(async (page) => {
+                    pdf.getPage(i).then(async page => {
                         const content = await page.getTextContent();
                         pages[i - 1] = content.items
-                            .map((item) => ('str' in item ? item.str : ''))
+                            .map(item => ('str' in item ? item.str : ''))
                             .join(' ');
-                    })
+                    }),
                 );
             }
             await Promise.all(batch);
@@ -39,6 +44,8 @@ export const extractTextFromPDF = async (file: File): Promise<string> => {
         return pages.join('\n\n');
     } catch (error) {
         console.error('[pdfWorker] extraction failed:', error);
-        throw new Error('Failed to extract text. Please ensure the file is a valid, non-encrypted PDF.');
+        throw new Error(
+            'Failed to extract text. Please ensure the file is a valid, non-encrypted PDF.',
+        );
     }
 };

@@ -1,6 +1,6 @@
 /**
  * mangadexInference.ts — Offline inference module for manga metadata
- * 
+ *
  * Provides deterministic algorithms to generate/infer synopsis, codex,
  * and metadata when MangaDex data is incomplete or unavailable.
  * Works completely offline without AI or API calls.
@@ -13,32 +13,78 @@ import { getPreferredTitle } from './mangadex';
 // ─── TAG MAPPINGS ───────────────────────────────────────────────────────────
 
 const GENRE_TAGS = new Set([
-    'action', 'adventure', 'comedy', 'drama', 'fantasy', 'horror',
-    'mystery', 'psychological', 'romance', 'sci-fi', 'slice of life',
-    'sports', 'thriller', 'tragedy', 'isekai', 'magical girls',
-    'mecha', 'medical', 'military', 'music', 'philosophical',
-    'superhero', 'wuxia', 'crime', 'survival'
+    'action',
+    'adventure',
+    'comedy',
+    'drama',
+    'fantasy',
+    'horror',
+    'mystery',
+    'psychological',
+    'romance',
+    'sci-fi',
+    'slice of life',
+    'sports',
+    'thriller',
+    'tragedy',
+    'isekai',
+    'magical girls',
+    'mecha',
+    'medical',
+    'military',
+    'music',
+    'philosophical',
+    'superhero',
+    'wuxia',
+    'crime',
+    'survival',
 ]);
 
 const THEME_TAGS = new Set([
-    'school life', 'martial arts', 'supernatural', 'demons', 'vampires',
-    'zombies', 'monsters', 'magic', 'time travel', 'virtual reality',
-    'video games', 'cooking', 'farming', 'office workers', 'police',
-    'samurai', 'ninja', 'pirates', 'post-apocalyptic', 'historical',
-    'reincarnation', 'villainess', 'harem', 'reverse harem'
+    'school life',
+    'martial arts',
+    'supernatural',
+    'demons',
+    'vampires',
+    'zombies',
+    'monsters',
+    'magic',
+    'time travel',
+    'virtual reality',
+    'video games',
+    'cooking',
+    'farming',
+    'office workers',
+    'police',
+    'samurai',
+    'ninja',
+    'pirates',
+    'post-apocalyptic',
+    'historical',
+    'reincarnation',
+    'villainess',
+    'harem',
+    'reverse harem',
 ]);
 
 const DEMOGRAPHIC_TAGS: Record<string, string> = {
-    'shounen': 'Young Male (Shounen)',
-    'shoujo': 'Young Female (Shoujo)',
-    'seinen': 'Adult Male (Seinen)',
-    'josei': 'Adult Female (Josei)',
-    'kodomomuke': 'Children',
+    shounen: 'Young Male (Shounen)',
+    shoujo: 'Young Female (Shoujo)',
+    seinen: 'Adult Male (Seinen)',
+    josei: 'Adult Female (Josei)',
+    kodomomuke: 'Children',
 };
 
 const CONTENT_WARNING_TAGS = new Set([
-    'gore', 'sexual violence', 'violence', 'self-harm', 'suicide',
-    'drugs', 'alcohol', 'smoking', 'mature themes'
+    'gore',
+    'sexual violence',
+    'violence',
+    'self-harm',
+    'suicide',
+    'drugs',
+    'alcohol',
+    'smoking',
+    'mature themes',
 ]);
 
 const MOOD_MAP: Record<string, string[]> = {
@@ -65,10 +111,12 @@ const NARRATIVE_STYLES: Record<string, string[]> = {
  * Extract tag names from MangaDex manga object
  */
 function extractTagNames(manga: MangaDexManga): string[] {
-    return manga.attributes.tags.map(tag => {
-        const name = tag.attributes?.name;
-        return (name?.['en'] || Object.values(name || {})[0] || '').toLowerCase();
-    }).filter(Boolean);
+    return manga.attributes.tags
+        .map(tag => {
+            const name = tag.attributes?.name;
+            return (name?.['en'] || Object.values(name || {})[0] || '').toLowerCase();
+        })
+        .filter(Boolean);
 }
 
 /**
@@ -105,13 +153,13 @@ function inferTargetAudience(tags: string[], originalLanguage: string): string {
  */
 function inferContentWarnings(tags: string[], contentRating: string): string[] {
     const warnings = tags.filter(tag => CONTENT_WARNING_TAGS.has(tag)).map(capitalize);
-    
+
     if (contentRating === 'suggestive') {
         warnings.push('Suggestive Content');
     } else if (contentRating === 'erotica' || contentRating === 'pornographic') {
         warnings.push('Adult Content (18+)');
     }
-    
+
     return [...new Set(warnings)];
 }
 
@@ -120,10 +168,11 @@ function inferContentWarnings(tags: string[], contentRating: string): string[] {
  */
 function estimateLength(
     lastChapter: string | null,
-    status: string
+    status: string,
 ): { category: 'oneshot' | 'short' | 'medium' | 'long' | 'epic'; readingTime: string } {
-    const chapterNum = lastChapter ? parseFloat(lastChapter) : 0;
-    
+    const raw = lastChapter ? parseFloat(lastChapter) : 0;
+    const chapterNum = Number.isNaN(raw) ? 0 : raw;
+
     if (chapterNum <= 1 || status === 'oneshot') {
         return { category: 'oneshot', readingTime: '15-30 minutes' };
     } else if (chapterNum <= 20) {
@@ -143,7 +192,7 @@ function estimateLength(
 function inferMood(tags: string[]): string {
     let bestMatch = 'Mixed genre';
     let bestScore = 0;
-    
+
     for (const [mood, matchTags] of Object.entries(MOOD_MAP)) {
         const score = tags.filter(t => matchTags.includes(t)).length;
         if (score > bestScore) {
@@ -151,7 +200,7 @@ function inferMood(tags: string[]): string {
             bestMatch = mood;
         }
     }
-    
+
     return capitalize(bestMatch);
 }
 
@@ -161,7 +210,7 @@ function inferMood(tags: string[]): string {
 function inferNarrativeStyle(tags: string[]): string {
     let bestMatch = 'Traditional manga storytelling';
     let bestScore = 0;
-    
+
     for (const [style, matchTags] of Object.entries(NARRATIVE_STYLES)) {
         const score = tags.filter(t => matchTags.includes(t)).length;
         if (score > bestScore) {
@@ -169,7 +218,7 @@ function inferNarrativeStyle(tags: string[]): string {
             bestMatch = style;
         }
     }
-    
+
     return bestMatch;
 }
 
@@ -178,7 +227,7 @@ function inferNarrativeStyle(tags: string[]): string {
  */
 function inferSimilarTo(tags: string[]): string[] {
     const suggestions: string[] = [];
-    
+
     // Genre-based suggestions (these are well-known series)
     if (tags.includes('action') && tags.includes('shounen')) {
         suggestions.push('Naruto', 'One Piece', 'Dragon Ball');
@@ -201,9 +250,13 @@ function inferSimilarTo(tags: string[]): string[] {
     if (tags.includes('slice of life') && tags.includes('comedy')) {
         suggestions.push('Nichijou', 'Yotsuba&!', 'Barakamon');
     }
-    
-    // Shuffle and return top 3
-    return suggestions.sort(() => Math.random() - 0.5).slice(0, 3);
+
+    // Shuffle and return top 3 (Fisher-Yates)
+    for (let i = suggestions.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [suggestions[i], suggestions[j]] = [suggestions[j], suggestions[i]];
+    }
+    return suggestions.slice(0, 3);
 }
 
 /**
@@ -221,7 +274,7 @@ function capitalize(str: string): string {
 export function generateMangaCodex(manga: MangaDexManga): MangaCodex {
     const tags = extractTagNames(manga);
     const lengthInfo = estimateLength(manga.attributes.lastChapter, manga.attributes.status);
-    
+
     return {
         genres: inferGenres(tags),
         themes: inferThemes(tags),
@@ -246,17 +299,17 @@ export function generateSynopsis(manga: MangaDexManga): string {
     const mood = inferMood(tags);
     const status = manga.attributes.status;
     const year = manga.attributes.year;
-    
+
     // Build synopsis from available metadata
     const parts: string[] = [];
-    
+
     // Opening
     if (genres.length > 0) {
         parts.push(`${title} is a ${genres.slice(0, 3).join('/')} manga`);
     } else {
         parts.push(`${title} is a manga`);
     }
-    
+
     // Year and status
     if (year) {
         parts[0] += ` that began serialization in ${year}`;
@@ -269,15 +322,15 @@ export function generateSynopsis(manga: MangaDexManga): string {
         parts[0] += ' but is currently on hiatus';
     }
     parts[0] += '.';
-    
+
     // Themes
     if (themes.length > 0) {
         parts.push(`The story explores themes of ${themes.slice(0, 4).join(', ')}.`);
     }
-    
+
     // Mood
     parts.push(`Readers can expect a ${mood.toLowerCase()} experience.`);
-    
+
     // Chapter info
     if (manga.attributes.lastChapter) {
         const chapterCount = parseFloat(manga.attributes.lastChapter);
@@ -285,7 +338,7 @@ export function generateSynopsis(manga: MangaDexManga): string {
             parts.push(`The series spans ${Math.round(chapterCount)} chapters.`);
         }
     }
-    
+
     return parts.join(' ');
 }
 
@@ -296,24 +349,24 @@ export function enrichSynopsis(existingSynopsis: string, manga: MangaDexManga): 
     if (!existingSynopsis || existingSynopsis.trim().length < 20) {
         return generateSynopsis(manga);
     }
-    
+
     // Add metadata footer if synopsis is short
     if (existingSynopsis.length < 200) {
         const codex = generateMangaCodex(manga);
         const additions: string[] = [];
-        
+
         if (codex.genres.length > 0 && !existingSynopsis.toLowerCase().includes('genre')) {
             additions.push(`Genre: ${codex.genres.join(', ')}`);
         }
         if (codex.mood && !existingSynopsis.toLowerCase().includes('mood')) {
             additions.push(`Mood: ${codex.mood}`);
         }
-        
+
         if (additions.length > 0) {
             return `${existingSynopsis}\n\n${additions.join(' | ')}`;
         }
     }
-    
+
     return existingSynopsis;
 }
 
@@ -333,12 +386,14 @@ export function getConnectivityStatus(): {
     downlink?: number;
 } {
     const online = isOnline();
-    
+
     // Check Network Information API if available
-    const connection = (navigator as Navigator & {
-        connection?: { effectiveType?: string; downlink?: number };
-    }).connection;
-    
+    const connection = (
+        navigator as Navigator & {
+            connection?: { effectiveType?: string; downlink?: number };
+        }
+    ).connection;
+
     return {
         online,
         effectiveType: connection?.effectiveType,

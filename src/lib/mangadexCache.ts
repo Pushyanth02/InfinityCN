@@ -1,6 +1,6 @@
 /**
  * mangadexCache.ts — Caching layer for MangaDex API responses
- * 
+ *
  * Provides IndexedDB-based caching for manga data, chapters, and cover images.
  * Supports offline browsing of previously fetched content.
  */
@@ -21,14 +21,14 @@ export interface CachedManga {
     generatedCodex?: MangaCodex;
 }
 
-export interface CachedChapterList {
+interface CachedChapterList {
     mangaId: string;
     chapters: MangaDexChapter[];
     total: number;
     fetchedAt: number;
 }
 
-export interface CachedSearchResult {
+interface CachedSearchResult {
     query: string;
     mangaIds: string[];
     total: number;
@@ -68,9 +68,9 @@ export const cacheDb = new MangaDexCacheDB();
 
 // Cache TTL in milliseconds
 const CACHE_TTL = {
-    manga: 24 * 60 * 60 * 1000,      // 24 hours for manga details
-    chapters: 6 * 60 * 60 * 1000,    // 6 hours for chapter list
-    search: 30 * 60 * 1000,          // 30 minutes for search results
+    manga: 24 * 60 * 60 * 1000, // 24 hours for manga details
+    chapters: 6 * 60 * 60 * 1000, // 6 hours for chapter list
+    search: 30 * 60 * 1000, // 30 minutes for search results
 };
 
 // ─── CACHE OPERATIONS ───────────────────────────────────────────────────────
@@ -86,26 +86,32 @@ function isValid(fetchedAt: number, ttl: number): boolean {
  * Get cached manga by ID
  */
 export async function getCachedManga(id: string): Promise<CachedManga | null> {
-    const cached = await cacheDb.manga.get(id);
-    if (cached && isValid(cached.fetchedAt, CACHE_TTL.manga)) {
-        return cached;
+    try {
+        const cached = await cacheDb.manga.get(id);
+        if (cached && isValid(cached.fetchedAt, CACHE_TTL.manga)) {
+            return cached;
+        }
+        return null;
+    } catch (err) {
+        console.warn('[mangadexCache] getCachedManga failed:', err);
+        return null;
     }
-    return null;
 }
 
 /**
  * Cache manga data
  */
-export async function cacheManga(
-    manga: MangaDexManga,
-    coverUrl: string | null
-): Promise<void> {
-    await cacheDb.manga.put({
-        id: manga.id,
-        data: manga,
-        coverUrl,
-        fetchedAt: Date.now(),
-    });
+export async function cacheManga(manga: MangaDexManga, coverUrl: string | null): Promise<void> {
+    try {
+        await cacheDb.manga.put({
+            id: manga.id,
+            data: manga,
+            coverUrl,
+            fetchedAt: Date.now(),
+        });
+    } catch (err) {
+        console.warn('[mangadexCache] cacheManga failed:', err);
+    }
 }
 
 /**
@@ -113,20 +119,29 @@ export async function cacheManga(
  */
 export async function updateMangaGenerated(
     mangaId: string,
-    updates: { generatedSynopsis?: string; generatedCodex?: MangaCodex }
+    updates: { generatedSynopsis?: string; generatedCodex?: MangaCodex },
 ): Promise<void> {
-    await cacheDb.manga.update(mangaId, updates);
+    try {
+        await cacheDb.manga.update(mangaId, updates);
+    } catch (err) {
+        console.warn('[mangadexCache] updateMangaGenerated failed:', err);
+    }
 }
 
 /**
  * Get cached chapters for a manga
  */
 export async function getCachedChapters(mangaId: string): Promise<CachedChapterList | null> {
-    const cached = await cacheDb.chapters.get(mangaId);
-    if (cached && isValid(cached.fetchedAt, CACHE_TTL.chapters)) {
-        return cached;
+    try {
+        const cached = await cacheDb.chapters.get(mangaId);
+        if (cached && isValid(cached.fetchedAt, CACHE_TTL.chapters)) {
+            return cached;
+        }
+        return null;
+    } catch (err) {
+        console.warn('[mangadexCache] getCachedChapters failed:', err);
+        return null;
     }
-    return null;
 }
 
 /**
@@ -135,103 +150,109 @@ export async function getCachedChapters(mangaId: string): Promise<CachedChapterL
 export async function cacheChapters(
     mangaId: string,
     chapters: MangaDexChapter[],
-    total: number
+    total: number,
 ): Promise<void> {
-    await cacheDb.chapters.put({
-        mangaId,
-        chapters,
-        total,
-        fetchedAt: Date.now(),
-    });
+    try {
+        await cacheDb.chapters.put({
+            mangaId,
+            chapters,
+            total,
+            fetchedAt: Date.now(),
+        });
+    } catch (err) {
+        console.warn('[mangadexCache] cacheChapters failed:', err);
+    }
 }
 
 /**
  * Get cached search results
  */
 export async function getCachedSearch(query: string): Promise<CachedSearchResult | null> {
-    const cached = await cacheDb.searches.get(query.toLowerCase().trim());
-    if (cached && isValid(cached.fetchedAt, CACHE_TTL.search)) {
-        return cached;
+    try {
+        const cached = await cacheDb.searches.get(query.toLowerCase().trim());
+        if (cached && isValid(cached.fetchedAt, CACHE_TTL.search)) {
+            return cached;
+        }
+        return null;
+    } catch (err) {
+        console.warn('[mangadexCache] getCachedSearch failed:', err);
+        return null;
     }
-    return null;
 }
 
 /**
  * Cache search results (stores manga IDs, actual manga data cached separately)
  */
-export async function cacheSearch(
-    query: string,
-    mangaIds: string[],
-    total: number
-): Promise<void> {
-    await cacheDb.searches.put({
-        query: query.toLowerCase().trim(),
-        mangaIds,
-        total,
-        fetchedAt: Date.now(),
-    });
+export async function cacheSearch(query: string, mangaIds: string[], total: number): Promise<void> {
+    try {
+        await cacheDb.searches.put({
+            query: query.toLowerCase().trim(),
+            mangaIds,
+            total,
+            fetchedAt: Date.now(),
+        });
+    } catch (err) {
+        console.warn('[mangadexCache] cacheSearch failed:', err);
+    }
 }
 
 /**
  * Get multiple manga by IDs (for reconstructing search results from cache)
  */
 export async function getCachedMangaByIds(ids: string[]): Promise<CachedManga[]> {
-    const results = await cacheDb.manga.bulkGet(ids);
-    return results.filter((m): m is CachedManga => m !== undefined);
+    try {
+        const results = await cacheDb.manga.bulkGet(ids);
+        return results.filter((m): m is CachedManga => m !== undefined);
+    } catch (err) {
+        console.warn('[mangadexCache] getCachedMangaByIds failed:', err);
+        return [];
+    }
 }
 
 /**
  * Get all cached manga (for offline browsing)
  */
 export async function getAllCachedManga(): Promise<CachedManga[]> {
-    return cacheDb.manga.orderBy('fetchedAt').reverse().limit(100).toArray();
+    try {
+        return await cacheDb.manga.orderBy('fetchedAt').reverse().limit(100).toArray();
+    } catch (err) {
+        console.warn('[mangadexCache] getAllCachedManga failed:', err);
+        return [];
+    }
 }
 
 /**
- * Clear expired cache entries
+ * Clear expired cache entries (parallelized — independent tables)
  */
-export async function clearExpiredCache(): Promise<void> {
-    const now = Date.now();
-    
-    await cacheDb.manga
-        .where('fetchedAt')
-        .below(now - CACHE_TTL.manga * 2)
-        .delete();
-    
-    await cacheDb.chapters
-        .where('fetchedAt')
-        .below(now - CACHE_TTL.chapters * 2)
-        .delete();
-    
-    await cacheDb.searches
-        .where('fetchedAt')
-        .below(now - CACHE_TTL.search * 2)
-        .delete();
+async function clearExpiredCache(): Promise<void> {
+    try {
+        const now = Date.now();
+
+        await Promise.all([
+            cacheDb.manga
+                .where('fetchedAt')
+                .below(now - CACHE_TTL.manga * 2)
+                .delete(),
+            cacheDb.chapters
+                .where('fetchedAt')
+                .below(now - CACHE_TTL.chapters * 2)
+                .delete(),
+            cacheDb.searches
+                .where('fetchedAt')
+                .below(now - CACHE_TTL.search * 2)
+                .delete(),
+        ]);
+    } catch (err) {
+        console.warn('[mangadexCache] clearExpiredCache failed:', err);
+    }
 }
 
-/**
- * Get cache statistics
- */
-export async function getCacheStats(): Promise<{
-    mangaCount: number;
-    chaptersCount: number;
-    searchesCount: number;
-}> {
-    const [mangaCount, chaptersCount, searchesCount] = await Promise.all([
-        cacheDb.manga.count(),
-        cacheDb.chapters.count(),
-        cacheDb.searches.count(),
-    ]);
-    return { mangaCount, chaptersCount, searchesCount };
-}
-
-/**
- * Clear all cache
- */
-export async function clearAllCache(): Promise<void> {
-    await Promise.all([
-        cacheDb.manga.clear(),
-        cacheDb.chapters.clear(),
-        cacheDb.searches.clear(),
-    ]);
+// Run cache cleanup once on startup and when the page becomes visible
+clearExpiredCache().catch(() => {});
+if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            clearExpiredCache().catch(() => {});
+        }
+    });
 }

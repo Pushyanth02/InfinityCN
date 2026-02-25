@@ -1,0 +1,121 @@
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import React, { Suspense } from 'react';
+
+// Mock heavy dependencies so we can test component mounting without the full dep tree
+vi.mock('../../lib/db', () => ({
+    default: {
+        compiledPages: { toArray: vi.fn().mockResolvedValue([]) },
+        chapters: { toArray: vi.fn().mockResolvedValue([]) },
+    },
+}));
+
+vi.mock('../../lib/mangadexCache', () => ({
+    getAllCachedManga: vi.fn().mockResolvedValue([]),
+    getCachedManga: vi.fn().mockResolvedValue(null),
+    clearExpiredCache: vi.fn().mockResolvedValue(undefined),
+    getCacheStats: vi.fn().mockResolvedValue({ mangaCount: 0, chapterCount: 0, searchCount: 0 }),
+}));
+
+vi.mock('dexie', () => {
+    const MockDexie = vi.fn().mockImplementation(() => ({
+        version: vi.fn().mockReturnThis(),
+        stores: vi.fn().mockReturnThis(),
+    }));
+    return { default: MockDexie };
+});
+
+// ─── LAZY-LOADED COMPONENT SMOKE TESTS ─────────────────────────────
+
+describe('Lazy component loading', () => {
+    it('Reader lazy component module can be imported', async () => {
+        // Verify the module resolves (does not throw at import time)
+        const module = await import('../../components/Reader');
+        expect(module).toBeDefined();
+    });
+
+    it('ThemeStudio lazy component module can be imported', async () => {
+        const module = await import('../../components/ThemeStudio');
+        expect(module).toBeDefined();
+    });
+
+    it('MangaDexBrowser lazy component module can be imported', async () => {
+        const module = await import('../../components/MangaDexBrowser');
+        expect(module).toBeDefined();
+    });
+});
+
+// ─── ERROR BOUNDARY ────────────────────────────────────────────────
+
+describe('ErrorBoundary', () => {
+    // Simple component that throws for testing
+    const ThrowingComponent = () => {
+        throw new Error('Test error');
+    };
+
+    it('catches errors from child components', async () => {
+        // Import App to get ErrorBoundary
+        // Since ErrorBoundary is defined inside App.tsx, we test the pattern directly
+        class TestErrorBoundary extends React.Component<
+            { children: React.ReactNode },
+            { hasError: boolean; error: Error | null }
+        > {
+            state = { hasError: false, error: null as Error | null };
+            static getDerivedStateFromError(error: Error) {
+                return { hasError: true, error };
+            }
+            render() {
+                if (this.state.hasError) {
+                    return (
+                        <div data-testid="error-fallback">Error: {this.state.error?.message}</div>
+                    );
+                }
+                return this.props.children;
+            }
+        }
+
+        // Suppress React error boundary console output
+        const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        render(
+            <TestErrorBoundary>
+                <ThrowingComponent />
+            </TestErrorBoundary>,
+        );
+
+        expect(screen.getByTestId('error-fallback')).toBeInTheDocument();
+        expect(screen.getByText(/Test error/)).toBeInTheDocument();
+
+        spy.mockRestore();
+    });
+});
+
+// ─── SUSPENSE FALLBACK ─────────────────────────────────────────────
+
+describe('Suspense fallback', () => {
+    it('shows fallback while lazy component loads', async () => {
+        // Create a component that suspends
+        let resolve: (mod: { default: React.FC }) => void;
+        const LazyTest = React.lazy(
+            () =>
+                new Promise<{ default: React.FC }>(r => {
+                    resolve = r;
+                }),
+        );
+
+        render(
+            <Suspense fallback={<div data-testid="loading">Loading...</div>}>
+                <LazyTest />
+            </Suspense>,
+        );
+
+        expect(screen.getByTestId('loading')).toBeInTheDocument();
+
+        // Resolve the lazy load
+        resolve!({ default: () => <div data-testid="loaded">Loaded</div> });
+
+        await waitFor(() => {
+            expect(screen.getByTestId('loaded')).toBeInTheDocument();
+        });
+    });
+});

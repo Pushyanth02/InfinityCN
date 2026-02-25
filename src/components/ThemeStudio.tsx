@@ -4,6 +4,21 @@ import { Sun, Moon, Check, Palette } from 'lucide-react';
 type ColorTheme = 'ember' | 'void' | 'ivory' | 'jade';
 type Mode = 'dark' | 'light';
 
+const PANEL_STYLE: React.CSSProperties = {
+    position: 'absolute',
+    right: 0,
+    top: 'calc(100% + 0.5rem)',
+    width: '240px',
+    background: 'var(--bg-glass)',
+    border: '1px solid var(--line-color)',
+    backdropFilter: 'blur(24px)',
+    WebkitBackdropFilter: 'blur(24px)',
+    padding: '1.5rem',
+    zIndex: 300,
+    boxShadow: 'var(--shadow-lg)',
+    borderRadius: '6px',
+};
+
 const THEMES: Record<ColorTheme, { name: string; color: string; vars: Record<string, string> }> = {
     ember: {
         name: 'Ember',
@@ -16,7 +31,7 @@ const THEMES: Record<ColorTheme, { name: string; color: string; vars: Record<str
             '--accent-primary': '#c62828',
             '--accent-primary-hover': '#e53935',
             '--accent-glow': 'rgba(198, 40, 40, 0.35)',
-        }
+        },
     },
     void: {
         name: 'Void',
@@ -29,7 +44,7 @@ const THEMES: Record<ColorTheme, { name: string; color: string; vars: Record<str
             '--accent-primary': '#7c3aed',
             '--accent-primary-hover': '#8b5cf6',
             '--accent-glow': 'rgba(124, 58, 237, 0.35)',
-        }
+        },
     },
     ivory: {
         name: 'Ivory',
@@ -42,7 +57,7 @@ const THEMES: Record<ColorTheme, { name: string; color: string; vars: Record<str
             '--accent-primary': '#c9a227',
             '--accent-primary-hover': '#d4af37',
             '--accent-glow': 'rgba(201, 162, 39, 0.35)',
-        }
+        },
     },
     jade: {
         name: 'Jade',
@@ -55,18 +70,25 @@ const THEMES: Record<ColorTheme, { name: string; color: string; vars: Record<str
             '--accent-primary': '#0d9488',
             '--accent-primary-hover': '#0f9c8e',
             '--accent-glow': 'rgba(13, 148, 136, 0.35)',
-        }
-    }
+        },
+    },
 };
 
-export const ThemeStudio: React.FC = () => {
+const VALID_MODES: Mode[] = ['dark', 'light'];
+const VALID_THEMES: ColorTheme[] = ['ember', 'void', 'ivory', 'jade'];
+
+export const ThemeStudio = React.memo(function ThemeStudio() {
     const [isOpen, setIsOpen] = useState(false);
-    const [mode, setMode] = useState<Mode>(
-        (localStorage.getItem('infinitycn-theme-mode') as Mode) || 'dark'
-    );
-    const [colorTheme, setColorTheme] = useState<ColorTheme>(
-        (localStorage.getItem('infinitycn-theme-color') as ColorTheme) || 'ember'
-    );
+    const [mode, setMode] = useState<Mode>(() => {
+        const stored = localStorage.getItem('infinitycn-theme-mode');
+        return stored && VALID_MODES.includes(stored as Mode) ? (stored as Mode) : 'dark';
+    });
+    const [colorTheme, setColorTheme] = useState<ColorTheme>(() => {
+        const stored = localStorage.getItem('infinitycn-theme-color');
+        return stored && VALID_THEMES.includes(stored as ColorTheme)
+            ? (stored as ColorTheme)
+            : 'ember';
+    });
 
     useEffect(() => {
         document.documentElement.setAttribute('data-theme', mode);
@@ -77,21 +99,6 @@ export const ThemeStudio: React.FC = () => {
         });
         localStorage.setItem('infinitycn-theme-color', colorTheme);
     }, [mode, colorTheme]);
-
-    const panelStyle: React.CSSProperties = {
-        position: 'absolute',
-        right: 0,
-        top: 'calc(100% + 0.5rem)',
-        width: '240px',
-        background: 'var(--bg-glass)',
-        border: '1px solid var(--line-color)',
-        backdropFilter: 'blur(24px)',
-        WebkitBackdropFilter: 'blur(24px)',
-        padding: '1.5rem',
-        zIndex: 300,
-        boxShadow: 'var(--shadow-lg)',
-        borderRadius: '6px',
-    };
 
     const panelRef = useRef<HTMLDivElement>(null);
 
@@ -120,9 +127,11 @@ export const ThemeStudio: React.FC = () => {
             <button
                 type="button"
                 className={`theme-trigger ${isOpen ? 'theme-trigger--open' : ''}`}
-                style={{
-                    '--trigger-theme-color': THEMES[colorTheme].color
-                } as React.CSSProperties}
+                style={
+                    {
+                        '--trigger-theme-color': THEMES[colorTheme].color,
+                    } as React.CSSProperties
+                }
                 onClick={() => setIsOpen(!isOpen)}
                 title="Theme Studio"
                 aria-label="Open Theme Studio"
@@ -137,7 +146,7 @@ export const ThemeStudio: React.FC = () => {
 
             {isOpen && (
                 <>
-                    <div style={{ ...panelStyle }} role="region" aria-label="Theme settings">
+                    <div style={PANEL_STYLE} role="region" aria-label="Theme settings">
                         {/* Mode */}
                         <div className="theme-panel-section">
                             <div className="theme-section-title">Mode</div>
@@ -176,13 +185,20 @@ export const ThemeStudio: React.FC = () => {
                                     >
                                         <div
                                             className="theme-accent-dot"
-                                            style={{
-                                                '--config-color': config.color,
-                                                boxShadow: colorTheme === key ? `0 0 8px ${config.color}` : 'none'
-                                            } as React.CSSProperties}
+                                            style={
+                                                {
+                                                    '--config-color': config.color,
+                                                    boxShadow:
+                                                        colorTheme === key
+                                                            ? `0 0 8px ${config.color}`
+                                                            : 'none',
+                                                } as React.CSSProperties
+                                            }
                                         />
                                         {config.name}
-                                        {colorTheme === key && <Check size={10} className="theme-check-icon" />}
+                                        {colorTheme === key && (
+                                            <Check size={10} className="theme-check-icon" />
+                                        )}
                                     </button>
                                 ))}
                             </div>
@@ -192,4 +208,4 @@ export const ThemeStudio: React.FC = () => {
             )}
         </div>
     );
-};
+});

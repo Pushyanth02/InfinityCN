@@ -89,12 +89,12 @@
 
 .mangadex-browser-status.online {
     background: rgba(34, 197, 94, 0.15);
-    color: #22c55e;
+    color: var(--status-success);
 }
 
 .mangadex-browser-status.offline {
     background: rgba(239, 68, 68, 0.15);
-    color: #ef4444;
+    color: var(--status-error);
 }
 
 .mangadex-browser-refresh {
@@ -275,7 +275,7 @@
     background: rgba(239, 68, 68, 0.1);
     border: 1px solid rgba(239, 68, 68, 0.3);
     border-radius: 12px;
-    color: #ef4444;
+    color: var(--status-error);
     margin-bottom: 1rem;
 }
 
@@ -374,8 +374,13 @@
 }
 
 @keyframes pulse {
-    0%, 100% { opacity: 0.4; }
-    50% { opacity: 0.8; }
+    0%,
+    100% {
+        opacity: 0.4;
+    }
+    50% {
+        opacity: 0.8;
+    }
 }
 
 .manga-card-cover-error span {
@@ -560,12 +565,12 @@
 
 .manga-detail-online {
     background: rgba(34, 197, 94, 0.15);
-    color: #22c55e;
+    color: var(--status-success);
 }
 
 .manga-detail-offline {
     background: rgba(239, 68, 68, 0.15);
-    color: #ef4444;
+    color: var(--status-error);
 }
 
 /* Hero Section */
@@ -648,12 +653,12 @@
 
 .manga-detail-badge--rating {
     background: rgba(239, 68, 68, 0.15);
-    color: #ef4444;
+    color: var(--status-error);
 }
 
 .manga-detail-badge--suggestive {
     background: rgba(245, 158, 11, 0.15);
-    color: #f59e0b;
+    color: var(--status-warning);
 }
 
 .manga-detail-creators {
@@ -791,7 +796,7 @@
     background: rgba(239, 68, 68, 0.1);
     border-radius: 8px;
     font-size: 0.85rem;
-    color: #ef4444;
+    color: var(--status-error);
 }
 
 .manga-detail-offline-note {
@@ -840,7 +845,7 @@
 
 .manga-detail-codex-tag--warning {
     background: rgba(239, 68, 68, 0.1);
-    color: #ef4444;
+    color: var(--status-error);
 }
 
 .manga-detail-codex-row {
@@ -1024,21 +1029,21 @@
         height: 100vh;
         border-radius: 0;
     }
-    
+
     .manga-detail-panel {
         max-width: 100%;
     }
-    
+
     .manga-detail-hero {
         flex-direction: column;
         align-items: center;
         text-align: center;
     }
-    
+
     .manga-detail-cover {
         width: 120px;
     }
-    
+
     .manga-detail-badges,
     .manga-detail-creators,
     .manga-detail-tags {
@@ -1052,9 +1057,4 @@
 
 .spin-icon {
     animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
 }

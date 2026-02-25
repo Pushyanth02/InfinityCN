@@ -1,4 +1,0 @@
-
-> shining-trifid@15.0.0 lint
-> eslint .
-

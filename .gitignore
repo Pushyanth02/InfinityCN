@@ -24,3 +24,8 @@ dist-ssr
 *.sw?
 
 .vercel
+
+# Temp files
+tmpclaude-*
+*_tmp.txt
+*_output.txt

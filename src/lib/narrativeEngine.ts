@@ -25,23 +25,18 @@ import type { MangaPanel } from '../types';
 // 1. NARRATIVE ARC DETECTION
 // ═══════════════════════════════════════════════════════════
 
-type NarrativeStage =
-    | 'exposition'
-    | 'rising_action'
-    | 'climax'
-    | 'falling_action'
-    | 'resolution';
+type NarrativeStage = 'exposition' | 'rising_action' | 'climax' | 'falling_action' | 'resolution';
 
-interface NarrativeArcResult {
+export interface NarrativeArcResult {
     stages: NarrativeStageSegment[];
-    climaxIndex: number;       // index of the panel at peak tension
-    climaxPercent: number;     // 0-100: where in the chapter the climax falls
+    climaxIndex: number; // index of the panel at peak tension
+    climaxPercent: number; // 0-100: where in the chapter the climax falls
     arcShape: 'mountain' | 'plateau' | 'rising' | 'falling' | 'flat';
 }
 
-interface NarrativeStageSegment {
+export interface NarrativeStageSegment {
     stage: NarrativeStage;
-    startPercent: number;     // 0-100
+    startPercent: number; // 0-100
     endPercent: number;
     avgTension: number;
     label: string;
@@ -53,12 +48,22 @@ interface NarrativeStageSegment {
  * then partitions the chapter into narrative segments relative to it.
  */
 export function detectNarrativeArc(
-    panels: Array<{ content: string; tension?: number }>
+    panels: Array<{ content: string; tension?: number }>,
 ): NarrativeArcResult {
     if (panels.length < 5) {
         return {
-            stages: [{ stage: 'exposition', startPercent: 0, endPercent: 100, avgTension: 0, label: 'Exposition' }],
-            climaxIndex: 0, climaxPercent: 50, arcShape: 'flat'
+            stages: [
+                {
+                    stage: 'exposition',
+                    startPercent: 0,
+                    endPercent: 100,
+                    avgTension: 0,
+                    label: 'Exposition',
+                },
+            ],
+            climaxIndex: 0,
+            climaxPercent: 50,
+            arcShape: 'flat',
         };
     }
 
@@ -77,7 +82,7 @@ export function detectNarrativeArc(
     const climaxPct = (climaxIndex / (panels.length - 1)) * 100;
 
     // Build five segments based on climax position
-    const avg = (arr: number[]) => arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : 0;
+    const avg = (arr: number[]) => (arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : 0);
     const segmentsRaw: { stage: NarrativeStage; label: string; start: number; end: number }[] = [];
 
     // Exposition: first 15% or up to climax/4, whichever is smaller
@@ -86,9 +91,19 @@ export function detectNarrativeArc(
     const fallingEnd = climaxPct + Math.min(20, (100 - climaxPct) * 0.5);
 
     segmentsRaw.push({ stage: 'exposition', label: 'Exposition', start: 0, end: expEnd });
-    segmentsRaw.push({ stage: 'rising_action', label: 'Rising Action', start: expEnd, end: Math.max(expEnd + 1, risingEnd) });
+    segmentsRaw.push({
+        stage: 'rising_action',
+        label: 'Rising Action',
+        start: expEnd,
+        end: Math.max(expEnd + 1, risingEnd),
+    });
     segmentsRaw.push({ stage: 'climax', label: 'Climax', start: risingEnd, end: climaxPct + 5 });
-    segmentsRaw.push({ stage: 'falling_action', label: 'Falling Action', start: climaxPct + 5, end: fallingEnd });
+    segmentsRaw.push({
+        stage: 'falling_action',
+        label: 'Falling Action',
+        start: climaxPct + 5,
+        end: fallingEnd,
+    });
     segmentsRaw.push({ stage: 'resolution', label: 'Resolution', start: fallingEnd, end: 100 });
 
     const stages = segmentsRaw.map(s => {
@@ -123,17 +138,17 @@ export function detectNarrativeArc(
 // 2. CHARACTER CO-OCCURRENCE GRAPH
 // ═══════════════════════════════════════════════════════════
 
-export interface CharacterNode {
+interface CharacterNode {
     id: string;
     name: string;
-    weight: number;   // normalized mention frequency 0-1
+    weight: number; // normalized mention frequency 0-1
     sentiment: number;
 }
 
-export interface CharacterEdge {
+interface CharacterEdge {
     source: string;
     target: string;
-    weight: number;   // co-occurrence count, normalized 0-1
+    weight: number; // co-occurrence count, normalized 0-1
 }
 
 export interface CharacterGraphResult {
@@ -147,15 +162,17 @@ export interface CharacterGraphResult {
  */
 export function buildCharacterGraph(
     text: string,
-    characters: NamedCharacter[]
+    characters: NamedCharacter[],
 ): CharacterGraphResult {
     if (characters.length < 2) {
         return {
             nodes: characters.map(c => ({
-                id: c.name, name: c.name,
-                weight: 1, sentiment: c.sentiment,
+                id: c.name,
+                name: c.name,
+                weight: 1,
+                sentiment: c.sentiment,
             })),
-            edges: []
+            edges: [],
         };
     }
 
@@ -169,15 +186,17 @@ export function buildCharacterGraph(
         const indices = new Set<number>();
         const firstName = c.name.split(' ')[0];
         for (let i = 0; i < sentences.length; i++) {
-            if (sentences[i].includes(c.name) || (c.name.includes(' ') && sentences[i].includes(firstName))) {
+            if (
+                sentences[i].includes(c.name) ||
+                (c.name.includes(' ') && sentences[i].includes(firstName))
+            ) {
                 indices.add(i);
             }
         }
         charSentenceIndex.set(c.name, indices);
     }
 
-    const edgeKey = (a: string, b: string) =>
-        [a, b].sort().join('|||');
+    const edgeKey = (a: string, b: string) => [a, b].sort().join('|||');
 
     // Count co-occurrences: two chars share a window if their sentence indices are within ±1
     for (let a = 0; a < characters.length; a++) {
@@ -209,7 +228,8 @@ export function buildCharacterGraph(
         if (count < 1) return;
         const [source, target] = key.split('|||');
         edges.push({
-            source, target,
+            source,
+            target,
             weight: Math.round((count / maxEdgeWeight) * 1000) / 1000,
         });
     });
@@ -217,7 +237,6 @@ export function buildCharacterGraph(
     edges.sort((a, b) => b.weight - a.weight);
     return { nodes, edges: edges.slice(0, 12) };
 }
-
 
 // ═══════════════════════════════════════════════════════════
 // 4. DIALOGUE LINE EXTRACTION
@@ -236,42 +255,55 @@ export interface DialogueLine {
  */
 export function extractDialogueLines(
     panels: Array<{ type: string; content: string; speaker?: string; tension?: number }>,
-    maxLines = 8
+    maxLines = 8,
 ): DialogueLine[] {
     const results: DialogueLine[] = [];
 
     // Pattern 1: `Speaker: text` (already attributed)
     const colonPattern = /^([A-Z][a-zA-Z\s]{1,20}):\s*["""'"']?(.{10,})/;
     // Pattern 2: `"text," said Speaker` or `"text," Speaker said`
-    const saidPattern = /["""'"'"](.{10,})["""'"'"]\s*,?\s*(?:said|whispered|shouted|muttered|called|cried|gasped|snarled|replied|answered)\s+([A-Z][a-z]+)/i;
+    const saidPattern =
+        /["""'"'"](.{10,})["""'"'"]\s*,?\s*(?:said|whispered|shouted|muttered|called|cried|gasped|snarled|replied|answered)\s+([A-Z][a-z]+)/i;
     // Pattern 3: Dialogue panels with a speaker field
     for (let i = 0; i < panels.length; i++) {
         const p = panels[i];
         const tension = p.tension ?? scoreTension(p.content);
 
         if (p.type === 'dialogue' && p.speaker) {
-            results.push({ speaker: p.speaker, line: p.content.slice(0, 200), tension, panelIndex: i });
+            results.push({
+                speaker: p.speaker,
+                line: p.content.slice(0, 200),
+                tension,
+                panelIndex: i,
+            });
             continue;
         }
 
         const colonMatch = colonPattern.exec(p.content);
         if (colonMatch) {
-            results.push({ speaker: colonMatch[1].trim(), line: colonMatch[2].trim().slice(0, 200), tension, panelIndex: i });
+            results.push({
+                speaker: colonMatch[1].trim(),
+                line: colonMatch[2].trim().slice(0, 200),
+                tension,
+                panelIndex: i,
+            });
             continue;
         }
 
         const saidMatch = saidPattern.exec(p.content);
         if (saidMatch) {
-            results.push({ speaker: saidMatch[2].trim(), line: saidMatch[1].trim().slice(0, 200), tension, panelIndex: i });
+            results.push({
+                speaker: saidMatch[2].trim(),
+                line: saidMatch[1].trim().slice(0, 200),
+                tension,
+                panelIndex: i,
+            });
         }
     }
 
     // Return the most dramatic lines, deduped by speaker
-    return results
-        .sort((a, b) => b.tension - a.tension)
-        .slice(0, maxLines);
+    return results.sort((a, b) => b.tension - a.tension).slice(0, maxLines);
 }
-
 
 // ═══════════════════════════════════════════════════════════
 // 5. CHAPTER INSIGHTS ORCHESTRATOR
@@ -281,10 +313,7 @@ export function extractDialogueLines(
  * Compute all chapter-level analytics in a single pass.
  * Orchestrates every algorithm into a ChapterInsights bundle.
  */
-export function computeChapterInsights(
-    rawText: string,
-    panels: MangaPanel[],
-): ChapterInsights {
+export function computeChapterInsights(rawText: string, panels: MangaPanel[]): ChapterInsights {
     const readability = computeReadability(rawText);
     const keywords = extractKeywords(rawText, 12);
     const vocabRichness = computeVocabRichness(rawText);

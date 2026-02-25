@@ -1,14 +1,14 @@
 /**
  * mangadex.ts — MangaDex API Client
- * 
+ *
  * Provides functionality to interact with the MangaDex API for manga search,
  * chapter listing, and content fetching.
- * 
+ *
  * Note: MangaDex is a manga hosting platform, not an AI service.
  * This module is for fetching manga content, not for AI text processing.
  */
 
-import { MANGADEX_CLIENT_ID, MANGADEX_API_URL } from './config';
+import { MANGADEX_API_URL } from './config';
 
 // ─── TYPES ──────────────────────────────────────────────────────────────────
 
@@ -57,23 +57,21 @@ export interface MangaDexChapter {
     }>;
 }
 
-export interface MangaDexSearchResult {
-    result: 'ok' | 'error';
+interface MangaDexSearchResult {
     data: MangaDexManga[];
     total: number;
     limit: number;
     offset: number;
 }
 
-export interface MangaDexChapterList {
-    result: 'ok' | 'error';
+interface MangaDexChapterList {
     data: MangaDexChapter[];
     total: number;
     limit: number;
     offset: number;
 }
 
-export interface MangaDexError {
+interface MangaDexError {
     result: 'error';
     errors: Array<{
         id: string;
@@ -86,20 +84,6 @@ export interface MangaDexError {
 // ─── API CLIENT ─────────────────────────────────────────────────────────────
 
 /**
- * Get the MangaDex Client ID (embedded in the app)
- */
-export function getMangaDexClientId(): string {
-    return MANGADEX_CLIENT_ID;
-}
-
-/**
- * Check if MangaDex API is configured and ready
- */
-export function isMangaDexAvailable(): boolean {
-    return !!MANGADEX_CLIENT_ID && MANGADEX_CLIENT_ID.length > 0;
-}
-
-/**
  * Search for manga on MangaDex
  */
 export async function searchManga(
@@ -109,7 +93,7 @@ export async function searchManga(
         offset?: number;
         contentRating?: Array<'safe' | 'suggestive' | 'erotica' | 'pornographic'>;
         order?: { relevance?: 'asc' | 'desc'; latestUploadedChapter?: 'asc' | 'desc' };
-    } = {}
+    } = {},
 ): Promise<MangaDexSearchResult> {
     const { limit = 10, offset = 0, contentRating = ['safe', 'suggestive'] } = options;
 
@@ -125,16 +109,18 @@ export async function searchManga(
     });
 
     const response = await fetch(`${MANGADEX_API_URL}/manga?${params}`, {
-        method: 'GET',
-        headers: {
-            'Content-Type': 'application/json',
-        },
         signal: AbortSignal.timeout(15_000),
     });
 
     if (!response.ok) {
-        const error = await response.json() as MangaDexError;
-        throw new Error(`MangaDex API error: ${error.errors?.[0]?.detail || response.statusText}`);
+        let detail = response.statusText;
+        try {
+            const error = (await response.json()) as MangaDexError;
+            detail = error.errors?.[0]?.detail || detail;
+        } catch {
+            /* non-JSON error body */
+        }
+        throw new Error(`MangaDex API error: ${detail}`);
     }
 
     return response.json();
@@ -149,16 +135,18 @@ export async function getMangaDetails(mangaId: string): Promise<MangaDexManga> {
     });
 
     const response = await fetch(`${MANGADEX_API_URL}/manga/${mangaId}?${params}`, {
-        method: 'GET',
-        headers: {
-            'Content-Type': 'application/json',
-        },
         signal: AbortSignal.timeout(15_000),
     });
 
     if (!response.ok) {
-        const error = await response.json() as MangaDexError;
-        throw new Error(`MangaDex API error: ${error.errors?.[0]?.detail || response.statusText}`);
+        let detail = response.statusText;
+        try {
+            const error = (await response.json()) as MangaDexError;
+            detail = error.errors?.[0]?.detail || detail;
+        } catch {
+            /* non-JSON error body */
+        }
+        throw new Error(`MangaDex API error: ${detail}`);
     }
 
     const result = await response.json();
@@ -175,7 +163,7 @@ export async function getMangaChapters(
         offset?: number;
         translatedLanguage?: string[];
         order?: { chapter?: 'asc' | 'desc'; publishAt?: 'asc' | 'desc' };
-    } = {}
+    } = {},
 ): Promise<MangaDexChapterList> {
     const { limit = 100, offset = 0, translatedLanguage = ['en'] } = options;
 
@@ -191,51 +179,21 @@ export async function getMangaChapters(
     });
 
     const response = await fetch(`${MANGADEX_API_URL}/chapter?${params}`, {
-        method: 'GET',
-        headers: {
-            'Content-Type': 'application/json',
-        },
         signal: AbortSignal.timeout(15_000),
     });
 
     if (!response.ok) {
-        const error = await response.json() as MangaDexError;
-        throw new Error(`MangaDex API error: ${error.errors?.[0]?.detail || response.statusText}`);
+        let detail = response.statusText;
+        try {
+            const error = (await response.json()) as MangaDexError;
+            detail = error.errors?.[0]?.detail || detail;
+        } catch {
+            /* non-JSON error body */
+        }
+        throw new Error(`MangaDex API error: ${detail}`);
     }
 
     return response.json();
-}
-
-/**
- * Get chapter pages (image URLs)
- */
-export async function getChapterPages(chapterId: string): Promise<{ baseUrl: string; chapter: { hash: string; data: string[]; dataSaver: string[] } }> {
-    const response = await fetch(`${MANGADEX_API_URL}/at-home/server/${chapterId}`, {
-        method: 'GET',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        signal: AbortSignal.timeout(15_000),
-    });
-
-    if (!response.ok) {
-        const error = await response.json() as MangaDexError;
-        throw new Error(`MangaDex API error: ${error.errors?.[0]?.detail || response.statusText}`);
-    }
-
-    return response.json();
-}
-
-/**
- * Build full image URL for a chapter page
- */
-export function buildPageUrl(
-    baseUrl: string,
-    hash: string,
-    filename: string,
-    quality: 'data' | 'data-saver' = 'data'
-): string {
-    return `${baseUrl}/${quality}/${hash}/${filename}`;
 }
 
 /**
@@ -243,7 +201,14 @@ export function buildPageUrl(
  */
 export function getPreferredTitle(
     titles: Record<string, string>,
-    preferredLanguage = 'en'
+    preferredLanguage = 'en',
 ): string {
-    return titles[preferredLanguage] || titles['en'] || titles['ja-ro'] || titles['ja'] || Object.values(titles)[0] || 'Untitled';
+    return (
+        titles[preferredLanguage] ||
+        titles['en'] ||
+        titles['ja-ro'] ||
+        titles['ja'] ||
+        Object.values(titles)[0] ||
+        'Untitled'
+    );
 }
