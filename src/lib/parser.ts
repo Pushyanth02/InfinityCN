@@ -22,11 +22,14 @@ import {
 const SESSION_EPOCH = Date.now();
 
 // ─── Speaker pattern: "said Name", "Name whispered", etc. ─
-const SAID_AFTER = /(?:said|whispered|shouted|muttered|snarled|replied|called|cried|gasped|answered|snapped)\s+([A-Z][a-zA-Z]{1,20})/;
-const SAID_BEFORE = /([A-Z][a-zA-Z]{1,20})\s+(?:said|whispered|shouted|muttered|snarled|replied|called|cried|gasped|answered|snapped)\b/;
+const SAID_AFTER =
+    /(?:said|whispered|shouted|muttered|snarled|replied|called|cried|gasped|answered|snapped)\s+([A-Z][a-zA-Z]{1,20})/;
+const SAID_BEFORE =
+    /([A-Z][a-zA-Z]{1,20})\s+(?:said|whispered|shouted|muttered|snarled|replied|called|cried|gasped|answered|snapped)\b/;
 
 // ─── Scene-transition keywords ─────────────────────────────
-const TRANSITION_RE = /meanwhile|later|suddenly|elsewhere|next day|years later|hours later|moments later|the next morning|back at the|at that moment|across the city|far away|in the distance/i;
+const TRANSITION_RE =
+    /meanwhile|later|suddenly|elsewhere|next day|years later|hours later|moments later|the next morning|back at the|at that moment|across the city|far away|in the distance/i;
 
 // ═══════════════════════════════════════════════════════════
 // PRIMARY: TEXT → PANELS  (async, time-sliced)
@@ -37,7 +40,7 @@ const yieldToMain = (ms = 0) => new Promise<void>(resolve => setTimeout(resolve,
 
 export const processTextToManga = async (
     text: string,
-    onProgress?: (progress: number) => void
+    onProgress?: (progress: number) => void,
 ): Promise<MangaPanel[]> => {
     if (onProgress) onProgress(20);
 
@@ -75,7 +78,9 @@ export const processTextToManga = async (
             quoteContent = quoteMatch[1];
 
             const beforeQ = sentence.substring(0, quoteMatch.index ?? 0).trim();
-            const afterQ = sentence.substring((quoteMatch.index ?? 0) + quoteMatch[0].length).trim();
+            const afterQ = sentence
+                .substring((quoteMatch.index ?? 0) + quoteMatch[0].length)
+                .trim();
 
             // Try "said Name" / "Name said" first (more reliable)
             const saidAfterMatch = SAID_AFTER.exec(afterQ);
@@ -148,8 +153,6 @@ export const processCharacters = async (text: string): Promise<Character[]> => {
     }));
 };
 
-
-
 // ═══════════════════════════════════════════════════════════
 // ATMOSPHERE — Tiered weighted keyword scoring (V15)
 // ═══════════════════════════════════════════════════════════
@@ -195,7 +198,10 @@ const ATMO_DESCRIPTIONS: Record<string, string> = {
 
 // ── Build weighted word→(mood,weight) map ONCE at module load ──
 const ATMO_WORD_MAP = new Map<string, { mood: Atmosphere['mood']; weight: number }[]>();
-for (const [mood, [t1, t2, t3]] of Object.entries(ATMO_TIERS) as [Atmosphere['mood'], [string[], string[], string[]]][]) {
+for (const [mood, [t1, t2, t3]] of Object.entries(ATMO_TIERS) as [
+    Atmosphere['mood'],
+    [string[], string[], string[]],
+][]) {
     if (mood === 'default') continue;
     for (const w of t1) {
         const arr = ATMO_WORD_MAP.get(w) ?? [];
@@ -230,9 +236,11 @@ export const processAtmosphere = async (text: string): Promise<Atmosphere> => {
     let topMood: Atmosphere['mood'] = 'default';
     let topScore = 4;
     for (const [mood, score] of Object.entries(scores) as [Atmosphere['mood'], number][]) {
-        if (score > topScore) { topScore = score; topMood = mood; }
+        if (score > topScore) {
+            topScore = score;
+            topMood = mood;
+        }
     }
 
     return { mood: topMood, description: ATMO_DESCRIPTIONS[topMood] };
 };
-

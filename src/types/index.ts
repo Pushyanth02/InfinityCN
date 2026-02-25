@@ -19,10 +19,15 @@ export interface Character {
 }
 
 export interface Atmosphere {
-    mood: 'dark_stormy' | 'bright_sunny' | 'mysterious_fog' | 'tense_battle' | 'quiet_indoor' | 'default';
+    mood:
+        | 'dark_stormy'
+        | 'bright_sunny'
+        | 'mysterious_fog'
+        | 'tense_battle'
+        | 'quiet_indoor'
+        | 'default';
     description: string;
 }
-
 
 // ─── AI Enriched Types ─────────────────────────────────────
 
@@ -52,7 +57,6 @@ export interface AIConnectionStatus {
     latencyMs?: number;
 }
 
-
 // ─── App State ────────────────────────────────────────────
 
 export interface AppState {
@@ -69,7 +73,15 @@ export interface AppState {
     chapterTitle: string | null;
 
     // AI Settings
-    aiProvider: 'none' | 'chrome' | 'gemini' | 'ollama' | 'openai' | 'anthropic' | 'groq' | 'deepseek';
+    aiProvider:
+        | 'none'
+        | 'chrome'
+        | 'gemini'
+        | 'ollama'
+        | 'openai'
+        | 'anthropic'
+        | 'groq'
+        | 'deepseek';
     geminiKey: string;
     useSearchGrounding: boolean;
     openAiKey: string;
@@ -90,7 +102,32 @@ export interface AppState {
     setProcessing: (isProcessing: boolean) => void;
     setRawText: (text: string) => void;
     setCurrentChapterId: (id: number | null) => void;
-    setMangaData: (data: Partial<Pick<AppState, Extract<keyof AppState, 'panels' | 'characters' | 'recap' | 'atmosphere' | 'chapterTitle' | 'insights'>>>) => void;
-    setAiConfig: (config: Partial<Pick<AppState, 'aiProvider' | 'geminiKey' | 'useSearchGrounding' | 'openAiKey' | 'anthropicKey' | 'groqKey' | 'deepseekKey' | 'ollamaUrl' | 'ollamaModel'>>) => void;
+    setMangaData: (
+        data: Partial<
+            Pick<
+                AppState,
+                Extract<
+                    keyof AppState,
+                    'panels' | 'characters' | 'recap' | 'atmosphere' | 'chapterTitle' | 'insights'
+                >
+            >
+        >,
+    ) => void;
+    setAiConfig: (
+        config: Partial<
+            Pick<
+                AppState,
+                | 'aiProvider'
+                | 'geminiKey'
+                | 'useSearchGrounding'
+                | 'openAiKey'
+                | 'anthropicKey'
+                | 'groqKey'
+                | 'deepseekKey'
+                | 'ollamaUrl'
+                | 'ollamaModel'
+            >
+        >,
+    ) => void;
     resetReader: () => void;
 }
