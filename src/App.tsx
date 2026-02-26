@@ -7,7 +7,7 @@ import { useStore } from './store';
 import { db } from './lib/db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trash2, Clock, Sparkles, BookOpen } from 'lucide-react';
+import { Trash2, Clock, Sparkles } from 'lucide-react';
 
 const AI_LABELS: Record<string, string> = {
     none: 'Setup AI',
@@ -44,10 +44,6 @@ const Reader = lazy(() => import('./components/Reader').then(m => ({ default: m.
 const AISettings = lazy(() =>
     import('./components/AISettings').then(m => ({ default: m.AISettings })),
 );
-const MangaDexBrowser = lazy(() =>
-    import('./components/MangaDexBrowser').then(m => ({ default: m.MangaDexBrowser })),
-);
-
 // Analytics lazy-loaded — non-UI code deferred from critical path
 const Analytics = lazy(() =>
     import('@vercel/analytics/react').then(m => ({ default: m.Analytics })),
@@ -146,7 +142,6 @@ function App() {
     const { compileToManga, generateBonusTools } = useMangaCompiler();
     const [isGeneratingBonus, setIsGeneratingBonus] = useState(false);
     const [isAIOpen, setIsAIOpen] = useState(false);
-    const [isMangaDexOpen, setIsMangaDexOpen] = useState(false);
 
     const savedChapters = useLiveQuery(() => db.chapters.orderBy('createdAt').reverse().toArray());
 
@@ -193,8 +188,6 @@ function App() {
 
     // Stable callback refs for modal close — prevents defeating React.memo on lazy-loaded modals
     const closeAI = useCallback(() => setIsAIOpen(false), []);
-    const closeMangaDex = useCallback(() => setIsMangaDexOpen(false), []);
-
     const aiLabel = AI_LABELS[aiProvider] || 'AI Off';
     const hasReader = panels.length > 0;
 
@@ -210,22 +203,6 @@ function App() {
                 <div className="header-island">
                     <h1 className="logo font-display">InfinityCN</h1>
                     <div className="header-actions">
-                        <button
-                            className="mangadex-trigger-button"
-                            onClick={() => setIsMangaDexOpen(true)}
-                            aria-label="Browse MangaDex"
-                            aria-expanded={isMangaDexOpen ? 'true' : 'false'}
-                            aria-haspopup="dialog"
-                            title="Browse MangaDex"
-                        >
-                            <BookOpen
-                                size={16}
-                                strokeWidth={2.5}
-                                className="mangadex-trigger-icon"
-                                aria-hidden="true"
-                            />
-                            <span className="mangadex-trigger-label">MangaDex</span>
-                        </button>
                         <div className="ai-trigger-container">
                             <button
                                 className="ai-trigger-button"
@@ -439,13 +416,6 @@ function App() {
                 <ErrorBoundary>
                     <Suspense fallback={null}>
                         <AISettings isOpen={isAIOpen} onClose={closeAI} />
-                    </Suspense>
-                </ErrorBoundary>
-            )}
-            {isMangaDexOpen && (
-                <ErrorBoundary>
-                    <Suspense fallback={null}>
-                        <MangaDexBrowser isOpen={isMangaDexOpen} onClose={closeMangaDex} />
                     </Suspense>
                 </ErrorBoundary>
             )}

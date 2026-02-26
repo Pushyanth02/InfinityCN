@@ -12,7 +12,7 @@ export default defineConfig({
             manifest: {
                 name: 'InfinityCN',
                 short_name: 'InfinityCN',
-                description: 'Offline-first AI-enhanced manga and novel reader',
+                description: 'Offline-first AI-enhanced novel reader',
                 theme_color: '#e53935',
                 background_color: '#0a0a0f',
                 display: 'standalone',
@@ -49,24 +49,6 @@ export default defineConfig({
                             cacheableResponse: { statuses: [0, 200] },
                         },
                     },
-                    {
-                        urlPattern: /^https:\/\/uploads\.mangadex\.org\/.*/i,
-                        handler: 'CacheFirst',
-                        options: {
-                            cacheName: 'mangadex-covers-cache',
-                            expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 30 },
-                            cacheableResponse: { statuses: [0, 200] },
-                        },
-                    },
-                    {
-                        urlPattern: /^https:\/\/api\.mangadex\.org\/.*/i,
-                        handler: 'NetworkFirst',
-                        options: {
-                            cacheName: 'mangadex-api-cache',
-                            expiration: { maxEntries: 50, maxAgeSeconds: 60 * 60 },
-                            cacheableResponse: { statuses: [0, 200] },
-                        },
-                    },
                 ],
             },
         }),
@@ -77,15 +59,6 @@ export default defineConfig({
         setupFiles: ['./src/test/setup.ts'],
         include: ['src/**/*.test.{ts,tsx}'],
         css: false,
-    },
-    server: {
-        proxy: {
-            '/mangadex-api': {
-                target: 'https://api.mangadex.org',
-                changeOrigin: true,
-                rewrite: path => path.replace(/^\/mangadex-api/, ''),
-            },
-        },
     },
     build: {
         target: 'esnext',

@@ -1131,38 +1131,6 @@ body::after {
     box-shadow: 0 0 12px rgba(251, 191, 36, 0.6);
 }
 
-/* ── MANGADEX TRIGGER BUTTON ── */
-.mangadex-trigger-button {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.35rem 0.65rem 0.35rem 0.5rem;
-    border-radius: 4px;
-    background: linear-gradient(135deg, #ff6740 0%, #ff4f3d 100%);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    cursor: pointer;
-    transition: all 0.2s ease;
-    color: #fff;
-}
-
-.mangadex-trigger-button:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 16px rgba(255, 103, 64, 0.4);
-}
-
-.mangadex-trigger-icon {
-    color: #fff;
-}
-
-.mangadex-trigger-label {
-    font-family: var(--font-mono);
-    font-size: 0.65rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: #fff;
-}
-
 /* ═══════════════════════════════════════════════════════════
    SETTINGS MODAL EXTENDED
    ═══════════════════════════════════════════════════════════ */

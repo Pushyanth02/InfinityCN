@@ -10,13 +10,6 @@ vi.mock('../../lib/db', () => ({
     },
 }));
 
-vi.mock('../../lib/mangadexCache', () => ({
-    getAllCachedManga: vi.fn().mockResolvedValue([]),
-    getCachedManga: vi.fn().mockResolvedValue(null),
-    clearExpiredCache: vi.fn().mockResolvedValue(undefined),
-    getCacheStats: vi.fn().mockResolvedValue({ mangaCount: 0, chapterCount: 0, searchCount: 0 }),
-}));
-
 vi.mock('dexie', () => {
     const MockDexie = vi.fn().mockImplementation(() => ({
         version: vi.fn().mockReturnThis(),
@@ -36,11 +29,6 @@ describe('Lazy component loading', () => {
 
     it('ThemeStudio lazy component module can be imported', async () => {
         const module = await import('../../components/ThemeStudio');
-        expect(module).toBeDefined();
-    });
-
-    it('MangaDexBrowser lazy component module can be imported', async () => {
-        const module = await import('../../components/MangaDexBrowser');
         expect(module).toBeDefined();
     });
 });
