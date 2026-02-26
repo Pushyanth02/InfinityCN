@@ -2,48 +2,56 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import React, { Suspense } from 'react';
 
-// Mock heavy dependencies so we can test component mounting without the full dep tree
-vi.mock('../../lib/db', () => ({
-    default: {
-        compiledPages: { toArray: vi.fn().mockResolvedValue([]) },
-        chapters: { toArray: vi.fn().mockResolvedValue([]) },
-    },
-}));
-
+// Mock Dexie with a proper class constructor for inheritance
 vi.mock('dexie', () => {
-    const MockDexie = vi.fn().mockImplementation(() => ({
-        version: vi.fn().mockReturnThis(),
-        stores: vi.fn().mockReturnThis(),
-    }));
+    class MockDexie {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        constructor(_dbName: string) {}
+        version() {
+            return {
+                stores: () => ({
+                    upgrade: () => ({}),
+                }),
+            };
+        }
+    }
     return { default: MockDexie };
 });
+
+// Mock cinematifierDb to avoid database operations in tests
+vi.mock('../../lib/cinematifierDb', () => ({
+    saveBook: vi.fn().mockResolvedValue(undefined),
+    loadLatestBook: vi.fn().mockResolvedValue(null),
+    loadBook: vi.fn().mockResolvedValue(null),
+    saveReadingProgress: vi.fn().mockResolvedValue(undefined),
+    loadReadingProgress: vi.fn().mockResolvedValue(null),
+}));
 
 // ─── LAZY-LOADED COMPONENT SMOKE TESTS ─────────────────────────────
 
 describe('Lazy component loading', () => {
-    it('Reader lazy component module can be imported', async () => {
+    it('CinematicReader lazy component module can be imported', async () => {
         // Verify the module resolves (does not throw at import time)
-        const module = await import('../../components/Reader');
+        const module = await import('../../components/CinematicReader');
         expect(module).toBeDefined();
     });
 
-    it('ThemeStudio lazy component module can be imported', async () => {
-        const module = await import('../../components/ThemeStudio');
+    it('CinematifierSettings lazy component module can be imported', async () => {
+        const module = await import('../../components/CinematifierSettings');
         expect(module).toBeDefined();
     });
 });
 
-// ─── ERROR BOUNDARY ────────────────────────────────────────────────
+// ─── ERROR BOUNDARY PATTERN ────────────────────────────────────────
 
-describe('ErrorBoundary', () => {
+describe('ErrorBoundary pattern', () => {
     // Simple component that throws for testing
     const ThrowingComponent = () => {
         throw new Error('Test error');
     };
 
     it('catches errors from child components', async () => {
-        // Import App to get ErrorBoundary
-        // Since ErrorBoundary is defined inside App.tsx, we test the pattern directly
+        // Test the error boundary pattern used in React apps
         class TestErrorBoundary extends React.Component<
             { children: React.ReactNode },
             { hasError: boolean; error: Error | null }
