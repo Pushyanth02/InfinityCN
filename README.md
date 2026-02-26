@@ -76,11 +76,12 @@ AI API keys are configured at runtime through the in-app AI Settings panel and s
 
 ```
 src/
-  components/       UI components (Reader, Upload, MangaDexBrowser, ThemeStudio, etc.)
-  components/ui/    Shared UI primitives (ErrorBoundary, Spinner, SlidePanel, EmptyState)
-  lib/              Core logic (algorithms, AI engine, MangaDex client, cache, config)
-  hooks/            Custom React hooks (useMangaDex, useMangaSearch, etc.)
+  components/       UI components (Reader, Upload, ThemeStudio, AISettings, etc.)
+  components/ui/    Shared UI primitives (ErrorBoundary)
+  lib/              Core logic (algorithms, AI engine, parser, narrative engine)
+  hooks/            Custom React hooks (useMangaCompiler, useScrollLock)
   store/            Zustand state management
+  types/            TypeScript type definitions
   test/             Test setup
   styles.css        CSS entry point (imports all partials + responsive breakpoints)
   App.tsx           Root component with error boundaries and lazy loading

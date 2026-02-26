@@ -63,34 +63,41 @@ npm run preview       # Preview the production build locally
 ```
 src/
 ├── components/         # React components
-│   ├── ui/             # Shared UI primitives (ErrorBoundary, Spinner, etc.)
+│   ├── ui/             # Shared UI primitives (ErrorBoundary)
+│   ├── __tests__/      # Component tests
 │   ├── Reader.tsx      # Core reading experience
-│   ├── MangaDexBrowser.tsx
-│   ├── MangaCard.tsx
-│   ├── MangaDetail.tsx
+│   ├── CinematicReader.tsx
+│   ├── CinematifierApp.tsx
+│   ├── CinematifierSettings.tsx
 │   ├── AISettings.tsx
 │   ├── ThemeStudio.tsx
 │   └── Upload.tsx
 ├── hooks/              # Custom React hooks
-│   ├── useMangaDex.ts  # Composed MangaDex hook
-│   ├── useMangaSearch.ts
-│   ├── useMangaDetail.ts
-│   └── useMangaGeneration.ts
+│   ├── useMangaCompiler.ts
+│   └── useScrollLock.ts
 ├── lib/                # Pure utilities (no React)
+│   ├── __tests__/      # Utility tests
 │   ├── algorithms.ts   # NLP: TF-IDF, sentiment, readability, etc.
 │   ├── ai.ts           # Multi-provider AI engine
-│   ├── mangadex.ts     # MangaDex API client
-│   ├── mangadexCache.ts
-│   ├── mangadexInference.ts
-│   ├── config.ts
+│   ├── cinematifier.ts
+│   ├── cinematifierDb.ts
 │   ├── db.ts           # Dexie (IndexedDB) schema
+│   ├── narrativeEngine.ts
+│   ├── parser.ts
 │   └── pdfWorker.ts
 ├── store/              # Zustand state management
+│   ├── index.ts
+│   └── cinematifierStore.ts
+├── types/              # TypeScript type definitions
+│   ├── index.ts
+│   └── cinematifier.ts
 ├── styles.css          # CSS entry point (imports all partials)
 ├── index.css           # Design system, reset, utilities
 ├── App.css             # App layout, modals, AI settings
+├── cinematifier.css    # Cinematifier-specific styles
 ├── reader.css          # Reader-specific styles
-├── mangadex.css        # MangaDex browser styles
+├── App.tsx             # Root component
+├── main.tsx            # Entry point
 └── test/               # Test setup
 server/
 └── proxy.ts            # Optional API proxy server

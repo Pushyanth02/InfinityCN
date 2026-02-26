@@ -352,7 +352,7 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
             .catch(() => {
                 setReadingProgress(createReadingProgress(book.id));
             });
-    }, [book, readingProgress, setReadingProgress]);  
+    }, [book, readingProgress, setReadingProgress]);
 
     // Track reading time (increment every 30 seconds while reader is open)
     useEffect(() => {
