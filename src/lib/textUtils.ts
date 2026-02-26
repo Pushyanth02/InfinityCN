@@ -75,15 +75,30 @@ export interface TextChunk {
  * preferring to break at paragraph or sentence boundaries.
  */
 export function chunkText(text: string, maxWords: number = 500): TextChunk[] {
-    const paragraphs = text.split(/\n\n+/);
+    // Split while tracking the actual separators
+    const paragraphPattern = /\n\n+/g;
+    const parts: string[] = [];
+    const separators: string[] = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = paragraphPattern.exec(text)) !== null) {
+        parts.push(text.slice(lastIndex, match.index));
+        separators.push(match[0]);
+        lastIndex = match.index + match[0].length;
+    }
+    parts.push(text.slice(lastIndex));
+
     const chunks: TextChunk[] = [];
     let currentChunk = '';
     let currentStart = 0;
     let currentWordCount = 0;
     let charOffset = 0;
 
-    for (const para of paragraphs) {
+    for (let i = 0; i < parts.length; i++) {
+        const para = parts[i];
         const paraWords = para.split(/\s+/).filter(w => w.length > 0).length;
+        const separator = i < separators.length ? separators[i] : '';
 
         if (currentWordCount + paraWords > maxWords && currentChunk.length > 0) {
             // Save current chunk
@@ -101,7 +116,7 @@ export function chunkText(text: string, maxWords: number = 500): TextChunk[] {
             currentWordCount += paraWords;
         }
 
-        charOffset += para.length + 2; // +2 for \n\n
+        charOffset += para.length + separator.length;
     }
 
     // Add final chunk
@@ -109,7 +124,7 @@ export function chunkText(text: string, maxWords: number = 500): TextChunk[] {
         chunks.push({
             text: currentChunk.trim(),
             startIndex: currentStart,
-            endIndex: charOffset,
+            endIndex: Math.min(charOffset, text.length),
             wordCount: currentWordCount,
         });
     }
@@ -307,7 +322,8 @@ export function extractEmails(text: string): string[] {
  * Extract all numbers from text
  */
 export function extractNumbers(text: string): number[] {
-    const numberPattern = /-?\d+\.?\d*/g;
+    // Pattern requires at least one digit, and optional decimal with at least one digit after
+    const numberPattern = /-?\d+(?:\.\d+)?/g;
     const matches = text.match(numberPattern) || [];
     return matches.map(Number).filter(n => !isNaN(n));
 }

@@ -245,7 +245,9 @@ export function estimateProcessingTime(textLength: number): {
     }
 
     // Calculate average processing rate from history
-    const withLength = processingMetrics.filter(m => typeof m.metadata?.textLength === 'number');
+    const withLength = processingMetrics.filter(
+        m => typeof m.metadata?.textLength === 'number' && (m.metadata.textLength as number) > 0,
+    );
 
     if (withLength.length >= 3) {
         const rates = withLength.map(m => m.duration / (m.metadata!.textLength as number));
