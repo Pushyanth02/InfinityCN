@@ -735,5 +735,3 @@ function validateTransitionType(type: string): TransitionType {
     ];
     return valid.includes(type as TransitionType) ? (type as TransitionType) : 'CUT TO';
 }
-
-export { CINEMATIFICATION_SYSTEM_PROMPT };

@@ -21,8 +21,7 @@
  *   • Error categorization and recovery
  */
 
-import { extractCharacters } from './algorithms';
-import type { Character, AIConnectionStatus } from '../types';
+import type { AIConnectionStatus } from '../types';
 
 // ─── PUBLIC CONFIG TYPE ────────────────────────────────────────────────────────
 
@@ -672,65 +671,5 @@ export async function testConnection(config: AIConfig): Promise<AIConnectionStat
             provider: config.provider,
             message: err instanceof Error ? err.message : 'Unknown error.',
         };
-    }
-}
-
-/**
- * AI-Enhanced Character Codex.
- * Generates rich narrative character descriptions merged with algorithmic stats.
- * Falls back to pure NER on failure.
- */
-export async function enhanceCharacters(text: string, config: AIConfig): Promise<Character[]> {
-    const algoStats = extractCharacters(text, 20);
-
-    const toCharacter = (c: {
-        name: string;
-        firstContext?: string;
-        frequency?: number;
-        sentiment?: number;
-        honorific?: string;
-    }): Character => ({
-        name: c.name,
-        description: c.firstContext ? `First appears: "${c.firstContext}"` : '',
-        frequency: c.frequency,
-        sentiment: c.sentiment,
-        honorific: c.honorific,
-    });
-
-    if (config.provider === 'none') {
-        return algoStats.slice(0, 10).map(toCharacter);
-    }
-
-    try {
-        const prompt = `Analyze the following story excerpt and extract the 3-8 most important recurring characters.
-For each provide a 'description': 2-3 vivid sentences detailing personality, role, and current situation.
-
-Text (first 8000 chars):
-${text.substring(0, 8000)}
-
-Return a JSON array ONLY:
-[{"name":"Character Name","description":"Rich narrative description."}]`;
-
-        const raw = await callAIWithDedup(prompt, config);
-        const parsed = parseJSON<{ name: string; description?: string }[]>(raw);
-        if (!Array.isArray(parsed)) throw new Error('Expected JSON array');
-
-        return parsed.map(char => {
-            const stats = algoStats.find(
-                a =>
-                    a.name.toLowerCase().includes(char.name.toLowerCase()) ||
-                    char.name.toLowerCase().includes(a.name.toLowerCase()),
-            );
-            return {
-                name: char.name,
-                description: char.description ?? 'No description available.',
-                frequency: stats?.frequency,
-                sentiment: stats?.sentiment,
-                honorific: stats?.honorific,
-            };
-        });
-    } catch (err) {
-        console.warn('[AI] enhanceCharacters fallback:', err);
-        return algoStats.slice(0, 10).map(toCharacter);
     }
 }
