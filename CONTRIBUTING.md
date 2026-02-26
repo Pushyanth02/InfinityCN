@@ -4,7 +4,7 @@
 
 1. **Clone the repo**
    ```bash
-   git clone https://github.com/your-username/InfinityCN.git
+   git clone https://github.com/Pushyanth02/InfinityCN.git
    cd InfinityCN
    ```
 
