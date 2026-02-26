@@ -96,6 +96,16 @@ server/
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for development workflow, architecture notes, and code style guidelines.
 
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Architecture](./docs/ARCHITECTURE.md) | System design, data flow, technology stack |
+| [AI Guide](./docs/AI_GUIDE.md) | AI provider configuration and optimization |
+| [DevOps Guide](./docs/DEVOPS_GUIDE.md) | CI/CD, deployment, monitoring |
+| [Optimization Roadmap](./docs/OPTIMIZATION_ROADMAP.md) | Technical audit and improvement plan |
+| [Security Policy](./SECURITY.md) | Vulnerability reporting and security practices |
+
 ## License
 
 Private.
