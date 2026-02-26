@@ -21,7 +21,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '../store';
 import { testConnection } from '../lib/ai';
-import { useScrollLock } from './ui/useScrollLock';
+import { useScrollLock } from '../hooks/useScrollLock';
 import type { AIConnectionStatus } from '../types';
 
 interface AISettingsProps {
