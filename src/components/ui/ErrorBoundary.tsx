@@ -1,4 +1,4 @@
-import { Component } from 'react';
+import React, { Component } from 'react';
 import type { ReactNode } from 'react';
 
 interface ErrorBoundaryProps {
@@ -16,6 +16,10 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
     static getDerivedStateFromError(error: Error) {
         return { hasError: true, error };
+    }
+
+    componentDidCatch(error: Error, info: React.ErrorInfo) {
+        console.error('[ErrorBoundary]', error, info.componentStack);
     }
 
     render() {

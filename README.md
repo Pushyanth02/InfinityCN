@@ -83,7 +83,6 @@ npm run build
 
 | Variable | Description | Required |
 |----------|-------------|----------|
-| `VITE_MANGADEX_CLIENT_ID` | MangaDex API client ID | No (has fallback) |
 | `VITE_API_PROXY_URL` | Backend proxy URL for server-side API keys | No |
 
 AI API keys are configured at runtime through the in-app AI Settings panel and stored encrypted (AES-GCM) in browser localStorage. For production deployments with shared keys, use the optional backend proxy (see below).
@@ -157,7 +156,7 @@ src/
     ui/
       ErrorBoundary.tsx      # React error boundary
     __tests__/
-      App.test.tsx           # Component tests
+      CinematifierApp.test.tsx  # Component tests
   lib/
     ai.ts                    # Multi-provider AI engine with streaming
     cinematifier.ts          # Text-to-cinematic transformation
@@ -184,6 +183,16 @@ server/
 ## Contributing
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for development workflow, architecture notes, and code style guidelines.
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Architecture](./docs/ARCHITECTURE.md) | System design, data flow, technology stack |
+| [AI Guide](./docs/AI_GUIDE.md) | AI provider configuration and optimization |
+| [DevOps Guide](./docs/DEVOPS_GUIDE.md) | CI/CD, deployment, monitoring |
+| [Optimization Roadmap](./docs/OPTIMIZATION_ROADMAP.md) | Technical audit and improvement plan |
+| [Security Policy](./SECURITY.md) | Vulnerability reporting and security practices |
 
 ## License
 

@@ -4,7 +4,7 @@
 
 1. **Clone the repo**
    ```bash
-   git clone https://github.com/your-username/InfinityCN.git
+   git clone https://github.com/Pushyanth02/InfinityCN.git
    cd InfinityCN
    ```
 
@@ -69,7 +69,7 @@ src/
 │   ├── ui/
 │   │   └── ErrorBoundary.tsx    # React error boundary
 │   └── __tests__/
-│       └── App.test.tsx         # Component tests
+│       └── CinematifierApp.test.tsx  # Component tests
 ├── lib/
 │   ├── ai.ts                    # Multi-provider AI engine (7 providers)
 │   ├── cinematifier.ts          # Cinematification transformation
@@ -126,7 +126,6 @@ Zustand with `persist` middleware. API keys are encrypted before localStorage pe
 
 | Variable | Required | Description |
 |---|---|---|
-| `VITE_MANGADEX_CLIENT_ID` | No | MangaDex client ID (has default fallback) |
 | `VITE_API_PROXY_URL` | No | URL of the API proxy server (e.g., `http://localhost:3001`) |
 
 AI provider keys are entered by the user in the AI Settings panel and stored in browser localStorage.
