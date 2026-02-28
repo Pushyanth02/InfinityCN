@@ -258,6 +258,9 @@ export const CinematifierApp: React.FC = () => {
                         message: `Cinematifying chapter ${chapterNum} of ${totalChapters}...`,
                     });
 
+                    // Yield to the event loop so React can paint progress updates
+                    await new Promise(r => setTimeout(r, 0));
+
                     try {
                         const chapter = bookWithId.chapters[i];
                         let result;

@@ -108,6 +108,9 @@ export const extractTextFromPDF = async (file: File): Promise<string> => {
 
         // Extract pages in batches of 10 for parallelism
         const BATCH = 10;
+        const MAX_OCR_PAGES = 5; // Limit OCR attempts to avoid freezing on image-heavy PDFs
+        let ocrPagesUsed = 0;
+
         for (let start = 1; start <= pdf.numPages; start += BATCH) {
             const end = Math.min(start + BATCH - 1, pdf.numPages);
             const batch = [];
@@ -133,8 +136,9 @@ export const extractTextFromPDF = async (file: File): Promise<string> => {
                             lastY = y;
                         }
 
-                        // OCR Fallback for scanned/image-based pages
-                        if (pageText.trim().length < 50) {
+                        // OCR Fallback for scanned/image-based pages (limited scope)
+                        if (pageText.trim().length < 50 && ocrPagesUsed < MAX_OCR_PAGES) {
+                            ocrPagesUsed++;
                             try {
                                 const Tesseract = await import('tesseract.js');
                                 const viewport = page.getViewport({ scale: 1.5 });
@@ -150,7 +154,7 @@ export const extractTextFromPDF = async (file: File): Promise<string> => {
                                     pageText = result.data.text;
                                 }
                             } catch (ocrErr) {
-                                console.warn('[pdfWorker] OCR failed:', ocrErr);
+                                console.warn('[pdfWorker] OCR failed on page', i, ':', ocrErr);
                             }
                         }
 
