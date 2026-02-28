@@ -62,55 +62,65 @@ npm run preview       # Preview the production build locally
 
 ```
 src/
-├── components/         # React components
-│   ├── ui/             # Shared UI primitives (ErrorBoundary, Spinner, etc.)
-│   ├── Reader.tsx      # Core reading experience
-│   ├── MangaDexBrowser.tsx
-│   ├── MangaCard.tsx
-│   ├── MangaDetail.tsx
-│   ├── AISettings.tsx
-│   ├── ThemeStudio.tsx
-│   └── Upload.tsx
-├── hooks/              # Custom React hooks
-│   ├── useMangaDex.ts  # Composed MangaDex hook
-│   ├── useMangaSearch.ts
-│   ├── useMangaDetail.ts
-│   └── useMangaGeneration.ts
-├── lib/                # Pure utilities (no React)
-│   ├── algorithms.ts   # NLP: TF-IDF, sentiment, readability, etc.
-│   ├── ai.ts           # Multi-provider AI engine
-│   ├── mangadex.ts     # MangaDex API client
-│   ├── mangadexCache.ts
-│   ├── mangadexInference.ts
-│   ├── config.ts
-│   ├── db.ts           # Dexie (IndexedDB) schema
-│   └── pdfWorker.ts
-├── store/              # Zustand state management
-├── styles.css          # CSS entry point (imports all partials)
-├── index.css           # Design system, reset, utilities
-├── App.css             # App layout, modals, AI settings
-├── reader.css          # Reader-specific styles
-├── mangadex.css        # MangaDex browser styles
-└── test/               # Test setup
+├── components/
+│   ├── CinematifierApp.tsx      # Main app: upload → process → read
+│   ├── CinematicReader.tsx      # Dual-mode reader with ambient audio
+│   ├── CinematifierSettings.tsx # AI provider configuration
+│   ├── ui/
+│   │   └── ErrorBoundary.tsx    # React error boundary
+│   └── __tests__/
+│       └── App.test.tsx         # Component tests
+├── lib/
+│   ├── ai.ts                    # Multi-provider AI engine (7 providers)
+│   ├── cinematifier.ts          # Cinematification transformation
+│   ├── cinematifierDb.ts        # IndexedDB persistence (Dexie)
+│   ├── crypto.ts                # AES-GCM encryption (SubtleCrypto)
+│   ├── embeddings.ts            # Semantic embeddings (MiniLM)
+│   ├── audioSynth.ts            # Ambient audio (Web Audio API)
+│   └── pdfWorker.ts             # Document extraction (PDF/EPUB/DOCX/PPTX/TXT)
+├── store/
+│   └── cinematifierStore.ts     # Zustand state with encrypted persistence
+├── types/
+│   └── cinematifier.ts          # Type definitions
+├── test/
+│   └── setup.ts                 # Vitest setup
+├── main.tsx                     # Entry point
+├── styles.css                   # CSS entry (imports partials)
+└── cinematifier.css             # Reader styles
 server/
-└── proxy.ts            # Optional API proxy server
+└── proxy.ts                     # Optional API proxy server
 ```
 
 ## Architecture Notes
 
-### CSS Organization
-All CSS flows through a single entry point (`src/styles.css`) which imports partials in cascade order. Responsive breakpoints are consolidated at the bottom of `styles.css` covering 480px, 768px, 1024px, and 1200px.
+### Cinematification Pipeline
+1. **Document Upload** — File validation (50MB limit), format detection
+2. **Text Extraction** — pdfjs-dist, fflate (EPUB/DOCX/PPTX), native (TXT)
+3. **Chapter Segmentation** — Automatic chapter detection with `segmentChapters()`
+4. **AI Transformation** — Chunk text, call AI provider, parse cinematified blocks
+5. **Streaming Display** — Block-by-block rendering with emotion-aware animations
 
 ### AI Provider System
-The AI engine (`src/lib/ai.ts`) supports 7 providers with a unified interface. When `VITE_API_PROXY_URL` is set, requests route through the optional backend proxy (`server/proxy.ts`) instead of calling providers directly from the browser.
+The AI engine (`src/lib/ai.ts`) supports 7 providers with unified interface:
+- Request deduplication to prevent duplicate API calls
+- Token bucket rate limiting per provider
+- LRU cache with 30-minute TTL
+- Automatic retry with exponential backoff
+- Streaming support for Gemini, OpenAI, Anthropic, Groq
+
+### Encrypted Storage
+API keys are encrypted using AES-GCM (Web Crypto API) with a device-derived key:
+- PBKDF2 key derivation (100k iterations)
+- Random IV per encryption
+- Automatic migration from legacy XOR obfuscation
 
 ### Offline-First
-- **IndexedDB** (via Dexie) stores compiled chapters and pages locally
-- **Service Worker** (via vite-plugin-pwa) precaches app assets and uses runtime caching strategies for fonts and MangaDex data
-- **Offline inference** (`mangadexInference.ts`) generates manga metadata without network calls
+- **IndexedDB** (via Dexie) stores full book data with chapters and cinematic blocks
+- **Service Worker** (via vite-plugin-pwa) precaches app assets
+- **Offline Fallback** — Algorithmic cinematification without AI
 
 ### State Management
-Zustand with `persist` middleware stores AI configuration in localStorage. UI state (panels, characters, atmosphere) is kept in memory only.
+Zustand with `persist` middleware. API keys are encrypted before localStorage persistence.
 
 ## Environment Variables
 

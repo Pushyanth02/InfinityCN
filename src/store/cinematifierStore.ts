@@ -6,15 +6,95 @@
  */
 
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
 import type {
     Chapter,
     ReaderMode,
+    ImmersionLevel,
     ProcessingProgress,
     Book,
     ReadingProgress,
 } from '../types/cinematifier';
 import type { AIConfig } from '../lib/ai';
+import { encrypt, decrypt, deobfuscateLegacy, isLegacyEncryption } from '../lib/crypto';
+
+// ─── API Key Encryption ──────────────────────────────────────────────────────
+// Uses AES-GCM encryption via SubtleCrypto with a device-derived key.
+// API keys are encrypted before persisting to localStorage.
+
+const API_KEY_FIELDS = [
+    'geminiKey',
+    'openAiKey',
+    'anthropicKey',
+    'groqKey',
+    'deepseekKey',
+] as const;
+
+// ─── Custom Storage with Async Encryption ────────────────────────────────────
+
+const encryptedStorage: StateStorage = {
+    getItem: (name: string): string | null => {
+        // Return raw value; async decryption happens in onRehydrateStorage
+        return localStorage.getItem(name);
+    },
+    setItem: (name: string, value: string): void => {
+        // Store immediately; encryption is handled in partialize
+        localStorage.setItem(name, value);
+    },
+    removeItem: (name: string): void => {
+        localStorage.removeItem(name);
+    },
+};
+
+// Track encrypted key cache for sync-to-async bridge
+const encryptedKeyCache = new Map<string, string>();
+
+/**
+ * Encrypt API keys asynchronously and cache results.
+ * Called before partialize to ensure encrypted values are available.
+ */
+async function encryptApiKeys(state: CinematifierState): Promise<void> {
+    const promises = API_KEY_FIELDS.map(async field => {
+        const value = state[field];
+        if (value) {
+            const encrypted = await encrypt(value);
+            encryptedKeyCache.set(field, encrypted);
+        } else {
+            encryptedKeyCache.set(field, '');
+        }
+    });
+    await Promise.all(promises);
+}
+
+/**
+ * Decrypt API keys from persisted state.
+ * Handles migration from legacy XOR obfuscation to AES-GCM.
+ */
+async function decryptApiKeys(
+    stored: Partial<CinematifierState>,
+): Promise<Partial<CinematifierState>> {
+    const decrypted = { ...stored };
+
+    for (const field of API_KEY_FIELDS) {
+        const encoded = stored[field] ?? '';
+        if (!encoded) {
+            (decrypted as Record<string, string>)[field] = '';
+            continue;
+        }
+
+        // Migrate legacy XOR-obfuscated keys to AES-GCM
+        if (isLegacyEncryption(encoded)) {
+            const plain = deobfuscateLegacy(encoded);
+            (decrypted as Record<string, string>)[field] = plain;
+            // Migration: re-encrypt on next save
+        } else {
+            const plain = await decrypt(encoded);
+            (decrypted as Record<string, string>)[field] = plain;
+        }
+    }
+
+    return decrypted;
+}
 
 // ─── Extended State Type ───────────────────────────────────────────────────────
 
@@ -29,7 +109,9 @@ export interface CinematifierState {
     readerMode: ReaderMode;
     currentChapterIndex: number;
     fontSize: number;
-    ambientMode: boolean;
+    lineSpacing: number;
+    immersionLevel: ImmersionLevel;
+    dyslexiaFont: boolean;
     darkMode: boolean;
 
     // Processing
@@ -65,7 +147,9 @@ export interface CinematifierState {
     setReaderMode: (mode: ReaderMode) => void;
     setCurrentChapter: (index: number) => void;
     setFontSize: (size: number) => void;
-    toggleAmbientMode: () => void;
+    setLineSpacing: (spacing: number) => void;
+    setImmersionLevel: (level: ImmersionLevel) => void;
+    toggleDyslexiaFont: () => void;
     toggleDarkMode: () => void;
 
     // Processing actions
@@ -115,8 +199,13 @@ export const useCinematifierStore = create<CinematifierState>()(
             readerMode: 'cinematified' as ReaderMode,
             currentChapterIndex: 0,
             fontSize: 18,
-            ambientMode: true,
-            darkMode: true,
+            lineSpacing: 1.8,
+            immersionLevel: 'balanced' as ImmersionLevel,
+            dyslexiaFont: false,
+            darkMode:
+                typeof window !== 'undefined'
+                    ? window.matchMedia('(prefers-color-scheme: dark)').matches
+                    : true,
 
             // Processing
             isProcessing: false,
@@ -194,7 +283,12 @@ export const useCinematifierStore = create<CinematifierState>()(
 
             setFontSize: (size: number) => set({ fontSize: Math.max(12, Math.min(32, size)) }),
 
-            toggleAmbientMode: () => set(state => ({ ambientMode: !state.ambientMode })),
+            setLineSpacing: (spacing: number) =>
+                set({ lineSpacing: Math.max(1.4, Math.min(2.4, spacing)) }),
+
+            setImmersionLevel: (level: ImmersionLevel) => set({ immersionLevel: level }),
+
+            toggleDyslexiaFont: () => set(state => ({ dyslexiaFont: !state.dyslexiaFont })),
 
             toggleDarkMode: () => set(state => ({ darkMode: !state.darkMode })),
 
@@ -299,21 +393,79 @@ export const useCinematifierStore = create<CinematifierState>()(
         }),
         {
             name: 'cinematifier-storage',
-            partialize: state => ({
-                readerMode: state.readerMode,
-                fontSize: state.fontSize,
-                ambientMode: state.ambientMode,
-                darkMode: state.darkMode,
-                aiProvider: state.aiProvider,
-                geminiKey: state.geminiKey,
-                useSearchGrounding: state.useSearchGrounding,
-                openAiKey: state.openAiKey,
-                anthropicKey: state.anthropicKey,
-                groqKey: state.groqKey,
-                deepseekKey: state.deepseekKey,
-                ollamaUrl: state.ollamaUrl,
-                ollamaModel: state.ollamaModel,
-            }),
+            storage: createJSONStorage(() => encryptedStorage),
+            partialize: state => {
+                // Trigger async encryption for next persist cycle (fire-and-forget)
+                void encryptApiKeys(state);
+
+                // Return with cached encrypted keys (or empty on first run)
+                return {
+                    readerMode: state.readerMode,
+                    fontSize: state.fontSize,
+                    lineSpacing: state.lineSpacing,
+                    immersionLevel: state.immersionLevel,
+                    dyslexiaFont: state.dyslexiaFont,
+                    darkMode: state.darkMode,
+                    aiProvider: state.aiProvider,
+                    geminiKey: encryptedKeyCache.get('geminiKey') ?? '',
+                    useSearchGrounding: state.useSearchGrounding,
+                    openAiKey: encryptedKeyCache.get('openAiKey') ?? '',
+                    anthropicKey: encryptedKeyCache.get('anthropicKey') ?? '',
+                    groqKey: encryptedKeyCache.get('groqKey') ?? '',
+                    deepseekKey: encryptedKeyCache.get('deepseekKey') ?? '',
+                    ollamaUrl: state.ollamaUrl,
+                    ollamaModel: state.ollamaModel,
+                };
+            },
+            merge: (persisted, current) => {
+                const stored = persisted as Partial<CinematifierState>;
+                // Initial sync merge — keys stay encrypted temporarily
+                return {
+                    ...current,
+                    ...stored,
+                    // API keys will be decrypted asynchronously in onRehydrateStorage
+                    geminiKey: '',
+                    openAiKey: '',
+                    anthropicKey: '',
+                    groqKey: '',
+                    deepseekKey: '',
+                };
+            },
+            onRehydrateStorage: () => {
+                // Called after initial hydration — now decrypt keys asynchronously
+                return async (state, error) => {
+                    if (error || !state) {
+                        console.error('[Store] Rehydration error:', error);
+                        return;
+                    }
+
+                    // Read raw persisted data to get encrypted keys
+                    const rawData = localStorage.getItem('cinematifier-storage');
+                    if (!rawData) return;
+
+                    try {
+                        const parsed = JSON.parse(rawData);
+                        const storedState = parsed.state as Partial<CinematifierState>;
+
+                        // Decrypt API keys
+                        const decrypted = await decryptApiKeys(storedState);
+
+                        // Update state with decrypted keys
+                        useCinematifierStore.setState({
+                            geminiKey: decrypted.geminiKey ?? '',
+                            openAiKey: decrypted.openAiKey ?? '',
+                            anthropicKey: decrypted.anthropicKey ?? '',
+                            groqKey: decrypted.groqKey ?? '',
+                            deepseekKey: decrypted.deepseekKey ?? '',
+                        });
+
+                        // Pre-populate encryption cache for future saves
+                        await encryptApiKeys(useCinematifierStore.getState());
+                    } catch (e) {
+                        console.error('[Store] Key decryption failed:', e);
+                    }
+                };
+            },
         },
     ),
 );

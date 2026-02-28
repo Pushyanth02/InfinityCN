@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { useCinematifierStore, getCinematifierAIConfig } from '../store/cinematifierStore';
 import { testConnection } from '../lib/ai';
-import type { AIConnectionStatus } from '../types';
+import type { AIConnectionStatus } from '../types/cinematifier';
 
 type Provider =
     | 'none'

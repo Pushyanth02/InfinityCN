@@ -23,9 +23,14 @@ import {
     List,
     Bookmark,
     BookmarkCheck,
+    Play,
+    Square,
+    Columns,
+    Download,
 } from 'lucide-react';
 import { useCinematifierStore, getCinematifierAIConfig } from '../store/cinematifierStore';
 import { cinematifyText, cinematifyOffline } from '../lib/cinematifier';
+import { AmbientAudioSynth } from '../lib/audioSynth';
 import { saveBook, saveReadingProgress, loadReadingProgress } from '../lib/cinematifierDb';
 import { createReadingProgress } from '../lib/cinematifier';
 import type { CinematicBlock, Chapter } from '../types/cinematifier';
@@ -39,30 +44,43 @@ interface CinematicReaderProps {
 const CinematicBlockView = React.memo(function CinematicBlockView({
     block,
     index,
+    immersionLevel,
 }: {
     block: CinematicBlock;
     index: number;
+    immersionLevel: 'minimal' | 'balanced' | 'cinematic';
 }) {
-    const baseDelay = Math.min(index * 0.03, 0.5);
+    const isMinimal = immersionLevel === 'minimal';
+    const durationMult = immersionLevel === 'cinematic' ? 1.5 : 1;
+    const baseDelay = isMinimal ? 0 : Math.min(index * 0.03, 0.5);
 
     // Different animations based on block type
     const variants = {
-        hidden: {
-            opacity: 0,
-            y: block.type === 'sfx' ? 0 : 30,
-            scale: block.type === 'sfx' ? 0.8 : 1,
-            filter: 'blur(8px)',
-        },
+        hidden: isMinimal
+            ? {
+                  opacity: 1,
+                  y: 0,
+                  scale: 1,
+                  filter: 'blur(0px)',
+              }
+            : {
+                  opacity: 0,
+                  y: block.type === 'sfx' ? 0 : 30,
+                  scale: block.type === 'sfx' ? 0.8 : 1,
+                  filter: 'blur(8px)',
+              },
         visible: {
             opacity: 1,
             y: 0,
             scale: 1,
             filter: 'blur(0px)',
-            transition: {
-                duration: block.type === 'beat' ? 0.8 : 0.6,
-                delay: baseDelay,
-                ease: [0.16, 1, 0.3, 1] as [number, number, number, number],
-            },
+            transition: isMinimal
+                ? { duration: 0 }
+                : {
+                      duration: (block.type === 'beat' ? 0.8 : 0.6) * durationMult,
+                      delay: baseDelay,
+                      ease: [0.16, 1, 0.3, 1] as [number, number, number, number],
+                  },
         },
     };
 
@@ -85,6 +103,9 @@ const CinematicBlockView = React.memo(function CinematicBlockView({
                     initial="hidden"
                     whileInView="visible"
                     viewport={{ once: true, margin: '-5% 0px' }}
+                    data-index={index}
+                    data-emotion={block.emotion || ''}
+                    data-tension={block.tensionScore || 0}
                 >
                     <div className="cine-sfx">
                         <Volume2 size={16} className="cine-sfx-icon" />
@@ -101,6 +122,9 @@ const CinematicBlockView = React.memo(function CinematicBlockView({
                     initial="hidden"
                     whileInView="visible"
                     viewport={{ once: true, margin: '-5% 0px' }}
+                    data-index={index}
+                    data-emotion={block.emotion || ''}
+                    data-tension={block.tensionScore || 0}
                 >
                     <div className="cine-beat">
                         <span className="cine-beat-dots">• • •</span>
@@ -117,6 +141,9 @@ const CinematicBlockView = React.memo(function CinematicBlockView({
                     initial="hidden"
                     whileInView="visible"
                     viewport={{ once: true, margin: '-5% 0px' }}
+                    data-index={index}
+                    data-emotion={block.emotion || ''}
+                    data-tension={block.tensionScore || 0}
                 >
                     <div className="cine-transition">
                         <div className="cine-transition-line" />
@@ -137,6 +164,9 @@ const CinematicBlockView = React.memo(function CinematicBlockView({
                     initial="hidden"
                     whileInView="visible"
                     viewport={{ once: true, margin: '-5% 0px' }}
+                    data-index={index}
+                    data-emotion={block.emotion || ''}
+                    data-tension={block.tensionScore || 0}
                 >
                     <h2 className="cine-title-card">{block.content}</h2>
                 </motion.div>
@@ -150,6 +180,9 @@ const CinematicBlockView = React.memo(function CinematicBlockView({
                     initial="hidden"
                     whileInView="visible"
                     viewport={{ once: true, margin: '-5% 0px' }}
+                    data-index={index}
+                    data-emotion={block.emotion || ''}
+                    data-tension={block.tensionScore || 0}
                 >
                     {block.speaker && <div className="cine-speaker">{block.speaker}</div>}
                     <div className="cine-dialogue">
@@ -157,6 +190,12 @@ const CinematicBlockView = React.memo(function CinematicBlockView({
                         {block.content}
                         <span className="cine-quote">"</span>
                     </div>
+                    {/* Emotion Tag */}
+                    {block.emotion && (
+                        <div className={`cine-emotion-tag cine-emotion--${block.emotion}`}>
+                            {block.emotion}
+                        </div>
+                    )}
                 </motion.div>
             );
 
@@ -168,10 +207,19 @@ const CinematicBlockView = React.memo(function CinematicBlockView({
                     initial="hidden"
                     whileInView="visible"
                     viewport={{ once: true, margin: '-5% 0px' }}
+                    data-index={index}
+                    data-emotion={block.emotion || ''}
+                    data-tension={block.tensionScore || 0}
                 >
                     <div className="cine-thought">
                         <em>{block.content}</em>
                     </div>
+                    {/* Emotion Tag */}
+                    {block.emotion && (
+                        <div className={`cine-emotion-tag cine-emotion--${block.emotion}`}>
+                            {block.emotion}
+                        </div>
+                    )}
                 </motion.div>
             );
 
@@ -184,11 +232,37 @@ const CinematicBlockView = React.memo(function CinematicBlockView({
                     initial="hidden"
                     whileInView="visible"
                     viewport={{ once: true, margin: '-5% 0px' }}
+                    data-index={index}
+                    data-emotion={block.emotion || ''}
+                    data-tension={block.tensionScore || 0}
                 >
                     {block.cameraDirection && (
                         <div className="cine-camera">({block.cameraDirection})</div>
                     )}
                     <p className="cine-action">{block.content}</p>
+
+                    {/* Emotion & Tension UI */}
+                    <div className="cine-action-metadata">
+                        {block.emotion && (
+                            <div className={`cine-emotion-tag cine-emotion--${block.emotion}`}>
+                                {block.emotion}
+                            </div>
+                        )}
+                        {block.tensionScore !== undefined && block.tensionScore > 0 && (
+                            <div
+                                className="cine-tension-meter"
+                                title={`Tension: ${block.tensionScore}`}
+                            >
+                                <div
+                                    className="cine-tension-bar"
+                                    style={{
+                                        width: `${block.tensionScore}%`,
+                                        backgroundColor: `hsl(${120 - block.tensionScore * 1.2}, 80%, 50%)`,
+                                    }}
+                                />
+                            </div>
+                        )}
+                    </div>
                 </motion.div>
             );
     }
@@ -297,13 +371,17 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
     const readerMode = useCinematifierStore(s => s.readerMode);
     const currentChapterIndex = useCinematifierStore(s => s.currentChapterIndex);
     const fontSize = useCinematifierStore(s => s.fontSize);
-    const ambientMode = useCinematifierStore(s => s.ambientMode);
+    const lineSpacing = useCinematifierStore(s => s.lineSpacing);
+    const immersionLevel = useCinematifierStore(s => s.immersionLevel);
+    const dyslexiaFont = useCinematifierStore(s => s.dyslexiaFont);
     const darkMode = useCinematifierStore(s => s.darkMode);
     const aiProvider = useCinematifierStore(s => s.aiProvider);
     const setReaderMode = useCinematifierStore(s => s.setReaderMode);
     const setCurrentChapter = useCinematifierStore(s => s.setCurrentChapter);
     const setFontSize = useCinematifierStore(s => s.setFontSize);
-    const toggleAmbientMode = useCinematifierStore(s => s.toggleAmbientMode);
+    const setLineSpacing = useCinematifierStore(s => s.setLineSpacing);
+    const setImmersionLevel = useCinematifierStore(s => s.setImmersionLevel);
+    const toggleDyslexiaFont = useCinematifierStore(s => s.toggleDyslexiaFont);
     const toggleDarkMode = useCinematifierStore(s => s.toggleDarkMode);
     const toggleBookmark = useCinematifierStore(s => s.toggleBookmark);
     const updateChapter = useCinematifierStore(s => s.updateChapter);
@@ -319,8 +397,37 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
     const [isProcessingChapter, setIsProcessingChapter] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [showChapterNav, setShowChapterNav] = useState(false);
+
+    // Cross-chunk tracking states
+    const [activeEmotion, setActiveEmotion] = useState<string>('');
+    const [activeTension, setActiveTension] = useState<number>(0);
+    const [isAutoScrolling, setIsAutoScrolling] = useState<boolean>(false);
+    const [isAmbientSoundEnabled, setIsAmbientSoundEnabled] = useState<boolean>(false);
+
     const contentRef = useRef<HTMLDivElement>(null);
     const readingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const autoScrollRef = useRef<number | null>(null);
+    const ambientSynthRef = useRef<AmbientAudioSynth | null>(null);
+
+    // Initialize audio synth
+    useEffect(() => {
+        ambientSynthRef.current = new AmbientAudioSynth();
+        return () => ambientSynthRef.current?.stop();
+    }, []);
+
+    // Sync audio theme with scrolling/reading position
+    useEffect(() => {
+        if (!isAmbientSoundEnabled || readerMode !== 'cinematified') {
+            ambientSynthRef.current?.stop();
+            return;
+        }
+
+        if (activeEmotion) {
+            ambientSynthRef.current?.setEmotion(activeEmotion);
+        } else {
+            ambientSynthRef.current?.setEmotion('neutral');
+        }
+    }, [activeEmotion, readerMode, isAmbientSoundEnabled]);
 
     const currentChapter = book?.chapters[currentChapterIndex];
 
@@ -352,7 +459,7 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
             .catch(() => {
                 setReadingProgress(createReadingProgress(book.id));
             });
-    }, [book, readingProgress, setReadingProgress]);  
+    }, [book, readingProgress, setReadingProgress]);
 
     // Track reading time (increment every 30 seconds while reader is open)
     useEffect(() => {
@@ -395,9 +502,21 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
             if (config.provider === 'none') {
                 result = cinematifyOffline(currentChapter.originalText);
             } else {
-                result = await cinematifyText(currentChapter.originalText, config);
+                result = await cinematifyText(
+                    currentChapter.originalText,
+                    config,
+                    undefined,
+                    (blocks, isDone) => {
+                        // Stream parsed blocks incrementally
+                        updateChapter(currentChapterIndex, {
+                            cinematifiedBlocks: blocks,
+                            isProcessed: isDone,
+                        });
+                    },
+                );
             }
 
+            // Final push
             updateChapter(currentChapterIndex, {
                 cinematifiedBlocks: result.blocks,
                 cinematifiedText: result.rawText,
@@ -428,6 +547,87 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
             processCurrentChapter();
         }
     }, [currentChapter, readerMode, processCurrentChapter]);
+
+    // Active block tracking for dynamic themes and tension
+    useEffect(() => {
+        if (readerMode !== 'cinematified' || !contentRef.current) return;
+
+        const observer = new IntersectionObserver(
+            (entries: IntersectionObserverEntry[]) => {
+                let maxRatio = 0;
+                let bestEntry: IntersectionObserverEntry | null = null;
+
+                entries.forEach(entry => {
+                    if (entry.isIntersecting && entry.intersectionRatio > maxRatio) {
+                        maxRatio = entry.intersectionRatio;
+                        bestEntry = entry;
+                    }
+                });
+
+                if (bestEntry) {
+                    const target = (bestEntry as IntersectionObserverEntry).target as HTMLElement;
+                    setActiveEmotion(target.getAttribute('data-emotion') || '');
+                    setActiveTension(Number(target.getAttribute('data-tension')) || 0);
+                }
+            },
+            {
+                root: contentRef.current,
+                rootMargin: '-20% 0px -40% 0px',
+                threshold: [0, 0.25, 0.5, 0.75, 1],
+            },
+        );
+
+        // Small delay to allow react blocks to render before observing
+        const timeout = setTimeout(() => {
+            const blocks = document.querySelectorAll('.cine-block');
+            blocks.forEach(block => observer.observe(block));
+        }, 100);
+
+        return () => {
+            clearTimeout(timeout);
+            observer.disconnect();
+        };
+    }, [currentChapter, readerMode, isProcessingChapter]);
+
+    // Tension-based Auto-Scroll Pacing
+    useEffect(() => {
+        if (!isAutoScrolling || !contentRef.current || readerMode !== 'cinematified') {
+            if (autoScrollRef.current) cancelAnimationFrame(autoScrollRef.current);
+            return;
+        }
+
+        let lastTime = performance.now();
+        const scrollStep = (time: number) => {
+            const dt = time - lastTime;
+            lastTime = time;
+
+            if (contentRef.current) {
+                // Base speed is ~40px per second. Tension drastically slows this down to build suspense.
+                // activeTension is 0-100. multiplier goes from 1.0 (chill) to 0.3 (very tense)
+                const speedMultiplier = 1 - ((activeTension || 0) / 100) * 0.7;
+                const pixelsToScroll = (40 * speedMultiplier * dt) / 1000;
+
+                contentRef.current.scrollTop += pixelsToScroll;
+
+                // Stop if bottom is reached
+                if (
+                    contentRef.current.scrollTop + contentRef.current.clientHeight >=
+                    contentRef.current.scrollHeight - 2
+                ) {
+                    setIsAutoScrolling(false);
+                    return;
+                }
+            }
+
+            autoScrollRef.current = requestAnimationFrame(scrollStep);
+        };
+
+        autoScrollRef.current = requestAnimationFrame(scrollStep);
+
+        return () => {
+            if (autoScrollRef.current) cancelAnimationFrame(autoScrollRef.current);
+        };
+    }, [isAutoScrolling, activeTension, readerMode]);
 
     // Scroll to top on chapter change
     useEffect(() => {
@@ -472,10 +672,11 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
 
     return (
         <div
-            className={`cine-reader ${ambientMode ? 'cine-reader--ambient' : ''} ${!darkMode ? 'cine-reader--light' : ''}`}
+            className={`cine-reader cine-reader--immersion-${immersionLevel} ${dyslexiaFont ? 'cine-reader--dyslexia' : ''} ${!darkMode ? 'cine-reader--light' : ''}`}
+            data-active-emotion={activeEmotion}
         >
-            {/* Ambient background effects */}
-            {ambientMode && darkMode && (
+            {/* Ambient background effects (cinematic immersion only) */}
+            {immersionLevel === 'cinematic' && darkMode && (
                 <div className="cine-ambient">
                     <div className="cine-ambient-glow cine-ambient-glow--1" />
                     <div className="cine-ambient-glow cine-ambient-glow--2" />
@@ -507,22 +708,77 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                             <span>Original</span>
                         </button>
                         <button
+                            className={`cine-mode-btn ${readerMode === 'side-by-side' ? 'active' : ''}`}
+                            onClick={() => setReaderMode('side-by-side')}
+                        >
+                            <Columns size={16} />
+                            <span>Dual</span>
+                        </button>
+                        <button
                             className={`cine-mode-btn ${readerMode === 'cinematified' ? 'active' : ''}`}
                             onClick={() => setReaderMode('cinematified')}
                         >
                             <Film size={16} />
-                            <span>Cinematified</span>
+                            <span>Cinematic</span>
                         </button>
                     </div>
                 </div>
 
                 <div className="cine-header-right">
                     <button
+                        className={`cine-btn cine-btn--icon ${isAmbientSoundEnabled ? 'cine-btn--active' : ''}`}
+                        onClick={() => {
+                            if (!isAmbientSoundEnabled && ambientSynthRef.current) {
+                                ambientSynthRef.current.play();
+                            } else if (ambientSynthRef.current) {
+                                ambientSynthRef.current.stop();
+                            }
+                            setIsAmbientSoundEnabled(!isAmbientSoundEnabled);
+                        }}
+                        title={
+                            isAmbientSoundEnabled ? 'Disable Ambient Sound' : 'Enable Ambient Sound'
+                        }
+                    >
+                        <Volume2
+                            size={20}
+                            color={isAmbientSoundEnabled ? 'var(--cine-gold)' : undefined}
+                        />
+                    </button>
+                    <button
+                        className={`cine-btn cine-btn--icon ${isAutoScrolling ? 'cine-btn--active' : ''}`}
+                        onClick={() => setIsAutoScrolling(!isAutoScrolling)}
+                        title={isAutoScrolling ? 'Stop Auto-Scroll' : 'Start Auto-Scroll'}
+                    >
+                        {isAutoScrolling ? (
+                            <Square size={20} color="var(--cine-red)" />
+                        ) : (
+                            <Play size={20} />
+                        )}
+                    </button>
+                    <button
                         className={`cine-btn cine-btn--icon ${isBookmarked ? 'cine-btn--bookmarked' : ''}`}
                         onClick={() => toggleBookmark(currentChapterIndex)}
                         title={isBookmarked ? 'Remove bookmark' : 'Bookmark chapter'}
                     >
                         {isBookmarked ? <BookmarkCheck size={20} /> : <Bookmark size={20} />}
+                    </button>
+                    <button
+                        className="cine-btn cine-btn--icon"
+                        onClick={() => {
+                            const text = book.chapters
+                                .map(c => `Chapter ${c.number}: ${c.title}\n\n${c.originalText}`)
+                                .join('\n\n\n');
+                            const blob = new Blob([text], { type: 'text/plain' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `${book.title}_Original_Text.txt`;
+                            a.click();
+                            URL.revokeObjectURL(url);
+                        }}
+                        title="Export Original Text"
+                    >
+                        <Download size={20} />
                     </button>
                     <button
                         className="cine-btn cine-btn--icon"
@@ -565,13 +821,46 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                             </div>
                         </div>
                         <div className="cine-settings-group">
-                            <label>Ambient Mode</label>
+                            <label>Line Spacing</label>
+                            <div className="cine-settings-row">
+                                <button
+                                    className="cine-btn cine-btn--sm"
+                                    onClick={() => setLineSpacing(lineSpacing - 0.2)}
+                                >
+                                    <Minus size={14} />
+                                </button>
+                                <span className="cine-settings-value">
+                                    {lineSpacing.toFixed(1)}
+                                </span>
+                                <button
+                                    className="cine-btn cine-btn--sm"
+                                    onClick={() => setLineSpacing(lineSpacing + 0.2)}
+                                >
+                                    <Plus size={14} />
+                                </button>
+                            </div>
+                        </div>
+                        <div className="cine-settings-group">
+                            <label>Immersion</label>
+                            <div className="cine-settings-row">
+                                {(['minimal', 'balanced', 'cinematic'] as const).map(level => (
+                                    <button
+                                        key={level}
+                                        className={`cine-btn cine-btn--sm ${immersionLevel === level ? 'active' : ''}`}
+                                        onClick={() => setImmersionLevel(level)}
+                                    >
+                                        {level.charAt(0).toUpperCase() + level.slice(1)}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="cine-settings-group">
+                            <label>Dyslexia Font</label>
                             <button
-                                className={`cine-btn cine-btn--toggle ${ambientMode ? 'active' : ''}`}
-                                onClick={toggleAmbientMode}
+                                className={`cine-btn cine-btn--toggle ${dyslexiaFont ? 'active' : ''}`}
+                                onClick={toggleDyslexiaFont}
                             >
-                                {ambientMode ? <Sparkles size={16} /> : <Sparkles size={16} />}
-                                {ambientMode ? 'On' : 'Off'}
+                                {dyslexiaFont ? 'On' : 'Off'}
                             </button>
                         </div>
                         <div className="cine-settings-group">
@@ -614,33 +903,94 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
             </div>
 
             {/* Content Area */}
-            <main className="cine-content" ref={contentRef} style={{ fontSize: `${fontSize}px` }}>
-                {isProcessingChapter && readerMode === 'cinematified' && (
-                    <div className="cine-processing">
-                        <Sparkles size={24} className="cine-processing-icon" />
-                        <p>Cinematifying chapter...</p>
-                    </div>
-                )}
+            <main
+                className={`cine-content ${readerMode === 'side-by-side' ? 'cine-content--dual' : ''}`}
+                ref={contentRef}
+                style={{ fontSize: `${fontSize}px`, lineHeight: lineSpacing }}
+            >
+                {isProcessingChapter &&
+                    readerMode === 'cinematified' &&
+                    currentChapter.cinematifiedBlocks.length === 0 && (
+                        <div className="cine-processing">
+                            <Sparkles size={24} className="cine-processing-icon" />
+                            <p>Cinematifying chapter...</p>
+                        </div>
+                    )}
 
                 {readerMode === 'original' ? (
-                    <OriginalTextView text={currentChapter.originalText} />
-                ) : currentChapter.isProcessed ? (
-                    <div className="cine-blocks">
-                        {currentChapter.cinematifiedBlocks.map((block, i) => (
-                            <CinematicBlockView key={block.id} block={block} index={i} />
-                        ))}
+                    <div className="cine-blocks-wrapper">
+                        <OriginalTextView text={currentChapter.originalText} />
+                    </div>
+                ) : readerMode === 'side-by-side' ? (
+                    <>
+                        <div className="cine-dual-pane cine-dual-pane--left">
+                            <OriginalTextView text={currentChapter.originalText} />
+                        </div>
+                        <div className="cine-dual-pane cine-dual-pane--right">
+                            {currentChapter.cinematifiedBlocks.length > 0 ? (
+                                <div className="cine-blocks">
+                                    {currentChapter.cinematifiedBlocks.map((block, i) => (
+                                        <CinematicBlockView
+                                            key={block.id}
+                                            block={block}
+                                            index={i}
+                                            immersionLevel={immersionLevel}
+                                        />
+                                    ))}
+                                    {isProcessingChapter && (
+                                        <div className="cine-processing cine-processing-inline">
+                                            <Sparkles size={16} className="cine-processing-icon" />
+                                            <p>Generating...</p>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : !isProcessingChapter ? (
+                                <div className="cine-empty-state">
+                                    <Film size={48} />
+                                    <p>Chapter not yet cinematified</p>
+                                    <button
+                                        className="cine-btn cine-btn--primary"
+                                        onClick={processCurrentChapter}
+                                    >
+                                        <Sparkles size={16} />
+                                        Process Now
+                                    </button>
+                                </div>
+                            ) : null}
+                        </div>
+                    </>
+                ) : currentChapter.cinematifiedBlocks.length > 0 ? (
+                    <div className="cine-blocks-wrapper">
+                        <div className="cine-blocks">
+                            {currentChapter.cinematifiedBlocks.map((block, i) => (
+                                <CinematicBlockView
+                                    key={block.id}
+                                    block={block}
+                                    index={i}
+                                    immersionLevel={immersionLevel}
+                                />
+                            ))}
+                            {isProcessingChapter && (
+                                <div className="cine-processing cine-processing-inline">
+                                    <Sparkles size={16} className="cine-processing-icon" />
+                                    <p>Generating...</p>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 ) : !isProcessingChapter ? (
-                    <div className="cine-empty-state">
-                        <Film size={48} />
-                        <p>Chapter not yet cinematified</p>
-                        <button
-                            className="cine-btn cine-btn--primary"
-                            onClick={processCurrentChapter}
-                        >
-                            <Sparkles size={16} />
-                            Process Now
-                        </button>
+                    <div className="cine-blocks-wrapper">
+                        <div className="cine-empty-state">
+                            <Film size={48} />
+                            <p>Chapter not yet cinematified</p>
+                            <button
+                                className="cine-btn cine-btn--primary"
+                                onClick={processCurrentChapter}
+                            >
+                                <Sparkles size={16} />
+                                Process Now
+                            </button>
+                        </div>
                     </div>
                 ) : null}
             </main>

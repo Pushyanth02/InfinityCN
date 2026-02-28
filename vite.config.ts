@@ -1,5 +1,4 @@
-/// <reference types="vitest/config" />
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
@@ -70,16 +69,16 @@ export default defineConfig({
                 manualChunks: id => {
                     // PDF processing — only load when user drops a file
                     if (id.includes('pdfjs-dist')) return 'pdfjs';
+                    // ZIP extraction for EPUB/DOCX/PPTX — lazy loaded
+                    if (id.includes('fflate')) return 'fflate';
                     // Animation library — lazy chunk
                     if (id.includes('framer-motion')) return 'motion';
                     // Icons — tree-shaken but grouped
                     if (id.includes('lucide-react')) return 'lucide';
-                    // IndexedDB — dexie and dexie-react-hooks together
+                    // IndexedDB — dexie
                     if (id.includes('dexie')) return 'dexie';
                     // Zustand
                     if (id.includes('zustand')) return 'store';
-                    // Export utility — only loaded on Export click
-                    if (id.includes('html-to-image')) return 'html-to-image';
                     // Analytics — deferred from critical path
                     if (id.includes('@vercel/analytics') || id.includes('@vercel/speed-insights'))
                         return 'analytics';

@@ -17,6 +17,8 @@ import type {
     Chapter,
     ChapterSegment,
 } from '../types/cinematifier';
+import { generateEmbedding, retrieveRelevantContext } from './embeddings';
+import type { ChunkEmbedding } from './embeddings';
 
 // ─── Session epoch for stable IDs ──────────────────────────
 const SESSION_EPOCH = Date.now();
@@ -62,8 +64,15 @@ RULES:
    Examples: SFX: CRASH!, SFX: distant thunder, SFX: silence...
 4. Add dramatic beats: BEAT, PAUSE
 5. Add scene transitions: CUT TO: [location], FADE IN, FADE TO BLACK
-6. Make fight scenes visceral with rapid-fire sentences
-7. Heighten emotional moments with sensory details`;
+6. Append inline narrative tags to lines:
+   - [EMOTION: joy|fear|sadness|suspense|anger|surprise|neutral]
+   - [TENSION: 0-100] (0 = calm, 100 = extreme stress/climax)
+   Example: "I can't believe it." [EMOTION: surprise] [TENSION: 40]
+7. At the end of the text, optionally append overall tags:
+   - [GENRE: fantasy|romance|thriller|sci_fi|mystery|historical|literary_fiction|horror|adventure|other] (Only if it's the first chapter)
+   - [TONE: dark, romantic, suspenseful, humorous, etc] (Comma separated)
+   - [SUMMARY: Brief 1-2 sentence summary of current characters, location, and action to maintain context]
+`;
 
 // ─── Main Cinematification Function ────────────────────────
 
@@ -71,6 +80,7 @@ export async function cinematifyText(
     text: string,
     config: AIConfig,
     onProgress?: (percent: number, message: string) => void,
+    onChunk?: (blocks: CinematicBlock[], isDone: boolean) => void,
 ): Promise<CinematificationResult> {
     const startTime = performance.now();
     const chunks = chunkText(text);
@@ -79,37 +89,130 @@ export async function cinematifyText(
     let sfxCount = 0;
     let transitionCount = 0;
     let beatCount = 0;
+    let previousSummary = '';
+    const chunkEmbeddings: ChunkEmbedding[] = [];
 
     for (let i = 0; i < chunks.length; i++) {
-        const chunkProgress = (i + 1) / chunks.length; // 0 to 1
-        onProgress?.(chunkProgress, `Cinematifying section ${i + 1} of ${chunks.length}...`);
+        const chunkProgress = (i + 1) / chunks.length;
+        if (onProgress) {
+            onProgress(chunkProgress, `Cinematifying section ${i + 1} of ${chunks.length}...`);
+        }
 
-        const prompt = `${CINEMATIFICATION_SYSTEM_PROMPT}
+        let prompt = CINEMATIFICATION_SYSTEM_PROMPT;
+        if (previousSummary) {
+            prompt += `\n\nPREVIOUS CHUNK CONTEXT:\n"""\n${previousSummary}\n"""\n`;
+        }
 
-ORIGINAL CHAPTER TEXT:
-"""
-${chunks[i]}
-"""
+        if (chunkEmbeddings.length > 0) {
+            // Find most similar past chunk summary to provide long-term continuity
+            const currentEmbedding = await generateEmbedding(chunks[i]).catch(() => null);
+            if (currentEmbedding) {
+                const relevantPastSummaries = retrieveRelevantContext(
+                    currentEmbedding,
+                    chunkEmbeddings,
+                );
+                if (relevantPastSummaries.length > 0) {
+                    prompt += `\n\nRELEVANT PAST CONTEXT (from earlier in the book):\n"""\n${relevantPastSummaries.join('\n\n')}\n"""\n`;
+                }
+            }
+        }
 
-OUTPUT: Full cinematified version`;
+        prompt += `\n\nORIGINAL CHAPTER TEXT:\n"""\n${chunks[i]}\n"""\n\nOUTPUT: Full cinematified version`;
+
+        let rawBuffer = '';
+        let lastProcessedIndex = 0;
 
         try {
-            const raw = await callAIWithDedup(prompt, config);
-            allRawText.push(raw);
+            // Check if provider supports streaming (offline algorithms, deepseek in some configs, might not)
+            const { MODEL_PRESETS, streamAI } = await import('./ai');
+            const preset = config.provider !== 'none' ? MODEL_PRESETS[config.provider] : null;
+            const canStream = preset?.supportsStreaming;
 
-            const blocks = parseCinematifiedText(raw);
-            for (const block of blocks) {
-                allBlocks.push(block);
-                if (block.sfx) sfxCount++;
-                if (block.transition) transitionCount++;
-                if (block.beat) beatCount++;
+            if (canStream) {
+                for await (const delta of streamAI(prompt, config)) {
+                    rawBuffer += delta;
+
+                    // Look for completed paragraphs to parse and flush block-by-block
+                    const doubleNewlineIdx = rawBuffer.lastIndexOf('\n\n');
+
+                    if (doubleNewlineIdx > lastProcessedIndex) {
+                        const completableText = rawBuffer
+                            .substring(lastProcessedIndex, doubleNewlineIdx)
+                            .trim();
+                        if (completableText) {
+                            const parsedBlocks = parseCinematifiedText(completableText);
+                            if (parsedBlocks.length > 0) {
+                                allBlocks.push(...parsedBlocks);
+                                if (onChunk) onChunk(parsedBlocks, false);
+
+                                for (const block of parsedBlocks) {
+                                    if (block.sfx) sfxCount++;
+                                    if (block.transition) transitionCount++;
+                                    if (block.beat) beatCount++;
+                                }
+                            }
+                        }
+                        // Advance cursor past the newlines
+                        lastProcessedIndex = doubleNewlineIdx + 2;
+                    }
+                }
+
+                // Flush remaining text
+                const remainingText = rawBuffer.substring(lastProcessedIndex).trim();
+                if (remainingText) {
+                    const parsedBlocks = parseCinematifiedText(remainingText);
+                    if (parsedBlocks.length > 0) {
+                        allBlocks.push(...parsedBlocks);
+                        if (onChunk) onChunk(parsedBlocks, false);
+
+                        for (const block of parsedBlocks) {
+                            if (block.sfx) sfxCount++;
+                            if (block.transition) transitionCount++;
+                            if (block.beat) beatCount++;
+                        }
+                    }
+                }
+                allRawText.push(rawBuffer);
+            } else {
+                // Fallback to bulk for non-streaming providers
+                const raw = await callAIWithDedup(prompt, config);
+                rawBuffer = raw;
+                allRawText.push(raw);
+                const blocks = parseCinematifiedText(raw);
+                if (blocks.length > 0) {
+                    allBlocks.push(...blocks);
+                    if (onChunk) onChunk(blocks, false);
+
+                    for (const block of blocks) {
+                        if (block.sfx) sfxCount++;
+                        if (block.transition) transitionCount++;
+                        if (block.beat) beatCount++;
+                    }
+                }
+            }
+
+            // Extract the summary for the NEXT chunk and save embedding
+            const summaryMatch = rawBuffer.match(/\[SUMMARY:\s*([^\]]+)\]/i);
+            if (summaryMatch) {
+                previousSummary = summaryMatch[1].trim();
+                const summaryEmbedding = await generateEmbedding(previousSummary).catch(() => null);
+                if (summaryEmbedding) {
+                    chunkEmbeddings.push({
+                        id: `chunk-${i}`,
+                        text: previousSummary,
+                        embedding: summaryEmbedding,
+                    });
+                }
             }
         } catch (err) {
             console.warn(`[Cinematifier] Chunk ${i + 1} fallback:`, err);
             const fallbackBlocks = createFallbackBlocks(chunks[i]);
             allBlocks.push(...fallbackBlocks);
+            if (onChunk) onChunk(fallbackBlocks, false);
         }
     }
+
+    if (onChunk) onChunk([], true); // Signal completion
 
     const processingTimeMs = Math.round(performance.now() - startTime);
 
@@ -140,7 +243,10 @@ OUTPUT: Full cinematified version`;
 export function parseCinematifiedText(text: string): CinematicBlock[] {
     const blocks: CinematicBlock[] = [];
 
-    // Normalize smart quotes
+    // Extract metadata tags at the end of the response: [GENRE: fantasy] [TONE: dark, suspenseful]
+    // (We'll handle these later in the orchestration layer by exporting a util to scrape them from text)
+
+    // Clean inline tags from normalizing but preserve them for parsing
     const normalized = text
         .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
         .replace(/[\u2018\u2019\u201A\u201B]/g, "'");
@@ -190,7 +296,7 @@ export function parseCinematifiedText(text: string): CinematicBlock[] {
                 blocks.push({
                     id: generateBlockId(),
                     type: 'sfx',
-                    content: `SFX: ${sound}`,
+                    content: 'SFX: ' + sound,
                     intensity: 'emphasis',
                     sfx: { sound, intensity: guessSFXIntensity(sound) },
                 });
@@ -205,7 +311,7 @@ export function parseCinematifiedText(text: string): CinematicBlock[] {
                 blocks.push({
                     id: generateBlockId(),
                     type: 'sfx',
-                    content: `SFX: ${sound}`,
+                    content: 'SFX: ' + sound,
                     intensity: 'emphasis',
                     sfx: { sound, intensity: guessSFXIntensity(sound) },
                 });
@@ -228,19 +334,47 @@ export function parseCinematifiedText(text: string): CinematicBlock[] {
             }
 
             // Regular text line (may contain dialogue)
-            blocks.push(...parseTextLine(line));
+            const parsedBlocks = parseTextLine(line);
+            blocks.push(...parsedBlocks);
         }
     }
 
     return blocks;
 }
 
+/** Helper to extract common tags from a line and return the cleaned line + metadata */
+function extractBlockMetadata(line: string) {
+    let cleaned = line;
+    let emotion: import('../types/cinematifier').EmotionCategory | undefined;
+    let tensionScore: number | undefined;
+
+    const emotionMatch = cleaned.match(/\[EMOTION:\s*([a-z]+)\]/i);
+    if (emotionMatch) {
+        const e = emotionMatch[1].toLowerCase();
+        if (['joy', 'fear', 'sadness', 'suspense', 'anger', 'surprise', 'neutral'].includes(e)) {
+            emotion = e as import('../types/cinematifier').EmotionCategory;
+        }
+        cleaned = cleaned.replace(emotionMatch[0], '');
+    }
+
+    const tensionMatch = cleaned.match(/\[TENSION:\s*(\d+)\]/i);
+    if (tensionMatch) {
+        tensionScore = Math.max(0, Math.min(100, parseInt(tensionMatch[1], 10)));
+        cleaned = cleaned.replace(tensionMatch[0], '');
+    }
+
+    return { cleaned: cleaned.trim(), emotion, tensionScore };
+}
+
 /** Parse a single text line into one or more CinematicBlocks */
 function parseTextLine(line: string): CinematicBlock[] {
     const blocks: CinematicBlock[] = [];
+    const { cleaned, emotion, tensionScore } = extractBlockMetadata(line);
+
+    if (!cleaned) return blocks;
 
     // Dialogue: line starts with "quoted text"
-    const dialogueMatch = line.match(/^"([^"]+)"(.*)$/);
+    const dialogueMatch = cleaned.match(/^"([^"]+)"(.*)$/);
     if (dialogueMatch) {
         const dialogue = dialogueMatch[1];
         const remainder = dialogueMatch[2]?.trim();
@@ -266,6 +400,8 @@ function parseTextLine(line: string): CinematicBlock[] {
             content: dialogue,
             speaker,
             intensity,
+            emotion,
+            tensionScore,
         });
 
         // Add remainder as action if substantial
@@ -282,24 +418,26 @@ function parseTextLine(line: string): CinematicBlock[] {
     }
 
     // Inner thought: *italicized text* or _underscored_
-    if (/^\*[^*]+\*$/.test(line) || /^_[^_]+_$/.test(line)) {
+    if (/^\*[^*]+\*$/.test(cleaned) || /^_[^_]+_$/.test(cleaned)) {
         blocks.push({
             id: generateBlockId(),
             type: 'inner_thought',
-            content: line.replace(/^\*|\*$|^_|_$/g, ''),
+            content: cleaned.replace(/^\*|\*$|^_|_$/g, ''),
             intensity: 'whisper',
+            emotion,
+            tensionScore,
         });
         return blocks;
     }
 
     // Regular action/narrative line
-    const wordCount = line.split(/\s+/).length;
+    const wordCount = cleaned.split(/\s+/).length;
     let intensity: CinematicBlock['intensity'] = 'normal';
     let timing: CinematicBlock['timing'] = 'normal';
 
-    if (line.includes('!')) intensity = 'emphasis';
-    if (/\.{3}|…|—\s*$/.test(line)) intensity = 'whisper';
-    if (/scream|roar|explod/i.test(line)) intensity = 'shout';
+    if (cleaned.includes('!')) intensity = 'emphasis';
+    if (/\.{3}|…|—\s*$/.test(cleaned)) intensity = 'whisper';
+    if (/scream|roar|explod/i.test(cleaned)) intensity = 'shout';
 
     if (wordCount <= 4) timing = 'rapid';
     else if (wordCount <= 8) timing = 'quick';
@@ -308,9 +446,11 @@ function parseTextLine(line: string): CinematicBlock[] {
     blocks.push({
         id: generateBlockId(),
         type: 'action',
-        content: line,
+        content: cleaned,
         intensity,
         timing,
+        emotion,
+        tensionScore,
     });
 
     return blocks;
@@ -493,7 +633,7 @@ function createFallbackBlocks(text: string): CinematicBlock[] {
                 blocks.push({
                     id: generateBlockId(),
                     type: 'sfx',
-                    content: `SFX: ${sound}`,
+                    content: 'SFX: ' + sound,
                     intensity: sfxIntensity === 'explosive' ? 'explosive' : 'emphasis',
                     sfx: { sound, intensity: sfxIntensity },
                 });
@@ -540,6 +680,59 @@ export function cleanExtractedText(text: string): string {
     );
 }
 
+// ─── Intelligent Paragraph Reconstruction ───────────────────
+
+/**
+ * Detects if text lacks paragraph breaks and uses sentence-boundary heuristics
+ * to insert \n\n breaks. This is critical for LLM chunking.
+ */
+export function reconstructParagraphs(text: string): string {
+    const existingParas = text.split(/\n\s*\n/).filter(p => p.trim().length > 0);
+    const avgLen = existingParas.length > 0 ? text.length / existingParas.length : text.length;
+
+    // If average paragraph is > 1000 chars, it's likely missing proper breaks
+    if (avgLen < 1000 && existingParas.length > 2) {
+        return text;
+    }
+
+    // Collapse single newlines that aren't already part of a double newline
+    const continuousText = text.replace(/([^\n])\n([^\n])/g, '$1 $2');
+
+    // Basic sentence splitting: ends with .!? and optional quote, followed by space and Capital/Quote
+    const sentences = continuousText.match(/[^.!?]+[.!?]+(?:["'”’])?(?=\s|$)/g) || [continuousText];
+
+    let result = '';
+    let sentencesInPara = 0;
+
+    for (let i = 0; i < sentences.length; i++) {
+        const s = sentences[i].trim();
+        if (!s) continue;
+
+        const isDialogueStart = /^["'“‘]/.test(s);
+        const nextS = i + 1 < sentences.length ? sentences[i + 1].trim() : '';
+        const nextIsDialogueStart = /^["'“‘]/.test(nextS);
+
+        if (sentencesInPara === 0) {
+            result += s;
+            sentencesInPara++;
+        } else {
+            if (isDialogueStart || sentencesInPara >= 4) {
+                result += '\n\n' + s;
+                sentencesInPara = 1;
+            } else {
+                result += ' ' + s;
+                sentencesInPara++;
+            }
+        }
+
+        if (nextIsDialogueStart && sentencesInPara > 0) {
+            sentencesInPara = 4; // Force break next iteration
+        }
+    }
+
+    return result || text;
+}
+
 // ─── Chapter Segmentation ──────────────────────────────────
 
 const CHAPTER_PATTERNS = [
@@ -569,9 +762,9 @@ export function segmentChapters(fullText: string): ChapterSegment[] {
                 isChapterStart = true;
                 // Build chapter title from match groups
                 if (match[3]) {
-                    chapterTitle = `${match[1]}${match[2]}: ${match[3]}`.trim();
+                    chapterTitle = match[1] + match[2] + ': ' + match[3];
                 } else if (match[2]) {
-                    chapterTitle = `${match[1]}${match[2]}`.trim();
+                    chapterTitle = match[1] + match[2];
                 } else if (match[1]) {
                     chapterTitle = match[1].trim();
                 } else {
@@ -584,7 +777,7 @@ export function segmentChapters(fullText: string): ChapterSegment[] {
         // Handle dividers as chapter breaks
         if (/^[*-]{3,}\s*$/.test(line)) {
             isChapterStart = true;
-            chapterTitle = `Section ${segments.length + 1}`;
+            chapterTitle = 'Section ' + String(segments.length + 1);
         }
 
         if (isChapterStart) {
@@ -661,10 +854,10 @@ export function createBookFromSegments(
         isPublic?: boolean;
     } = {},
 ): import('../types/cinematifier').Book {
-    const bookId = `book-${SESSION_EPOCH}`;
+    const bookId = 'book-' + String(SESSION_EPOCH);
 
     const chapters: Chapter[] = segments.map((seg, index) => ({
-        id: `chapter-${SESSION_EPOCH}-${index}`,
+        id: 'chapter-' + String(SESSION_EPOCH) + '-' + String(index),
         bookId,
         number: index + 1,
         title: seg.title,
@@ -698,7 +891,7 @@ export function createReadingProgress(
     bookId: string,
 ): import('../types/cinematifier').ReadingProgress {
     return {
-        id: `progress-${bookId}`,
+        id: 'progress-' + bookId,
         bookId,
         currentChapter: 1,
         scrollPosition: 0,
@@ -737,3 +930,61 @@ function validateTransitionType(type: string): TransitionType {
 }
 
 export { CINEMATIFICATION_SYSTEM_PROMPT };
+
+// ─── Metadata Orchestration ────────────────────────────────
+
+export interface NarrativeMetadata {
+    genre?: import('../types/cinematifier').BookGenre;
+    toneTags?: string[];
+    characters: Record<string, import('../types/cinematifier').CharacterAppearance>;
+}
+
+export function extractOverallMetadata(
+    rawText: string | undefined,
+    blocks: CinematicBlock[],
+): NarrativeMetadata {
+    const metadata: NarrativeMetadata = { characters: {} };
+
+    if (rawText) {
+        const genreMatch = rawText.match(/\[GENRE:\s*([^\]]+)\]/i);
+        if (genreMatch) {
+            const rawGenre = genreMatch[1].trim().toLowerCase().replace(/\s+/g, '_');
+            const validGenres = [
+                'fantasy',
+                'romance',
+                'thriller',
+                'sci_fi',
+                'mystery',
+                'historical',
+                'literary_fiction',
+                'horror',
+                'adventure',
+            ];
+            if (validGenres.includes(rawGenre)) {
+                metadata.genre = rawGenre as import('../types/cinematifier').BookGenre;
+            }
+        }
+
+        const toneMatch = rawText.match(/\[TONE:\s*([^\]]+)\]/i);
+        if (toneMatch) {
+            metadata.toneTags = toneMatch[1]
+                .split(',')
+                .map(t => t.trim().toLowerCase())
+                .filter(Boolean);
+        }
+    }
+
+    // Build characters from dialogue tags
+    blocks.forEach((block, index) => {
+        if (block.type === 'dialogue' && block.speaker) {
+            const name = block.speaker.toUpperCase();
+            if (!metadata.characters[name]) {
+                metadata.characters[name] = { appearances: [], dialogueCount: 0 };
+            }
+            metadata.characters[name].appearances.push(index);
+            metadata.characters[name].dialogueCount++;
+        }
+    });
+
+    return metadata;
+}

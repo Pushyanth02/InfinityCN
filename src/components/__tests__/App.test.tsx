@@ -1,37 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import React, { Suspense } from 'react';
-
-// Mock heavy dependencies so we can test component mounting without the full dep tree
-vi.mock('../../lib/db', () => ({
-    default: {
-        compiledPages: { toArray: vi.fn().mockResolvedValue([]) },
-        chapters: { toArray: vi.fn().mockResolvedValue([]) },
-    },
-}));
-
-vi.mock('dexie', () => {
-    const MockDexie = vi.fn().mockImplementation(() => ({
-        version: vi.fn().mockReturnThis(),
-        stores: vi.fn().mockReturnThis(),
-    }));
-    return { default: MockDexie };
-});
-
-// ─── LAZY-LOADED COMPONENT SMOKE TESTS ─────────────────────────────
-
-describe('Lazy component loading', () => {
-    it('Reader lazy component module can be imported', async () => {
-        // Verify the module resolves (does not throw at import time)
-        const module = await import('../../components/Reader');
-        expect(module).toBeDefined();
-    });
-
-    it('ThemeStudio lazy component module can be imported', async () => {
-        const module = await import('../../components/ThemeStudio');
-        expect(module).toBeDefined();
-    });
-});
 
 // ─── ERROR BOUNDARY ────────────────────────────────────────────────
 
@@ -42,37 +10,19 @@ describe('ErrorBoundary', () => {
     };
 
     it('catches errors from child components', async () => {
-        // Import App to get ErrorBoundary
-        // Since ErrorBoundary is defined inside App.tsx, we test the pattern directly
-        class TestErrorBoundary extends React.Component<
-            { children: React.ReactNode },
-            { hasError: boolean; error: Error | null }
-        > {
-            state = { hasError: false, error: null as Error | null };
-            static getDerivedStateFromError(error: Error) {
-                return { hasError: true, error };
-            }
-            render() {
-                if (this.state.hasError) {
-                    return (
-                        <div data-testid="error-fallback">Error: {this.state.error?.message}</div>
-                    );
-                }
-                return this.props.children;
-            }
-        }
+        // Import the real ErrorBoundary
+        const { ErrorBoundary } = await import('../../components/ui/ErrorBoundary');
 
         // Suppress React error boundary console output
         const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
         render(
-            <TestErrorBoundary>
+            <ErrorBoundary fallback={<div data-testid="error-fallback">Error caught</div>}>
                 <ThrowingComponent />
-            </TestErrorBoundary>,
+            </ErrorBoundary>,
         );
 
         expect(screen.getByTestId('error-fallback')).toBeInTheDocument();
-        expect(screen.getByText(/Test error/)).toBeInTheDocument();
 
         spy.mockRestore();
     });

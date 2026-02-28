@@ -1,20 +1,22 @@
 /**
  * CinematifierApp.tsx — Main Application Component
  *
- * Handles the full flow: PDF Upload → Processing → Reading
+ * Handles the full flow: Document Upload → Processing → Reading
  */
 
 import React, { useState, useCallback, useRef, useEffect, lazy, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Film, Upload, Settings, X, Sparkles, AlertCircle, Moon, Sun } from 'lucide-react';
 import { useCinematifierStore, getCinematifierAIConfig } from '../store/cinematifierStore';
-import { extractTextFromPDF } from '../lib/pdfWorker';
+import { extractText, detectFormat, ACCEPTED_EXTENSIONS } from '../lib/pdfWorker';
 import {
     segmentChapters,
     createBookFromSegments,
     cinematifyText,
     cinematifyOffline,
     cleanExtractedText,
+    reconstructParagraphs,
+    extractOverallMetadata,
 } from '../lib/cinematifier';
 import { saveBook, loadLatestBook } from '../lib/cinematifierDb';
 import type { Book, ProcessingProgress } from '../types/cinematifier';
@@ -59,12 +61,11 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelect, isProcessing }) =
             const files = e.dataTransfer.files;
             if (files.length > 0) {
                 const file = files[0];
-                if (
-                    file.type === 'application/pdf' ||
-                    file.type === 'text/plain' ||
-                    file.name.endsWith('.txt')
-                ) {
+                try {
+                    detectFormat(file);
                     onFileSelect(file);
+                } catch {
+                    // Unsupported format — silently ignore drag
                 }
             }
         },
@@ -103,7 +104,7 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelect, isProcessing }) =
             <input
                 ref={inputRef}
                 type="file"
-                accept=".pdf,.txt"
+                accept={ACCEPTED_EXTENSIONS}
                 style={{ display: 'none' }}
                 onChange={handleChange}
                 disabled={isProcessing}
@@ -111,11 +112,9 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelect, isProcessing }) =
             <div className="cine-upload-content">
                 <Upload size={48} className="cine-upload-icon" />
                 <p className="cine-upload-text">
-                    {isDragging
-                        ? 'Drop your file here'
-                        : 'Drop a PDF or text file, or click to upload'}
+                    {isDragging ? 'Drop your file here' : 'Drop a document or click to upload'}
                 </p>
-                <p className="cine-upload-hint">PDF and TXT files supported • Novels work best</p>
+                <p className="cine-upload-hint">PDF, EPUB, DOCX, PPTX, TXT supported</p>
             </div>
         </div>
     );
@@ -185,7 +184,7 @@ export const CinematifierApp: React.FC = () => {
         }
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Process PDF file
+    // Process uploaded file
     const processFile = useCallback(
         async (file: File) => {
             setProcessing(true);
@@ -201,21 +200,18 @@ export const CinematifierApp: React.FC = () => {
                     message: 'Extracting text...',
                 });
 
-                let text: string;
-                const isTextFile = file.type === 'text/plain' || file.name.endsWith('.txt');
-
-                if (isTextFile) {
-                    text = await file.text();
-                } else {
-                    text = await extractTextFromPDF(file);
+                let text = await extractText(file);
+                const isPDF = file.name.toLowerCase().endsWith('.pdf');
+                if (isPDF) {
                     text = cleanExtractedText(text);
                 }
 
+                // Apply intelligent paragraph reconstruction for all documents
+                text = reconstructParagraphs(text);
+
                 if (!text || text.trim().length < 100) {
                     throw new Error(
-                        isTextFile
-                            ? 'The text file does not contain enough content (minimum 100 characters).'
-                            : 'Could not extract enough text from PDF. The file may be image-based (scanned) or encrypted.',
+                        'Could not extract enough text from the file (minimum 100 characters). The file may be empty, image-based, or encrypted.',
                     );
                 }
 
@@ -229,7 +225,7 @@ export const CinematifierApp: React.FC = () => {
                 });
 
                 const segments = segmentChapters(text);
-                const bookTitle = file.name.replace(/\.(pdf|txt)$/i, '');
+                const bookTitle = file.name.replace(/\.(pdf|epub|docx|pptx|txt)$/i, '');
                 const bookData = createBookFromSegments(segments, bookTitle);
 
                 const bookWithId: Book = {
@@ -281,22 +277,70 @@ export const CinematifierApp: React.FC = () => {
                             );
                         }
 
+                        const metadata = extractOverallMetadata(result.rawText, result.blocks);
+
                         updateChapter(i, {
                             cinematifiedBlocks: result.blocks,
                             cinematifiedText: result.rawText,
                             isProcessed: true,
+                            toneTags: metadata.toneTags,
+                            characters: metadata.characters,
                         });
+
+                        // If it's the first chapter and we found a genre, update the book's genre
+                        if (i === 0 && metadata.genre && bookWithId.genre === 'other') {
+                            bookWithId.genre = metadata.genre;
+                        }
+
+                        // Merge characters into the main book object
+                        if (!bookWithId.characters) bookWithId.characters = {};
+                        for (const [charName, charData] of Object.entries(metadata.characters)) {
+                            if (!bookWithId.characters[charName]) {
+                                bookWithId.characters[charName] = {
+                                    appearances: [],
+                                    dialogueCount: 0,
+                                };
+                            }
+                            bookWithId.characters[charName].appearances.push(
+                                ...charData.appearances,
+                            );
+                            bookWithId.characters[charName].dialogueCount += charData.dialogueCount;
+                        }
                     } catch (chapterErr) {
                         console.warn(`[Cinematifier] Chapter ${chapterNum} fallback:`, chapterErr);
                         // Use offline fallback for this chapter
                         try {
                             const chapter = bookWithId.chapters[i];
                             const fallbackResult = cinematifyOffline(chapter.originalText);
+                            const metadata = extractOverallMetadata(
+                                fallbackResult.rawText,
+                                fallbackResult.blocks,
+                            );
                             updateChapter(i, {
                                 cinematifiedBlocks: fallbackResult.blocks,
                                 cinematifiedText: fallbackResult.rawText,
                                 isProcessed: true,
+                                toneTags: metadata.toneTags,
+                                characters: metadata.characters,
                             });
+
+                            // Merge characters into the main book object for offline fallback too
+                            if (!bookWithId.characters) bookWithId.characters = {};
+                            for (const [charName, charData] of Object.entries(
+                                metadata.characters,
+                            )) {
+                                if (!bookWithId.characters[charName]) {
+                                    bookWithId.characters[charName] = {
+                                        appearances: [],
+                                        dialogueCount: 0,
+                                    };
+                                }
+                                bookWithId.characters[charName].appearances.push(
+                                    ...charData.appearances,
+                                );
+                                bookWithId.characters[charName].dialogueCount +=
+                                    charData.dialogueCount;
+                            }
                         } catch {
                             // Skip this chapter - user can retry later
                         }
@@ -397,8 +441,8 @@ export const CinematifierApp: React.FC = () => {
                         <div className="cine-home-hero">
                             <h1>Transform Novels into Cinematic Experiences</h1>
                             <p>
-                                Upload a PDF novel and watch it come alive with dramatic SFX,
-                                cinematic transitions, and screenplay-style formatting. AI-powered
+                                Upload a novel and watch it come alive with dramatic SFX, cinematic
+                                transitions, and screenplay-style formatting. AI-powered
                                 transformation for an immersive reading experience.
                             </p>
                         </div>

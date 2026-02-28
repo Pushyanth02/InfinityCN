@@ -24,6 +24,22 @@ export type BookStatus = 'uploading' | 'processing' | 'ready' | 'error';
 
 export type ChapterStatus = 'pending' | 'processing' | 'ready' | 'error';
 
+// ─── Narrative Metadata ────────────────────────────────────────────────────────
+
+export type EmotionCategory =
+    | 'joy'
+    | 'fear'
+    | 'sadness'
+    | 'suspense'
+    | 'anger'
+    | 'surprise'
+    | 'neutral';
+
+export interface CharacterAppearance {
+    appearances: number[]; // Block/Paragraph indices
+    dialogueCount: number;
+}
+
 // ─── Core Cinematic Elements ───────────────────────────────────────────────────
 
 export type TransitionType =
@@ -86,6 +102,8 @@ export interface CinematicBlock {
     intensity: 'whisper' | 'normal' | 'emphasis' | 'shout' | 'explosive';
     cameraDirection?: string; // e.g., "CLOSE ON", "WIDE SHOT", "POV"
     timing?: 'slow' | 'normal' | 'quick' | 'rapid';
+    emotion?: EmotionCategory;
+    tensionScore?: number; // 0-100
 }
 
 // ─── Chapter Entity ────────────────────────────────────────────────────────────
@@ -103,6 +121,8 @@ export interface Chapter {
     isProcessed: boolean; // Legacy compat
     estimatedReadTime: number; // in minutes
     errorMessage?: string; // If processing failed
+    toneTags?: string[];
+    characters?: Record<string, CharacterAppearance>;
 }
 
 // ─── Book Entity ───────────────────────────────────────────────────────────────
@@ -123,6 +143,7 @@ export interface Book {
     totalWordCount: number;
     createdAt: number;
     updatedAt?: number;
+    characters?: Record<string, CharacterAppearance>;
 }
 
 // ─── ReadingProgress Entity ────────────────────────────────────────────────────
@@ -142,14 +163,18 @@ export interface ReadingProgress {
 
 // ─── Reader State ──────────────────────────────────────────────────────────────
 
-export type ReaderMode = 'original' | 'cinematified';
+export type ReaderMode = 'original' | 'cinematified' | 'side-by-side';
+
+export type ImmersionLevel = 'minimal' | 'balanced' | 'cinematic';
 
 export interface ReaderState {
     mode: ReaderMode;
     currentChapterIndex: number;
     scrollPosition: number;
     fontSize: number;
-    ambientMode: boolean; // Subtle background effects
+    lineSpacing: number; // Line height multiplier (1.4 - 2.4)
+    immersionLevel: ImmersionLevel;
+    dyslexiaFont: boolean;
     autoScrollSpeed: number; // 0 = off, 1-10 = speed levels
 }
 
@@ -183,4 +208,14 @@ export interface ChapterSegment {
     content: string;
     startIndex: number;
     endIndex: number;
+}
+
+// ─── AI Connection Status ─────────────────────────────────────────────────────
+
+/** AI connection test result */
+export interface AIConnectionStatus {
+    ok: boolean;
+    provider: string;
+    message: string;
+    latencyMs?: number;
 }

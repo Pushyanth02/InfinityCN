@@ -142,6 +142,7 @@
         transform: scale(1) translate(0, 0);
         opacity: 0.15;
     }
+
     50% {
         transform: scale(1.1) translate(2%, -2%);
         opacity: 0.25;
@@ -410,6 +411,7 @@
         transform: scale(1) rotate(0deg);
         opacity: 1;
     }
+
     50% {
         transform: scale(1.1) rotate(10deg);
         opacity: 0.8;
@@ -567,9 +569,11 @@
         transform: scale(0.8);
         opacity: 0;
     }
+
     50% {
         transform: scale(1.05);
     }
+
     100% {
         transform: scale(1);
         opacity: 1;
@@ -581,9 +585,11 @@
         transform: scale(0.5);
         opacity: 0;
     }
+
     30% {
         transform: scale(1.2);
     }
+
     100% {
         transform: scale(1);
         opacity: 1;
@@ -625,6 +631,7 @@
     100% {
         opacity: 0.5;
     }
+
     50% {
         opacity: 1;
     }
@@ -1251,4 +1258,218 @@
 
 .cinematifier-app--light .cine-processing-overlay {
     background: rgba(255, 255, 255, 0.95);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   EMOTION & TENSION METADATA
+   ═══════════════════════════════════════════════════════════ */
+
+.cine-action-metadata {
+    display: flex;
+    align-items: center;
+    gap: var(--cine-space-md);
+    margin-top: var(--cine-space-sm);
+}
+
+.cine-emotion-tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-family: var(--cine-font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+    opacity: 0.8;
+}
+
+.cine-emotion--joy {
+    background-color: rgba(250, 204, 21, 0.15);
+    color: #fde047;
+    border: 1px solid rgba(250, 204, 21, 0.3);
+}
+
+.cine-emotion--sadness {
+    background-color: rgba(56, 189, 248, 0.15);
+    color: #7dd3fc;
+    border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.cine-emotion--anger {
+    background-color: rgba(239, 68, 68, 0.15);
+    color: #fca5a5;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.cine-emotion--fear {
+    background-color: rgba(168, 85, 247, 0.15);
+    color: #d8b4fe;
+    border: 1px solid rgba(168, 85, 247, 0.3);
+}
+
+.cine-emotion--suspense {
+    background-color: rgba(249, 115, 22, 0.15);
+    color: #fdba74;
+    border: 1px solid rgba(249, 115, 22, 0.3);
+}
+
+.cine-emotion--surprise {
+    background-color: rgba(236, 72, 153, 0.15);
+    color: #f9a8d4;
+    border: 1px solid rgba(236, 72, 153, 0.3);
+}
+
+.cine-emotion--neutral {
+    background-color: rgba(156, 163, 175, 0.15);
+    color: #d1d5db;
+    border: 1px solid rgba(156, 163, 175, 0.3);
+}
+
+.cine-tension-meter {
+    flex: 1;
+    max-width: 150px;
+    height: 4px;
+    background: var(--cine-bg-tertiary);
+    border-radius: 2px;
+    overflow: hidden;
+    display: flex;
+}
+
+.cine-tension-bar {
+    height: 100%;
+    transition:
+        width var(--cine-transition-normal),
+        background-color var(--cine-transition-normal);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   ATMOSPHERIC SCREEN TINTS (BASED ON ACTIVE EMOTION)
+   ═══════════════════════════════════════════════════════════ */
+
+.cine-reader {
+    transition:
+        background-color 1s ease,
+        box-shadow 1s ease;
+}
+
+/* Subtle background washing based on active emotion */
+.cine-reader[data-active-emotion='joy'] {
+    box-shadow: inset 0 0 150px rgba(250, 204, 21, 0.05);
+}
+
+.cine-reader[data-active-emotion='sadness'] {
+    box-shadow: inset 0 0 150px rgba(56, 189, 248, 0.05);
+}
+
+.cine-reader[data-active-emotion='anger'] {
+    box-shadow: inset 0 0 150px rgba(239, 68, 68, 0.08);
+}
+
+.cine-reader[data-active-emotion='fear'] {
+    box-shadow: inset 0 0 150px rgba(168, 85, 247, 0.05);
+}
+
+.cine-reader[data-active-emotion='suspense'] {
+    box-shadow: inset 0 0 150px rgba(249, 115, 22, 0.05);
+}
+
+.cine-reader[data-active-emotion='surprise'] {
+    box-shadow: inset 0 0 150px rgba(236, 72, 153, 0.05);
+}
+
+/* In dark mode cinematic immersion, make it slightly stronger */
+.cine-reader.cine-reader--immersion-cinematic:not(.cine-reader--light)[data-active-emotion='joy'] {
+    box-shadow: inset 0 0 300px rgba(250, 204, 21, 0.1);
+}
+
+.cine-reader.cine-reader--immersion-cinematic:not(
+        .cine-reader--light
+    )[data-active-emotion='sadness'] {
+    box-shadow: inset 0 0 300px rgba(56, 189, 248, 0.1);
+}
+
+.cine-reader.cine-reader--immersion-cinematic:not(
+        .cine-reader--light
+    )[data-active-emotion='anger'] {
+    box-shadow: inset 0 0 300px rgba(239, 68, 68, 0.15);
+}
+
+.cine-reader.cine-reader--immersion-cinematic:not(.cine-reader--light)[data-active-emotion='fear'] {
+    box-shadow: inset 0 0 300px rgba(168, 85, 247, 0.1);
+}
+
+.cine-reader.cine-reader--immersion-cinematic:not(
+        .cine-reader--light
+    )[data-active-emotion='suspense'] {
+    box-shadow: inset 0 0 300px rgba(249, 115, 22, 0.1);
+}
+
+.cine-reader.cine-reader--immersion-cinematic:not(
+        .cine-reader--light
+    )[data-active-emotion='surprise'] {
+    box-shadow: inset 0 0 300px rgba(236, 72, 153, 0.1);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   DUAL READING MODE (SIDE-BY-SIDE)
+   ═══════════════════════════════════════════════════════════ */
+
+.cine-content--dual {
+    max-width: 1600px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--cine-space-2xl);
+    padding: 0 var(--cine-space-2xl);
+}
+
+.cine-dual-pane {
+    display: flex;
+    flex-direction: column;
+}
+
+.cine-dual-pane--left {
+    border-right: 1px solid var(--cine-bg-tertiary);
+    padding-right: var(--cine-space-2xl);
+}
+
+.cine-blocks-wrapper {
+    max-width: 800px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+@media (max-width: 1024px) {
+    .cine-content--dual {
+        gap: var(--cine-space-lg);
+        padding: 0 var(--cine-space-lg);
+    }
+
+    .cine-dual-pane--left {
+        padding-right: var(--cine-space-lg);
+    }
+}
+
+@media (max-width: 768px) {
+    .cine-content--dual {
+        grid-template-columns: 1fr;
+    }
+
+    .cine-dual-pane--left {
+        border-right: none;
+        border-bottom: 1px solid var(--cine-bg-tertiary);
+        padding-right: 0;
+        padding-bottom: var(--cine-space-lg);
+        margin-bottom: var(--cine-space-lg);
+    }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   DYSLEXIA FRIENDLY MODE
+   ═══════════════════════════════════════════════════════════ */
+
+.cine-reader--dyslexia {
+    --cine-font-body: 'Lexend', sans-serif;
+    --cine-font-display: 'Lexend', sans-serif;
+    letter-spacing: 0.02em;
 }

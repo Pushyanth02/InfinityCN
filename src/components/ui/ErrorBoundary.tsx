@@ -22,7 +22,18 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
         if (this.state.hasError) {
             return (
                 this.props.fallback ?? (
-                    <div className="error-banner" role="alert">
+                    <div
+                        role="alert"
+                        style={{
+                            padding: '1rem 1.5rem',
+                            margin: '1rem',
+                            background: 'rgba(239, 68, 68, 0.1)',
+                            border: '1px solid rgba(239, 68, 68, 0.3)',
+                            borderRadius: '8px',
+                            color: '#f87171',
+                            fontSize: '0.875rem',
+                        }}
+                    >
                         Something went wrong loading this component.
                         <button
                             onClick={() => this.setState({ hasError: false, error: null })}

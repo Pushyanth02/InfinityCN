@@ -21,8 +21,7 @@
  *   • Error categorization and recovery
  */
 
-import { extractCharacters } from './algorithms';
-import type { Character, AIConnectionStatus } from '../types';
+import type { AIConnectionStatus } from '../types/cinematifier';
 
 // ─── PUBLIC CONFIG TYPE ────────────────────────────────────────────────────────
 
@@ -57,7 +56,7 @@ interface ModelPreset {
     rateLimitRPM: number;
 }
 
-const MODEL_PRESETS: Record<string, ModelPreset> = {
+export const MODEL_PRESETS: Record<string, ModelPreset> = {
     chrome: {
         model: 'gemini-nano',
         maxTokens: 2048,
@@ -617,6 +616,277 @@ export async function callAIWithDedup(prompt: string, config: AIConfig): Promise
     }
 }
 
+// ═══════════════════════════════════════════════════════════
+// ── STREAMING API CLIENT ───────────────────────────────────
+// ═══════════════════════════════════════════════════════════
+
+/**
+ * Streaming entry point. Yields chunks of text as they arrive.
+ * Dedup and caching are not applied to streaming to keep things real-time.
+ */
+export async function* streamAI(prompt: string, config: AIConfig): AsyncGenerator<string> {
+    if (config.provider === 'none') {
+        throw new Error('AI provider is not configured.');
+    }
+
+    const preset = MODEL_PRESETS[config.provider];
+    if (!preset) throw new Error(`No model preset configured for provider "${config.provider}".`);
+
+    // Acquire rate limit token
+    const limiter = getRateLimiter(config.provider);
+    await limiter.acquire();
+
+    // ── CHROME NANO STREAMING ────────────────────────────────
+    if (config.provider === 'chrome') {
+        if (!window.ai?.languageModel) {
+            throw new Error('Chrome AI is not available.');
+        }
+        const session = await window.ai.languageModel.create({ systemPrompt: SYSTEM_PROMPT });
+        try {
+            const stream = session.promptStreaming(prompt);
+            let previousLength = 0;
+            for await (const chunk of stream) {
+                // Chrome returns the FULL accumulated string each time, so we yield only the delta
+                const delta = chunk.slice(previousLength);
+                previousLength = chunk.length;
+                if (delta) yield delta;
+            }
+        } finally {
+            session.destroy();
+        }
+        return;
+    }
+
+    // ── OLLAMA STREAMING ─────────────────────────────────────
+    if (config.provider === 'ollama') {
+        const ollamaBody = {
+            model: config.ollamaModel || preset.model,
+            prompt: `${SYSTEM_PROMPT}\n\n${prompt}`,
+            stream: true,
+        };
+        const res = API_PROXY_URL
+            ? await proxyFetch('ollama', ollamaBody)
+            : await fetch(`${config.ollamaUrl.replace(/\/$/, '')}/api/generate`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(ollamaBody),
+              });
+
+        if (!res.ok) throw new Error(`Ollama error ${res.status}`);
+        if (!res.body) throw new Error('No response body from Ollama');
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value, { stream: true });
+            const lines = chunk.split('\n').filter(Boolean);
+            for (const line of lines) {
+                try {
+                    const data = JSON.parse(line);
+                    if (data.response) yield data.response;
+                } catch {
+                    // Ignore parse errors on partial chunks
+                }
+            }
+        }
+        return;
+    }
+
+    // ── OPENAI COMPATIBLE STREAMING (OpenAI, Groq, DeepSeek) ─
+    if (['openai', 'groq', 'deepseek'].includes(config.provider)) {
+        let url = '';
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+
+        if (config.provider === 'openai') {
+            if (!API_PROXY_URL && !config.openAiKey) throw new Error('OpenAI key missing');
+            url = API_PROXY_URL
+                ? `${API_PROXY_URL}/api/ai/openai`
+                : 'https://api.openai.com/v1/chat/completions';
+            if (!API_PROXY_URL) headers['Authorization'] = `Bearer ${config.openAiKey}`;
+        } else if (config.provider === 'groq') {
+            if (!API_PROXY_URL && !config.groqKey) throw new Error('Groq key missing');
+            url = API_PROXY_URL
+                ? `${API_PROXY_URL}/api/ai/groq`
+                : 'https://api.groq.com/openai/v1/chat/completions';
+            if (!API_PROXY_URL) headers['Authorization'] = `Bearer ${config.groqKey}`;
+        } else if (config.provider === 'deepseek') {
+            if (!API_PROXY_URL && !config.deepseekKey) throw new Error('Deepseek key missing');
+            url = API_PROXY_URL
+                ? `${API_PROXY_URL}/api/ai/deepseek`
+                : 'https://api.deepseek.com/chat/completions';
+            if (!API_PROXY_URL) headers['Authorization'] = `Bearer ${config.deepseekKey}`;
+        }
+
+        const body = {
+            model: preset.model,
+            messages: [
+                { role: 'system', content: SYSTEM_PROMPT },
+                { role: 'user', content: prompt },
+            ],
+            stream: true,
+            temperature: preset.temperature,
+        };
+
+        const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+        if (!res.ok) throw new Error(`${config.provider} error ${res.status}`);
+        if (!res.body) throw new Error('No response body');
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() ?? ''; // keep the last incomplete line in buffer
+
+            for (const line of lines) {
+                const trimmed = line.trim();
+                // Both standard SSE and dummy keepalives
+                if (!trimmed || trimmed.startsWith(':')) continue;
+                if (trimmed === 'data: [DONE]') break;
+                if (trimmed.startsWith('data: ')) {
+                    try {
+                        const data = JSON.parse(trimmed.slice(6));
+                        const delta = data.choices?.[0]?.delta?.content;
+                        if (delta) yield delta;
+                    } catch {
+                        // Ignore parse errors
+                    }
+                }
+            }
+        }
+        return;
+    }
+
+    // ── GEMINI STREAMING ─────────────────────────────────────
+    if (config.provider === 'gemini') {
+        if (!API_PROXY_URL && !config.geminiKey) throw new Error('Gemini API key is not set.');
+
+        const geminiBody = {
+            system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+            contents: [{ parts: [{ text: prompt }] }],
+            tools: config.useSearchGrounding ? [{ google_search: {} }] : undefined,
+            generationConfig: { temperature: preset.temperature },
+        };
+
+        const url = API_PROXY_URL
+            ? `${API_PROXY_URL}/api/ai/gemini?stream=true`
+            : `https://generativelanguage.googleapis.com/v1beta/models/${preset.model}:streamGenerateContent?alt=sse`;
+
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (!API_PROXY_URL) headers['x-goog-api-key'] = config.geminiKey;
+
+        const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(geminiBody) });
+        if (!res.ok) throw new Error(`Gemini error ${res.status}`);
+        if (!res.body) throw new Error('No response body');
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() ?? '';
+
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed || trimmed.startsWith(':')) continue;
+                if (trimmed.startsWith('data: ')) {
+                    try {
+                        const data = JSON.parse(trimmed.slice(6));
+                        const delta = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                        if (delta) yield delta;
+                    } catch {
+                        // Ignore malformed SSE chunks
+                    }
+                }
+            }
+        }
+        return;
+    }
+
+    // ── ANTHROPIC STREAMING ──────────────────────────────────
+    if (config.provider === 'anthropic') {
+        if (!API_PROXY_URL && !config.anthropicKey)
+            throw new Error('Anthropic API key is not set.');
+
+        const anthropicBody = {
+            model: preset.model,
+            max_tokens: 1500,
+            system: SYSTEM_PROMPT,
+            messages: [{ role: 'user', content: prompt }],
+            temperature: preset.temperature,
+            stream: true,
+        };
+
+        const url = API_PROXY_URL
+            ? `${API_PROXY_URL}/api/ai/anthropic`
+            : 'https://api.anthropic.com/v1/messages';
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+            'anthropic-version': '2023-06-01',
+        };
+
+        if (!API_PROXY_URL) {
+            headers['x-api-key'] = config.anthropicKey;
+            headers['anthropic-dangerous-direct-browser-access'] = 'true';
+        }
+
+        const res = await fetch(url, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(anthropicBody),
+        });
+        if (!res.ok) throw new Error(`Anthropic error ${res.status}`);
+        if (!res.body) throw new Error('No response body');
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() ?? '';
+
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed || trimmed.startsWith(':')) continue;
+                if (trimmed.startsWith('data: ')) {
+                    try {
+                        const data = JSON.parse(trimmed.slice(6));
+                        if (
+                            data.type === 'content_block_delta' &&
+                            data.delta?.type === 'text_delta'
+                        ) {
+                            yield data.delta.text;
+                        }
+                    } catch {
+                        // Ignore malformed SSE chunks
+                    }
+                }
+            }
+        }
+        return;
+    }
+
+    throw new Error(`Streaming not implemented for provider ${config.provider}`);
+}
+
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
 /** Strip accidental markdown code fences from LLM output */
@@ -672,65 +942,5 @@ export async function testConnection(config: AIConfig): Promise<AIConnectionStat
             provider: config.provider,
             message: err instanceof Error ? err.message : 'Unknown error.',
         };
-    }
-}
-
-/**
- * AI-Enhanced Character Codex.
- * Generates rich narrative character descriptions merged with algorithmic stats.
- * Falls back to pure NER on failure.
- */
-export async function enhanceCharacters(text: string, config: AIConfig): Promise<Character[]> {
-    const algoStats = extractCharacters(text, 20);
-
-    const toCharacter = (c: {
-        name: string;
-        firstContext?: string;
-        frequency?: number;
-        sentiment?: number;
-        honorific?: string;
-    }): Character => ({
-        name: c.name,
-        description: c.firstContext ? `First appears: "${c.firstContext}"` : '',
-        frequency: c.frequency,
-        sentiment: c.sentiment,
-        honorific: c.honorific,
-    });
-
-    if (config.provider === 'none') {
-        return algoStats.slice(0, 10).map(toCharacter);
-    }
-
-    try {
-        const prompt = `Analyze the following story excerpt and extract the 3-8 most important recurring characters.
-For each provide a 'description': 2-3 vivid sentences detailing personality, role, and current situation.
-
-Text (first 8000 chars):
-${text.substring(0, 8000)}
-
-Return a JSON array ONLY:
-[{"name":"Character Name","description":"Rich narrative description."}]`;
-
-        const raw = await callAIWithDedup(prompt, config);
-        const parsed = parseJSON<{ name: string; description?: string }[]>(raw);
-        if (!Array.isArray(parsed)) throw new Error('Expected JSON array');
-
-        return parsed.map(char => {
-            const stats = algoStats.find(
-                a =>
-                    a.name.toLowerCase().includes(char.name.toLowerCase()) ||
-                    char.name.toLowerCase().includes(a.name.toLowerCase()),
-            );
-            return {
-                name: char.name,
-                description: char.description ?? 'No description available.',
-                frequency: stats?.frequency,
-                sentiment: stats?.sentiment,
-                honorific: stats?.honorific,
-            };
-        });
-    } catch (err) {
-        console.warn('[AI] enhanceCharacters fallback:', err);
-        return algoStats.slice(0, 10).map(toCharacter);
     }
 }
