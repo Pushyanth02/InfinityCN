@@ -143,8 +143,7 @@ export const extractTextFromPDF = async (file: File): Promise<string> => {
                                 if (ctx) {
                                     canvas.height = viewport.height;
                                     canvas.width = viewport.width;
-                                    await page.render({ canvasContext: ctx, viewport, canvas })
-                                        .promise;
+                                    await page.render({ canvasContext: ctx, viewport }).promise;
                                     const dataUrl = canvas.toDataURL('image/png');
                                     const result = await Tesseract.recognize(dataUrl, 'eng');
                                     pageText = result.data.text;
@@ -162,20 +161,35 @@ export const extractTextFromPDF = async (file: File): Promise<string> => {
         }
 
         // Smart Header/Footer Detection via Frequency Analysis
-        const firstLines = new Map<string, number>();
-        const lastLines = new Map<string, number>();
+        // Check the first and last few lines of each page for recurring text.
+        const SCAN_DEPTH = 3; // lines to check at top/bottom of each page
+        const headerCandidates = new Map<string, number>();
+        const footerCandidates = new Map<string, number>();
+
+        // Normalize a line for frequency comparison:
+        // - Replace standalone numbers with a token so "42" and "43" match
+        // - Trim whitespace
+        const normalizeLine = (line: string): string =>
+            line.trim().replace(/^\d{1,4}$/, '__PAGE_NUM__');
 
         pages.forEach(page => {
             const lines = page
                 .split('\n')
                 .map(l => l.trim())
                 .filter(Boolean);
-            if (lines.length > 0) {
-                firstLines.set(lines[0], (firstLines.get(lines[0]) || 0) + 1);
-                lastLines.set(
-                    lines[lines.length - 1],
-                    (lastLines.get(lines[lines.length - 1]) || 0) + 1,
-                );
+            if (lines.length === 0) return;
+
+            // Top lines (headers)
+            const topN = Math.min(SCAN_DEPTH, lines.length);
+            for (let k = 0; k < topN; k++) {
+                const key = normalizeLine(lines[k]);
+                if (key) headerCandidates.set(key, (headerCandidates.get(key) || 0) + 1);
+            }
+            // Bottom lines (footers)
+            const bottomStart = Math.max(0, lines.length - SCAN_DEPTH);
+            for (let k = bottomStart; k < lines.length; k++) {
+                const key = normalizeLine(lines[k]);
+                if (key) footerCandidates.set(key, (footerCandidates.get(key) || 0) + 1);
             }
         });
 
@@ -184,11 +198,11 @@ export const extractTextFromPDF = async (file: File): Promise<string> => {
         const commonHeaders = new Set<string>();
         const commonFooters = new Set<string>();
 
-        firstLines.forEach((count, line) => {
-            if (count >= threshold) commonHeaders.add(line);
+        headerCandidates.forEach((count, key) => {
+            if (count >= threshold) commonHeaders.add(key);
         });
-        lastLines.forEach((count, line) => {
-            if (count >= threshold) commonFooters.add(line);
+        footerCandidates.forEach((count, key) => {
+            if (count >= threshold) commonFooters.add(key);
         });
 
         const cleanedPages = pages.map(page => {
@@ -196,15 +210,16 @@ export const extractTextFromPDF = async (file: File): Promise<string> => {
             let startIdx = 0;
             let endIdx = lines.length - 1;
 
-            while (startIdx <= endIdx) {
-                const l = lines[startIdx].trim();
-                // We strip exact matches. A more advanced approach could use Levenshtein or regex
-                if (!l || commonHeaders.has(l)) startIdx++;
+            // Strip header lines from the top
+            while (startIdx <= endIdx && startIdx < SCAN_DEPTH) {
+                const norm = normalizeLine(lines[startIdx]);
+                if (!norm || commonHeaders.has(norm)) startIdx++;
                 else break;
             }
-            while (endIdx >= startIdx) {
-                const l = lines[endIdx].trim();
-                if (!l || commonFooters.has(l)) endIdx--;
+            // Strip footer lines from the bottom
+            while (endIdx >= startIdx && endIdx >= lines.length - SCAN_DEPTH) {
+                const norm = normalizeLine(lines[endIdx]);
+                if (!norm || commonFooters.has(norm)) endIdx--;
                 else break;
             }
             return lines.slice(startIdx, endIdx + 1).join('\n');

@@ -483,6 +483,7 @@ export function cinematifyOffline(text: string): CinematificationResult {
 
     return {
         blocks,
+        rawText: blocks.map(b => b.content).join('\n\n'),
         metadata: {
             originalWordCount: text.split(/\s+/).length,
             cinematifiedWordCount: blocks.reduce(
@@ -682,6 +683,129 @@ export function cleanExtractedText(text: string): string {
 
 // ─── Intelligent Paragraph Reconstruction ───────────────────
 
+// Common abbreviations that end with a period but are NOT sentence boundaries.
+const ABBREVIATIONS = new Set([
+    'mr',
+    'mrs',
+    'ms',
+    'dr',
+    'prof',
+    'sr',
+    'jr',
+    'st',
+    'ave',
+    'blvd',
+    'gen',
+    'gov',
+    'sgt',
+    'cpl',
+    'pvt',
+    'lt',
+    'col',
+    'capt',
+    'maj',
+    'dept',
+    'univ',
+    'assn',
+    'bros',
+    'inc',
+    'ltd',
+    'co',
+    'corp',
+    'vs',
+    'etc',
+    'approx',
+    'appt',
+    'est',
+    'min',
+    'max',
+    'al', // et al.
+    'fig',
+    'eq',
+    'vol',
+    'rev',
+    'no',
+    'op',
+]);
+
+/**
+ * Split text into sentences using heuristics that handle abbreviations,
+ * decimals, ellipses, and quoted speech.
+ */
+function splitSentences(text: string): string[] {
+    const sentences: string[] = [];
+    let current = '';
+
+    for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        current += ch;
+
+        // Only consider sentence-ending punctuation
+        if (ch !== '.' && ch !== '!' && ch !== '?') continue;
+
+        // Absorb trailing quotes/brackets that close the sentence
+        let j = i + 1;
+        while (j < text.length && /["'"')\]]/.test(text[j])) {
+            current += text[j];
+            j++;
+        }
+
+        // Must be followed by whitespace or end of text to be a boundary
+        if (j < text.length && !/\s/.test(text[j])) {
+            i = j - 1; // skip absorbed chars
+            continue;
+        }
+
+        // Not a boundary: ellipsis ("..." or "…")
+        if (ch === '.' && i >= 2 && text[i - 1] === '.' && text[i - 2] === '.') {
+            i = j - 1;
+            continue;
+        }
+
+        // Not a boundary: decimal number  e.g. "3.99"
+        if (ch === '.' && i > 0 && /\d/.test(text[i - 1]) && j < text.length) {
+            // Look past whitespace — if next non-space is lowercase or digit, not a boundary
+            const afterSpace = text.substring(j).match(/^\s*(\S)/);
+            if (afterSpace && /[a-z\d]/.test(afterSpace[1])) {
+                i = j - 1;
+                continue;
+            }
+        }
+
+        // Not a boundary: known abbreviation  e.g. "Dr."
+        if (ch === '.') {
+            // Extract the word before the period
+            const before = current.slice(0, -1); // drop the period
+            const wordMatch = before.match(/([A-Za-z]+)$/);
+            if (wordMatch) {
+                const word = wordMatch[1].toLowerCase();
+                if (ABBREVIATIONS.has(word)) {
+                    i = j - 1;
+                    continue;
+                }
+                // Single uppercase letter (initials like "J." or "U.S.")
+                if (wordMatch[1].length === 1 && /[A-Z]/.test(wordMatch[1])) {
+                    i = j - 1;
+                    continue;
+                }
+            }
+        }
+
+        // It's a sentence boundary
+        sentences.push(current.trim());
+        current = '';
+        i = j - 1; // advance past absorbed chars
+    }
+
+    // Don't lose trailing fragment
+    const remaining = current.trim();
+    if (remaining) {
+        sentences.push(remaining);
+    }
+
+    return sentences;
+}
+
 /**
  * Detects if text lacks paragraph breaks and uses sentence-boundary heuristics
  * to insert \n\n breaks. This is critical for LLM chunking.
@@ -690,7 +814,7 @@ export function reconstructParagraphs(text: string): string {
     const existingParas = text.split(/\n\s*\n/).filter(p => p.trim().length > 0);
     const avgLen = existingParas.length > 0 ? text.length / existingParas.length : text.length;
 
-    // If average paragraph is > 1000 chars, it's likely missing proper breaks
+    // If average paragraph is < 1000 chars and there are multiple, paragraphs exist
     if (avgLen < 1000 && existingParas.length > 2) {
         return text;
     }
@@ -698,19 +822,19 @@ export function reconstructParagraphs(text: string): string {
     // Collapse single newlines that aren't already part of a double newline
     const continuousText = text.replace(/([^\n])\n([^\n])/g, '$1 $2');
 
-    // Basic sentence splitting: ends with .!? and optional quote, followed by space and Capital/Quote
-    const sentences = continuousText.match(/[^.!?]+[.!?]+(?:["'”’])?(?=\s|$)/g) || [continuousText];
+    const sentences = splitSentences(continuousText);
+    if (sentences.length <= 1) return text;
 
     let result = '';
     let sentencesInPara = 0;
 
     for (let i = 0; i < sentences.length; i++) {
-        const s = sentences[i].trim();
+        const s = sentences[i];
         if (!s) continue;
 
-        const isDialogueStart = /^["'“‘]/.test(s);
-        const nextS = i + 1 < sentences.length ? sentences[i + 1].trim() : '';
-        const nextIsDialogueStart = /^["'“‘]/.test(nextS);
+        const isDialogueStart = /^["'"']/.test(s);
+        const nextS = i + 1 < sentences.length ? sentences[i + 1] : '';
+        const nextIsDialogueStart = /^["'"']/.test(nextS);
 
         if (sentencesInPara === 0) {
             result += s;

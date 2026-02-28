@@ -81,7 +81,6 @@ npm run preview           # Preview production build
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `VITE_MANGADEX_CLIENT_ID` | No | Built-in | MangaDex API client ID |
 | `VITE_API_PROXY_URL` | No | None | API proxy server URL |
 
 ---

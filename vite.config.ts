@@ -71,6 +71,13 @@ export default defineConfig({
                     if (id.includes('pdfjs-dist')) return 'pdfjs';
                     // ZIP extraction for EPUB/DOCX/PPTX — lazy loaded
                     if (id.includes('fflate')) return 'fflate';
+                    // OCR — lazy loaded only for scanned PDFs
+                    if (id.includes('tesseract.js')) return 'tesseract';
+                    // ML runtime (shared by tesseract + @xenova/transformers) — lazy loaded
+                    if (id.includes('onnxruntime-web') || id.includes('onnxruntime-common'))
+                        return 'onnx';
+                    // Embeddings model — lazy loaded during cinematification
+                    if (id.includes('@xenova/transformers')) return 'transformers';
                     // Animation library — lazy chunk
                     if (id.includes('framer-motion')) return 'motion';
                     // Icons — tree-shaken but grouped

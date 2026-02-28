@@ -447,6 +447,12 @@ export const useCinematifierStore = create<CinematifierState>()(
                         const parsed = JSON.parse(rawData);
                         const storedState = parsed.state as Partial<CinematifierState>;
 
+                        // Pre-populate encryption cache with stored (encrypted) values
+                        // BEFORE setState triggers persist, so partialize reads correct values
+                        for (const field of API_KEY_FIELDS) {
+                            encryptedKeyCache.set(field, (storedState[field] as string) ?? '');
+                        }
+
                         // Decrypt API keys
                         const decrypted = await decryptApiKeys(storedState);
 
@@ -459,7 +465,7 @@ export const useCinematifierStore = create<CinematifierState>()(
                             deepseekKey: decrypted.deepseekKey ?? '',
                         });
 
-                        // Pre-populate encryption cache for future saves
+                        // Re-encrypt with fresh values for future saves
                         await encryptApiKeys(useCinematifierStore.getState());
                     } catch (e) {
                         console.error('[Store] Key decryption failed:', e);

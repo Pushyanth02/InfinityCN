@@ -9,6 +9,7 @@ export class AmbientAudioSynth {
     private currentSources: AudioNode[] = [];
     private activeEmotion: string = '';
     private isPlaying: boolean = false;
+    private crossfadeTimeout: ReturnType<typeof setTimeout> | null = null;
 
     constructor() {
         // Initialize lazily to respect auto-play policies
@@ -39,10 +40,17 @@ export class AmbientAudioSynth {
 
         this.activeEmotion = emotion;
 
+        // Cancel any pending crossfade from a previous setEmotion call
+        if (this.crossfadeTimeout) {
+            clearTimeout(this.crossfadeTimeout);
+            this.crossfadeTimeout = null;
+        }
+
         // Fade out current sounds
         this.masterGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.5);
 
-        setTimeout(() => {
+        this.crossfadeTimeout = setTimeout(() => {
+            this.crossfadeTimeout = null;
             this.stopCurrentSources();
             this.playEmotionSoundscape(emotion);
             // Fade back in

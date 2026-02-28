@@ -94,7 +94,11 @@ export async function encrypt(plaintext: string): Promise<string> {
         combined.set(new Uint8Array(ciphertext), iv.length);
 
         // Encode as base64 for safe JSON storage
-        return btoa(String.fromCharCode(...combined));
+        let binary = '';
+        for (let i = 0; i < combined.length; i++) {
+            binary += String.fromCharCode(combined[i]);
+        }
+        return btoa(binary);
     } catch (error) {
         console.error('[Crypto] Encryption failed:', error);
         // Fall back to empty string on error — don't expose plaintext

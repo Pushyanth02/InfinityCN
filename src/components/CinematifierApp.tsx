@@ -19,7 +19,7 @@ import {
     extractOverallMetadata,
 } from '../lib/cinematifier';
 import { saveBook, loadLatestBook } from '../lib/cinematifierDb';
-import type { Book, ProcessingProgress } from '../types/cinematifier';
+import type { Book, ProcessingProgress, CharacterAppearance } from '../types/cinematifier';
 
 // Lazy load components
 const CinematicReader = lazy(() =>
@@ -164,6 +164,7 @@ export const CinematifierApp: React.FC = () => {
     const setProcessing = useCinematifierStore(s => s.setProcessing);
     const setProgress = useCinematifierStore(s => s.setProgress);
     const setError = useCinematifierStore(s => s.setError);
+    const updateBook = useCinematifierStore(s => s.updateBook);
     const updateChapter = useCinematifierStore(s => s.updateChapter);
     const toggleDarkMode = useCinematifierStore(s => s.toggleDarkMode);
     const reset = useCinematifierStore(s => s.reset);
@@ -241,6 +242,10 @@ export const CinematifierApp: React.FC = () => {
                 const totalChapters = bookWithId.chapters.length;
                 const progressPerChapter = 45 / totalChapters; // 50% to 95% across all chapters
 
+                // Accumulate book-level metadata without mutating bookWithId
+                let detectedGenre: Book['genre'] | undefined;
+                const allCharacters: Record<string, CharacterAppearance> = {};
+
                 for (let i = 0; i < totalChapters; i++) {
                     const chapterNum = i + 1;
                     const baseProgress = 50 + i * progressPerChapter;
@@ -287,24 +292,20 @@ export const CinematifierApp: React.FC = () => {
                             characters: metadata.characters,
                         });
 
-                        // If it's the first chapter and we found a genre, update the book's genre
+                        // Accumulate book-level metadata
                         if (i === 0 && metadata.genre && bookWithId.genre === 'other') {
-                            bookWithId.genre = metadata.genre;
+                            detectedGenre = metadata.genre;
                         }
 
-                        // Merge characters into the main book object
-                        if (!bookWithId.characters) bookWithId.characters = {};
                         for (const [charName, charData] of Object.entries(metadata.characters)) {
-                            if (!bookWithId.characters[charName]) {
-                                bookWithId.characters[charName] = {
+                            if (!allCharacters[charName]) {
+                                allCharacters[charName] = {
                                     appearances: [],
                                     dialogueCount: 0,
                                 };
                             }
-                            bookWithId.characters[charName].appearances.push(
-                                ...charData.appearances,
-                            );
-                            bookWithId.characters[charName].dialogueCount += charData.dialogueCount;
+                            allCharacters[charName].appearances.push(...charData.appearances);
+                            allCharacters[charName].dialogueCount += charData.dialogueCount;
                         }
                     } catch (chapterErr) {
                         console.warn(`[Cinematifier] Chapter ${chapterNum} fallback:`, chapterErr);
@@ -324,28 +325,30 @@ export const CinematifierApp: React.FC = () => {
                                 characters: metadata.characters,
                             });
 
-                            // Merge characters into the main book object for offline fallback too
-                            if (!bookWithId.characters) bookWithId.characters = {};
+                            // Accumulate characters from fallback
                             for (const [charName, charData] of Object.entries(
                                 metadata.characters,
                             )) {
-                                if (!bookWithId.characters[charName]) {
-                                    bookWithId.characters[charName] = {
+                                if (!allCharacters[charName]) {
+                                    allCharacters[charName] = {
                                         appearances: [],
                                         dialogueCount: 0,
                                     };
                                 }
-                                bookWithId.characters[charName].appearances.push(
-                                    ...charData.appearances,
-                                );
-                                bookWithId.characters[charName].dialogueCount +=
-                                    charData.dialogueCount;
+                                allCharacters[charName].appearances.push(...charData.appearances);
+                                allCharacters[charName].dialogueCount += charData.dialogueCount;
                             }
                         } catch {
                             // Skip this chapter - user can retry later
                         }
                     }
                 }
+
+                // Push accumulated book-level metadata to the store
+                const bookUpdates: Partial<Book> = { status: 'ready' as const };
+                if (detectedGenre) bookUpdates.genre = detectedGenre;
+                if (Object.keys(allCharacters).length > 0) bookUpdates.characters = allCharacters;
+                updateBook(bookUpdates);
 
                 // Complete
                 setProgress({
@@ -359,7 +362,7 @@ export const CinematifierApp: React.FC = () => {
                 // Persist processed book to IndexedDB
                 const finalBook = useCinematifierStore.getState().book;
                 if (finalBook) {
-                    saveBook({ ...finalBook, status: 'ready' }).catch(err =>
+                    saveBook(finalBook).catch(err =>
                         console.warn('[Cinematifier] Failed to persist book:', err),
                     );
                 }
@@ -374,7 +377,7 @@ export const CinematifierApp: React.FC = () => {
                 setProcessing(false);
             }
         },
-        [setProcessing, setProgress, setError, setBook, updateChapter],
+        [setProcessing, setProgress, setError, setBook, updateBook, updateChapter],
     );
 
     // Close reader and go back to home
