@@ -119,6 +119,9 @@ export async function cinematifyText(
 
         prompt += `\n\nORIGINAL CHAPTER TEXT:\n"""\n${chunks[i]}\n"""\n\nOUTPUT: Full cinematified version`;
 
+        // Use rawTextMode so the AI engine skips JSON formatting and uses higher token limits
+        const cinematifyConfig: AIConfig = { ...config, rawTextMode: true };
+
         let rawBuffer = '';
         let lastProcessedIndex = 0;
 
@@ -129,7 +132,7 @@ export async function cinematifyText(
             const canStream = preset?.supportsStreaming;
 
             if (canStream) {
-                for await (const delta of streamAI(prompt, config)) {
+                for await (const delta of streamAI(prompt, cinematifyConfig)) {
                     rawBuffer += delta;
 
                     // Look for completed paragraphs to parse and flush block-by-block
@@ -175,7 +178,7 @@ export async function cinematifyText(
                 allRawText.push(rawBuffer);
             } else {
                 // Fallback to bulk for non-streaming providers
-                const raw = await callAIWithDedup(prompt, config);
+                const raw = await callAIWithDedup(prompt, cinematifyConfig);
                 rawBuffer = raw;
                 allRawText.push(raw);
                 const blocks = parseCinematifiedText(raw);
@@ -509,19 +512,42 @@ function createFallbackBlocks(text: string): CinematicBlock[] {
         /^---+/,
     ];
 
-    // SFX trigger words
-    const sfxPatterns: [RegExp, string, 'soft' | 'medium' | 'loud' | 'explosive'][] = [
-        [/\b(explod|blast|detona)/i, 'EXPLOSION', 'explosive'],
-        [/\b(thunder|lightning)/i, 'THUNDER', 'loud'],
-        [/\b(crash|shatter|smash)/i, 'CRASH', 'loud'],
-        [/\b(gunshot|shot|fire[ds]?)\b/i, 'GUNSHOT', 'loud'],
-        [/\b(knock|door|creak)/i, 'DOOR', 'medium'],
-        [/\b(whisper|murmur|hush)/i, 'WHISPER', 'soft'],
-        [/\b(scream|shout|yell)/i, 'SCREAM', 'loud'],
-        [/\b(footstep|stride|stomp)/i, 'FOOTSTEPS', 'medium'],
-        [/\b(rain|storm|wind)/i, 'WIND HOWLING', 'medium'],
-        [/\b(heart|pulse|beat)/i, 'HEARTBEAT', 'soft'],
-    ];
+    // SFX trigger words — combined into a single regex for O(1) per paragraph
+    const sfxCombined =
+        /\b(explod|blast|detona|thunder|lightning|crash|shatter|smash|gunshot|shot|fires?\b|knock|door|creak|whisper|murmur|hush|scream|shout|yell|footstep|stride|stomp|rain|storm|wind|heart|pulse|beat)\b/i;
+    const sfxLookup: Record<string, [string, 'soft' | 'medium' | 'loud' | 'explosive']> = {
+        explod: ['EXPLOSION', 'explosive'],
+        blast: ['EXPLOSION', 'explosive'],
+        detona: ['EXPLOSION', 'explosive'],
+        thunder: ['THUNDER', 'loud'],
+        lightning: ['THUNDER', 'loud'],
+        crash: ['CRASH', 'loud'],
+        shatter: ['CRASH', 'loud'],
+        smash: ['CRASH', 'loud'],
+        gunshot: ['GUNSHOT', 'loud'],
+        shot: ['GUNSHOT', 'loud'],
+        fire: ['GUNSHOT', 'loud'],
+        fires: ['GUNSHOT', 'loud'],
+        fired: ['GUNSHOT', 'loud'],
+        knock: ['DOOR', 'medium'],
+        door: ['DOOR', 'medium'],
+        creak: ['DOOR', 'medium'],
+        whisper: ['WHISPER', 'soft'],
+        murmur: ['WHISPER', 'soft'],
+        hush: ['WHISPER', 'soft'],
+        scream: ['SCREAM', 'loud'],
+        shout: ['SCREAM', 'loud'],
+        yell: ['SCREAM', 'loud'],
+        footstep: ['FOOTSTEPS', 'medium'],
+        stride: ['FOOTSTEPS', 'medium'],
+        stomp: ['FOOTSTEPS', 'medium'],
+        rain: ['WIND HOWLING', 'medium'],
+        storm: ['WIND HOWLING', 'medium'],
+        wind: ['WIND HOWLING', 'medium'],
+        heart: ['HEARTBEAT', 'soft'],
+        pulse: ['HEARTBEAT', 'soft'],
+        beat: ['HEARTBEAT', 'soft'],
+    };
 
     // Dialogue pattern
     const dialoguePattern = /"([^"]+)"/g;
@@ -618,7 +644,7 @@ function createFallbackBlocks(text: string): CinematicBlock[] {
             // Regular narration/action
             let intensity: CinematicBlock['intensity'] = 'normal';
             if (para.includes('!')) intensity = 'emphasis';
-            if (para.includes('...')) intensity = 'whisper';
+            if (para.includes('...') || para.includes('\u2026')) intensity = 'whisper';
 
             blocks.push({
                 id: generateBlockId(),
@@ -628,9 +654,13 @@ function createFallbackBlocks(text: string): CinematicBlock[] {
             });
         }
 
-        // Check for SFX triggers in the paragraph
-        for (const [pattern, sound, sfxIntensity] of sfxPatterns) {
-            if (pattern.test(para)) {
+        // Check for SFX triggers in the paragraph (single regex, O(1))
+        const sfxMatch = para.match(sfxCombined);
+        if (sfxMatch) {
+            const key = sfxMatch[1].toLowerCase().replace(/[sd]$/, '');
+            const entry = sfxLookup[key] ?? sfxLookup[sfxMatch[1].toLowerCase()];
+            if (entry) {
+                const [sound, sfxIntensity] = entry;
                 blocks.push({
                     id: generateBlockId(),
                     type: 'sfx',
@@ -638,12 +668,11 @@ function createFallbackBlocks(text: string): CinematicBlock[] {
                     intensity: sfxIntensity === 'explosive' ? 'explosive' : 'emphasis',
                     sfx: { sound, intensity: sfxIntensity },
                 });
-                break; // Only one SFX per paragraph
             }
         }
 
         // Add dramatic beats for emotional moments
-        if (/\.\.\.|—$|sudden|shock|realiz|gasp/i.test(para)) {
+        if (/\.\.\.|…|—$|sudden|shock|realiz|gasp/i.test(para)) {
             blocks.push({
                 id: generateBlockId(),
                 type: 'beat',
@@ -732,21 +761,22 @@ const ABBREVIATIONS = new Set([
  * Split text into sentences using heuristics that handle abbreviations,
  * decimals, ellipses, and quoted speech.
  */
+const CLOSING_QUOTE_RE = /["'"')\]]/;
+const AFTER_SPACE_RE = /^\s*(\S)/;
+
 function splitSentences(text: string): string[] {
     const sentences: string[] = [];
-    let current = '';
+    let start = 0; // Track start index instead of building current string
 
     for (let i = 0; i < text.length; i++) {
         const ch = text[i];
-        current += ch;
 
         // Only consider sentence-ending punctuation
         if (ch !== '.' && ch !== '!' && ch !== '?') continue;
 
         // Absorb trailing quotes/brackets that close the sentence
         let j = i + 1;
-        while (j < text.length && /["'"')\]]/.test(text[j])) {
-            current += text[j];
+        while (j < text.length && CLOSING_QUOTE_RE.test(text[j])) {
             j++;
         }
 
@@ -761,11 +791,15 @@ function splitSentences(text: string): string[] {
             i = j - 1;
             continue;
         }
+        // Not a boundary: preceded by unicode ellipsis character
+        if (i > 0 && text[i - 1] === '\u2026') {
+            i = j - 1;
+            continue;
+        }
 
         // Not a boundary: decimal number  e.g. "3.99"
         if (ch === '.' && i > 0 && /\d/.test(text[i - 1]) && j < text.length) {
-            // Look past whitespace — if next non-space is lowercase or digit, not a boundary
-            const afterSpace = text.substring(j).match(/^\s*(\S)/);
+            const afterSpace = text.substring(j).match(AFTER_SPACE_RE);
             if (afterSpace && /[a-z\d]/.test(afterSpace[1])) {
                 i = j - 1;
                 continue;
@@ -774,8 +808,7 @@ function splitSentences(text: string): string[] {
 
         // Not a boundary: known abbreviation  e.g. "Dr."
         if (ch === '.') {
-            // Extract the word before the period
-            const before = current.slice(0, -1); // drop the period
+            const before = text.substring(start, i);
             const wordMatch = before.match(/([A-Za-z]+)$/);
             if (wordMatch) {
                 const word = wordMatch[1].toLowerCase();
@@ -791,14 +824,15 @@ function splitSentences(text: string): string[] {
             }
         }
 
-        // It's a sentence boundary
-        sentences.push(current.trim());
-        current = '';
+        // It's a sentence boundary — extract via substring (no incremental concat)
+        const sentence = text.substring(start, j).trim();
+        if (sentence) sentences.push(sentence);
+        start = j;
         i = j - 1; // advance past absorbed chars
     }
 
     // Don't lose trailing fragment
-    const remaining = current.trim();
+    const remaining = text.substring(start).trim();
     if (remaining) {
         sentences.push(remaining);
     }
@@ -1032,32 +1066,38 @@ export function createReadingProgress(
 
 import type { BeatType, TransitionType } from '../types/cinematifier';
 
+const VALID_BEAT_TYPES = new Set<string>([
+    'BEAT',
+    'PAUSE',
+    'LONG PAUSE',
+    'SILENCE',
+    'TENSION',
+    'RELEASE',
+]);
+const VALID_TRANSITION_TYPES = new Set<string>([
+    'FADE IN',
+    'FADE OUT',
+    'CUT TO',
+    'DISSOLVE TO',
+    'SMASH CUT',
+    'MATCH CUT',
+    'JUMP CUT',
+    'WIPE TO',
+    'IRIS IN',
+    'IRIS OUT',
+]);
+
 function validateBeatType(type: string): BeatType {
-    const valid: BeatType[] = ['BEAT', 'PAUSE', 'LONG PAUSE', 'SILENCE', 'TENSION', 'RELEASE'];
-    return valid.includes(type as BeatType) ? (type as BeatType) : 'BEAT';
+    return VALID_BEAT_TYPES.has(type) ? (type as BeatType) : 'BEAT';
 }
 
 function validateTransitionType(type: string): TransitionType {
-    const valid: TransitionType[] = [
-        'FADE IN',
-        'FADE OUT',
-        'CUT TO',
-        'DISSOLVE TO',
-        'SMASH CUT',
-        'MATCH CUT',
-        'JUMP CUT',
-        'WIPE TO',
-        'IRIS IN',
-        'IRIS OUT',
-    ];
-    return valid.includes(type as TransitionType) ? (type as TransitionType) : 'CUT TO';
+    return VALID_TRANSITION_TYPES.has(type) ? (type as TransitionType) : 'CUT TO';
 }
-
-export { CINEMATIFICATION_SYSTEM_PROMPT };
 
 // ─── Metadata Orchestration ────────────────────────────────
 
-export interface NarrativeMetadata {
+interface NarrativeMetadata {
     genre?: import('../types/cinematifier').BookGenre;
     toneTags?: string[];
     characters: Record<string, import('../types/cinematifier').CharacterAppearance>;

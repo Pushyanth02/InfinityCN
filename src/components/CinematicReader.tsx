@@ -35,6 +35,9 @@ import { saveBook, saveReadingProgress, loadReadingProgress } from '../lib/cinem
 import { createReadingProgress } from '../lib/cinematifier';
 import type { CinematicBlock, Chapter } from '../types/cinematifier';
 
+// Hoisted constant to avoid recreating the threshold array on every render cycle
+const OBSERVER_THRESHOLDS: number[] = [0, 0.25, 0.5, 0.75, 1];
+
 interface CinematicReaderProps {
     onClose: () => void;
 }
@@ -552,6 +555,7 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
     useEffect(() => {
         if (readerMode !== 'cinematified' || !contentRef.current) return;
 
+        const root = contentRef.current;
         const observer = new IntersectionObserver(
             (entries: IntersectionObserverEntry[]) => {
                 let maxRatio = 0;
@@ -571,23 +575,22 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                 }
             },
             {
-                root: contentRef.current,
+                root,
                 rootMargin: '-20% 0px -40% 0px',
-                threshold: [0, 0.25, 0.5, 0.75, 1],
+                threshold: OBSERVER_THRESHOLDS,
             },
         );
 
         // Small delay to allow react blocks to render before observing
         const timeout = setTimeout(() => {
-            const blocks = document.querySelectorAll('.cine-block');
-            blocks.forEach(block => observer.observe(block));
+            root.querySelectorAll('.cine-block').forEach(block => observer.observe(block));
         }, 100);
 
         return () => {
             clearTimeout(timeout);
             observer.disconnect();
         };
-    }, [currentChapter, readerMode, isProcessingChapter]);
+    }, [currentChapter, readerMode]);
 
     // Tension-based Auto-Scroll Pacing
     useEffect(() => {

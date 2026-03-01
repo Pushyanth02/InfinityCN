@@ -1,5 +1,9 @@
 /**
- * InfinityCN — Optional API Proxy Server
+ * @deprecated This file is superseded by server/src/index.ts which adds
+ * Redis caching, RabbitMQ job queues, and SSE progress streaming.
+ * Use `cd server && npm run dev` instead of `npx tsx server/proxy.ts`.
+ *
+ * InfinityCN — Legacy API Proxy Server
  *
  * Proxies AI provider requests so API keys stay server-side.
  * Run: npx tsx server/proxy.ts

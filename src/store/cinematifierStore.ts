@@ -35,14 +35,27 @@ const API_KEY_FIELDS = [
 const encryptedStorage: StateStorage = {
     getItem: (name: string): string | null => {
         // Return raw value; async decryption happens in onRehydrateStorage
-        return localStorage.getItem(name);
+        try {
+            return localStorage.getItem(name);
+        } catch {
+            // localStorage may be unavailable (private browsing, quota exceeded, etc.)
+            return null;
+        }
     },
     setItem: (name: string, value: string): void => {
         // Store immediately; encryption is handled in partialize
-        localStorage.setItem(name, value);
+        try {
+            localStorage.setItem(name, value);
+        } catch {
+            // Silently fail — user will lose settings on reload but app still works
+        }
     },
     removeItem: (name: string): void => {
-        localStorage.removeItem(name);
+        try {
+            localStorage.removeItem(name);
+        } catch {
+            // Silently fail
+        }
     },
 };
 
@@ -398,7 +411,9 @@ export const useCinematifierStore = create<CinematifierState>()(
                 // Trigger async encryption for next persist cycle (fire-and-forget)
                 void encryptApiKeys(state);
 
-                // Return with cached encrypted keys (or empty on first run)
+                // Return with cached encrypted keys.
+                // If cache not yet populated (first run), use empty string to avoid
+                // persisting plaintext keys — they'll be encrypted on the next cycle.
                 return {
                     readerMode: state.readerMode,
                     fontSize: state.fontSize,
@@ -440,7 +455,12 @@ export const useCinematifierStore = create<CinematifierState>()(
                     }
 
                     // Read raw persisted data to get encrypted keys
-                    const rawData = localStorage.getItem('cinematifier-storage');
+                    let rawData: string | null = null;
+                    try {
+                        rawData = localStorage.getItem('cinematifier-storage');
+                    } catch {
+                        // localStorage unavailable
+                    }
                     if (!rawData) return;
 
                     try {

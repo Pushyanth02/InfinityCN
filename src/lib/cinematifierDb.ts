@@ -68,45 +68,6 @@ export async function loadLatestBook(): Promise<Book | null> {
     return book ?? null;
 }
 
-/** Load a specific book by ID */
-export async function loadBook(id: string): Promise<Book | null> {
-    const book = await db.books.get(id);
-    return book ?? null;
-}
-
-/** Update a single chapter within a stored book */
-export async function updateBookChapter(
-    bookId: string,
-    chapterIndex: number,
-    updates: Partial<Book['chapters'][number]>,
-): Promise<void> {
-    const book = await db.books.get(bookId);
-    if (!book || chapterIndex < 0 || chapterIndex >= book.chapters.length) return;
-
-    book.chapters[chapterIndex] = { ...book.chapters[chapterIndex], ...updates };
-    await db.books.put(book);
-}
-
-/** Delete a book from IndexedDB */
-export async function deleteBook(id: string): Promise<void> {
-    await db.books.delete(id);
-    // Also delete associated reading progress
-    await db.readingProgress.where('bookId').equals(id).delete();
-}
-
-/** List all stored books (metadata only, no chapter content) */
-export async function listBooks(): Promise<
-    Pick<Book, 'id' | 'title' | 'createdAt' | 'totalWordCount'>[]
-> {
-    const books = await db.books.orderBy('createdAt').reverse().toArray();
-    return books.map(b => ({
-        id: b.id,
-        title: b.title,
-        createdAt: b.createdAt,
-        totalWordCount: b.totalWordCount,
-    }));
-}
-
 // ─── ReadingProgress Operations ───────────────────────────────
 
 /** Save or update reading progress */

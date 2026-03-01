@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useCinematifierStore, getCinematifierAIConfig } from '../store/cinematifierStore';
 import { testConnection } from '../lib/ai';
+import { isServerProcessingAvailable } from '../lib/serverJobs';
 import type { AIConnectionStatus } from '../types/cinematifier';
 
 type Provider =
@@ -236,6 +237,14 @@ export const CinematifierSettings: React.FC<CinematifierSettingsProps> = ({ onCl
 
     return (
         <div className="cine-settings-panel">
+            {/* Server Processing Indicator */}
+            {isServerProcessingAvailable() && (
+                <div className="cine-server-badge">
+                    <span className="cine-server-dot" />
+                    Server processing available
+                </div>
+            )}
+
             {/* Provider Selection */}
             <div className="cine-provider-grid">
                 {PROVIDERS.map(p => (
@@ -463,9 +472,29 @@ export const CinematifierSettings: React.FC<CinematifierSettingsProps> = ({ onCl
                 .spinning {
                     animation: spin 1s linear infinite;
                 }
-                
+
                 @keyframes spin {
                     to { transform: rotate(360deg); }
+                }
+
+                .cine-server-badge {
+                    display: flex;
+                    align-items: center;
+                    gap: 0.5rem;
+                    padding: 0.5rem 0.75rem;
+                    background: rgba(34, 197, 94, 0.1);
+                    border-radius: 6px;
+                    font-size: 0.75rem;
+                    color: #22c55e;
+                    font-weight: 500;
+                }
+
+                .cine-server-dot {
+                    width: 6px;
+                    height: 6px;
+                    border-radius: 50%;
+                    background: #22c55e;
+                    flex-shrink: 0;
                 }
             `}</style>
         </div>

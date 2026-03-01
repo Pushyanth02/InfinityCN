@@ -1051,6 +1051,19 @@
     }
 }
 
+@keyframes cineFadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+.cine-fade-in {
+    animation: cineFadeIn 0.2s ease-out;
+}
+
 .cine-processing-phase {
     font-size: 1.125rem;
     color: var(--cine-text-primary);

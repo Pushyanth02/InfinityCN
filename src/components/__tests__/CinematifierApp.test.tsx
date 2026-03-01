@@ -21,7 +21,6 @@ vi.mock('dexie', () => {
 vi.mock('../../lib/cinematifierDb', () => ({
     saveBook: vi.fn().mockResolvedValue(undefined),
     loadLatestBook: vi.fn().mockResolvedValue(null),
-    loadBook: vi.fn().mockResolvedValue(null),
     saveReadingProgress: vi.fn().mockResolvedValue(undefined),
     loadReadingProgress: vi.fn().mockResolvedValue(null),
 }));

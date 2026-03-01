@@ -43,6 +43,10 @@ export interface AIConfig {
     deepseekKey: string;
     ollamaUrl: string;
     ollamaModel: string;
+    /** When true, skip JSON response formatting and use higher token limits (for cinematification) */
+    rawTextMode?: boolean;
+    /** Custom system prompt to replace the default JSON-oriented one */
+    systemPrompt?: string;
 }
 
 // ─── MODEL PRESETS ─────────────────────────────────────────────────────────────
@@ -62,7 +66,7 @@ export const MODEL_PRESETS: Record<string, ModelPreset> = {
         maxTokens: 2048,
         temperature: 0.4,
         supportsJSON: false,
-        supportsStreaming: false,
+        supportsStreaming: true,
         rateLimitRPM: 60,
     },
     gemini: {
@@ -102,7 +106,7 @@ export const MODEL_PRESETS: Record<string, ModelPreset> = {
         maxTokens: 4096,
         temperature: 0.4,
         supportsJSON: true,
-        supportsStreaming: false,
+        supportsStreaming: true,
         rateLimitRPM: 60,
     },
     ollama: {
@@ -110,7 +114,7 @@ export const MODEL_PRESETS: Record<string, ModelPreset> = {
         maxTokens: 4096,
         temperature: 0.4,
         supportsJSON: true,
-        supportsStreaming: false,
+        supportsStreaming: true,
         rateLimitRPM: 120,
     },
 };
@@ -169,17 +173,23 @@ function getFromCache(key: string): string | null {
         apiCache.delete(key);
         return null;
     }
-    // Move to end of Map insertion order (LRU touch)
-    apiCache.delete(key);
-    apiCache.set(key, entry);
+    // LRU touch: just refresh timestamp (avoids Map reordering overhead)
+    entry.timestamp = Date.now();
     return entry.value;
 }
 
 function setCache(key: string, value: string, provider: string): void {
-    // O(1) LRU eviction: Map preserves insertion order — oldest is first
     if (apiCache.size >= MAX_CACHE_SIZE) {
-        const oldestKey = apiCache.keys().next().value;
-        if (oldestKey !== undefined) apiCache.delete(oldestKey);
+        // Evict the entry with the oldest timestamp
+        let oldestKey = '';
+        let oldestTs = Infinity;
+        for (const [k, v] of apiCache) {
+            if (v.timestamp < oldestTs) {
+                oldestTs = v.timestamp;
+                oldestKey = k;
+            }
+        }
+        if (oldestKey) apiCache.delete(oldestKey);
     }
     apiCache.set(key, { value, timestamp: Date.now(), provider });
 }
@@ -367,6 +377,10 @@ async function callAI(prompt: string, config: AIConfig): Promise<string> {
     if (!preset) throw new Error(`No model preset configured for provider "${config.provider}".`);
     let result = '';
 
+    const sysPrompt = config.systemPrompt ?? SYSTEM_PROMPT;
+    const useJSON = !config.rawTextMode;
+    const maxTokens = config.rawTextMode ? Math.min(preset.maxTokens, 4096) : 800;
+
     // ── CHROME NANO ──────────────────────────────────────────
     if (config.provider === 'chrome') {
         if (!window.ai?.languageModel) {
@@ -379,7 +393,7 @@ async function callAI(prompt: string, config: AIConfig): Promise<string> {
             throw new Error('Chrome AI model is unavailable (may need to download).');
 
         const session = await window.ai.languageModel.create({
-            systemPrompt: SYSTEM_PROMPT,
+            systemPrompt: sysPrompt,
         });
         try {
             result = await session.prompt(prompt);
@@ -394,14 +408,14 @@ async function callAI(prompt: string, config: AIConfig): Promise<string> {
 
         const geminiBody = {
             system_instruction: {
-                parts: [{ text: SYSTEM_PROMPT }],
+                parts: [{ text: sysPrompt }],
             },
             contents: [{ parts: [{ text: prompt }] }],
             tools: config.useSearchGrounding ? [{ google_search: {} }] : undefined,
             generationConfig: {
-                response_mime_type: 'application/json',
+                ...(useJSON ? { response_mime_type: 'application/json' } : {}),
                 temperature: preset.temperature,
-                maxOutputTokens: 800,
+                maxOutputTokens: maxTokens,
             },
         };
 
@@ -433,11 +447,11 @@ async function callAI(prompt: string, config: AIConfig): Promise<string> {
         const openaiBody = {
             model: preset.model,
             messages: [
-                { role: 'system', content: SYSTEM_PROMPT },
+                { role: 'system', content: sysPrompt },
                 { role: 'user', content: prompt },
             ],
-            response_format: { type: 'json_object' },
-            max_tokens: 800,
+            ...(useJSON ? { response_format: { type: 'json_object' } } : {}),
+            max_tokens: maxTokens,
             temperature: preset.temperature,
         };
         const res = API_PROXY_URL
@@ -462,8 +476,8 @@ async function callAI(prompt: string, config: AIConfig): Promise<string> {
             throw new Error('Anthropic API key is not set.');
         const anthropicBody = {
             model: preset.model,
-            max_tokens: 800,
-            system: SYSTEM_PROMPT,
+            max_tokens: maxTokens,
+            system: sysPrompt,
             messages: [{ role: 'user', content: prompt }],
             temperature: preset.temperature,
         };
@@ -497,11 +511,11 @@ async function callAI(prompt: string, config: AIConfig): Promise<string> {
         const groqBody = {
             model: preset.model,
             messages: [
-                { role: 'system', content: SYSTEM_PROMPT },
+                { role: 'system', content: sysPrompt },
                 { role: 'user', content: prompt },
             ],
-            response_format: { type: 'json_object' },
-            max_completion_tokens: 800,
+            ...(useJSON ? { response_format: { type: 'json_object' } } : {}),
+            max_completion_tokens: maxTokens,
             temperature: preset.temperature,
         };
         const res = API_PROXY_URL
@@ -526,11 +540,11 @@ async function callAI(prompt: string, config: AIConfig): Promise<string> {
         const deepseekBody = {
             model: preset.model,
             messages: [
-                { role: 'system', content: SYSTEM_PROMPT },
+                { role: 'system', content: sysPrompt },
                 { role: 'user', content: prompt },
             ],
-            response_format: { type: 'json_object' },
-            max_tokens: 800,
+            ...(useJSON ? { response_format: { type: 'json_object' } } : {}),
+            max_tokens: maxTokens,
             temperature: preset.temperature,
         };
         const res = API_PROXY_URL
@@ -553,9 +567,9 @@ async function callAI(prompt: string, config: AIConfig): Promise<string> {
     else if (config.provider === 'ollama') {
         const ollamaBody = {
             model: config.ollamaModel || preset.model,
-            prompt: `${SYSTEM_PROMPT}\n\n${prompt}`,
+            prompt: `${sysPrompt}\n\n${prompt}`,
             stream: false,
-            format: 'json',
+            ...(useJSON ? { format: 'json' } : {}),
         };
         const res = API_PROXY_URL
             ? await proxyFetch('ollama', ollamaBody)
@@ -621,6 +635,58 @@ export async function callAIWithDedup(prompt: string, config: AIConfig): Promise
 // ═══════════════════════════════════════════════════════════
 
 /**
+ * Shared SSE stream parser. Reads chunks, buffers partial lines,
+ * and yields deltas extracted by the provider-specific extractor.
+ */
+async function* parseSSEStream(
+    reader: ReadableStreamDefaultReader<Uint8Array>,
+    extractDelta: (data: unknown) => string | undefined,
+): AsyncGenerator<string> {
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith(':')) continue;
+            if (trimmed === 'data: [DONE]') return;
+            if (trimmed.startsWith('data: ')) {
+                try {
+                    const data = JSON.parse(trimmed.slice(6));
+                    const delta = extractDelta(data);
+                    if (delta) yield delta;
+                } catch {
+                    // Ignore malformed SSE chunks
+                }
+            }
+        }
+    }
+}
+
+// SSE delta extractors per provider family
+const sseExtractors = {
+    openai: (data: unknown) =>
+        (data as { choices?: Array<{ delta?: { content?: string } }> }).choices?.[0]?.delta
+            ?.content,
+    gemini: (data: unknown) =>
+        (data as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> })
+            .candidates?.[0]?.content?.parts?.[0]?.text,
+    anthropic: (data: unknown) => {
+        const d = data as { type?: string; delta?: { type?: string; text?: string } };
+        return d.type === 'content_block_delta' && d.delta?.type === 'text_delta'
+            ? d.delta.text
+            : undefined;
+    },
+} as const;
+
+/**
  * Streaming entry point. Yields chunks of text as they arrive.
  * Dedup and caching are not applied to streaming to keep things real-time.
  */
@@ -632,6 +698,8 @@ export async function* streamAI(prompt: string, config: AIConfig): AsyncGenerato
     const preset = MODEL_PRESETS[config.provider];
     if (!preset) throw new Error(`No model preset configured for provider "${config.provider}".`);
 
+    const sysPrompt = config.systemPrompt ?? SYSTEM_PROMPT;
+    const maxTokens = config.rawTextMode ? Math.min(preset.maxTokens, 4096) : 800;
     // Acquire rate limit token
     const limiter = getRateLimiter(config.provider);
     await limiter.acquire();
@@ -641,7 +709,7 @@ export async function* streamAI(prompt: string, config: AIConfig): AsyncGenerato
         if (!window.ai?.languageModel) {
             throw new Error('Chrome AI is not available.');
         }
-        const session = await window.ai.languageModel.create({ systemPrompt: SYSTEM_PROMPT });
+        const session = await window.ai.languageModel.create({ systemPrompt: sysPrompt });
         try {
             const stream = session.promptStreaming(prompt);
             let previousLength = 0;
@@ -661,7 +729,7 @@ export async function* streamAI(prompt: string, config: AIConfig): AsyncGenerato
     if (config.provider === 'ollama') {
         const ollamaBody = {
             model: config.ollamaModel || preset.model,
-            prompt: `${SYSTEM_PROMPT}\n\n${prompt}`,
+            prompt: `${sysPrompt}\n\n${prompt}`,
             stream: true,
         };
         const res = API_PROXY_URL
@@ -723,10 +791,11 @@ export async function* streamAI(prompt: string, config: AIConfig): AsyncGenerato
         const body = {
             model: preset.model,
             messages: [
-                { role: 'system', content: SYSTEM_PROMPT },
+                { role: 'system', content: sysPrompt },
                 { role: 'user', content: prompt },
             ],
             stream: true,
+            max_tokens: maxTokens,
             temperature: preset.temperature,
         };
 
@@ -734,34 +803,7 @@ export async function* streamAI(prompt: string, config: AIConfig): AsyncGenerato
         if (!res.ok) throw new Error(`${config.provider} error ${res.status}`);
         if (!res.body) throw new Error('No response body');
 
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop() ?? ''; // keep the last incomplete line in buffer
-
-            for (const line of lines) {
-                const trimmed = line.trim();
-                // Both standard SSE and dummy keepalives
-                if (!trimmed || trimmed.startsWith(':')) continue;
-                if (trimmed === 'data: [DONE]') break;
-                if (trimmed.startsWith('data: ')) {
-                    try {
-                        const data = JSON.parse(trimmed.slice(6));
-                        const delta = data.choices?.[0]?.delta?.content;
-                        if (delta) yield delta;
-                    } catch {
-                        // Ignore parse errors
-                    }
-                }
-            }
-        }
+        yield* parseSSEStream(res.body.getReader(), sseExtractors.openai);
         return;
     }
 
@@ -770,10 +812,10 @@ export async function* streamAI(prompt: string, config: AIConfig): AsyncGenerato
         if (!API_PROXY_URL && !config.geminiKey) throw new Error('Gemini API key is not set.');
 
         const geminiBody = {
-            system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+            system_instruction: { parts: [{ text: sysPrompt }] },
             contents: [{ parts: [{ text: prompt }] }],
             tools: config.useSearchGrounding ? [{ google_search: {} }] : undefined,
-            generationConfig: { temperature: preset.temperature },
+            generationConfig: { temperature: preset.temperature, maxOutputTokens: maxTokens },
         };
 
         const url = API_PROXY_URL
@@ -787,32 +829,7 @@ export async function* streamAI(prompt: string, config: AIConfig): AsyncGenerato
         if (!res.ok) throw new Error(`Gemini error ${res.status}`);
         if (!res.body) throw new Error('No response body');
 
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop() ?? '';
-
-            for (const line of lines) {
-                const trimmed = line.trim();
-                if (!trimmed || trimmed.startsWith(':')) continue;
-                if (trimmed.startsWith('data: ')) {
-                    try {
-                        const data = JSON.parse(trimmed.slice(6));
-                        const delta = data.candidates?.[0]?.content?.parts?.[0]?.text;
-                        if (delta) yield delta;
-                    } catch {
-                        // Ignore malformed SSE chunks
-                    }
-                }
-            }
-        }
+        yield* parseSSEStream(res.body.getReader(), sseExtractors.gemini);
         return;
     }
 
@@ -823,8 +840,8 @@ export async function* streamAI(prompt: string, config: AIConfig): AsyncGenerato
 
         const anthropicBody = {
             model: preset.model,
-            max_tokens: 1500,
-            system: SYSTEM_PROMPT,
+            max_tokens: maxTokens,
+            system: sysPrompt,
             messages: [{ role: 'user', content: prompt }],
             temperature: preset.temperature,
             stream: true,
@@ -851,36 +868,7 @@ export async function* streamAI(prompt: string, config: AIConfig): AsyncGenerato
         if (!res.ok) throw new Error(`Anthropic error ${res.status}`);
         if (!res.body) throw new Error('No response body');
 
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop() ?? '';
-
-            for (const line of lines) {
-                const trimmed = line.trim();
-                if (!trimmed || trimmed.startsWith(':')) continue;
-                if (trimmed.startsWith('data: ')) {
-                    try {
-                        const data = JSON.parse(trimmed.slice(6));
-                        if (
-                            data.type === 'content_block_delta' &&
-                            data.delta?.type === 'text_delta'
-                        ) {
-                            yield data.delta.text;
-                        }
-                    } catch {
-                        // Ignore malformed SSE chunks
-                    }
-                }
-            }
-        }
+        yield* parseSSEStream(res.body.getReader(), sseExtractors.anthropic);
         return;
     }
 

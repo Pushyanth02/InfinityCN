@@ -5,7 +5,6 @@
  */
 
 import React, { useState, useCallback, useRef, useEffect, lazy, Suspense } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { Film, Upload, Settings, X, Sparkles, AlertCircle, Moon, Sun } from 'lucide-react';
 import { useCinematifierStore, getCinematifierAIConfig } from '../store/cinematifierStore';
 import { extractText, detectFormat, ACCEPTED_EXTENSIONS } from '../lib/pdfWorker';
@@ -18,8 +17,14 @@ import {
     reconstructParagraphs,
     extractOverallMetadata,
 } from '../lib/cinematifier';
-import { saveBook, loadLatestBook } from '../lib/cinematifierDb';
+import {
+    isServerProcessingAvailable,
+    submitBookForServerProcessing,
+    connectToJobEvents,
+    getProcessedChapter,
+} from '../lib/serverJobs';
 import type { Book, ProcessingProgress, CharacterAppearance } from '../types/cinematifier';
+import { toClientBlocks } from '../types/cinematifier';
 
 // Lazy load components
 const CinematicReader = lazy(() =>
@@ -130,12 +135,7 @@ const ProcessingOverlay: React.FC<ProcessingOverlayProps> = ({ progress }) => {
     if (!progress) return null;
 
     return (
-        <motion.div
-            className="cine-processing-overlay"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-        >
+        <div className="cine-processing-overlay cine-fade-in">
             <div className="cine-processing-content">
                 <div className="cine-processing-spinner" />
                 <p className="cine-processing-phase">{progress.message}</p>
@@ -147,7 +147,7 @@ const ProcessingOverlay: React.FC<ProcessingOverlayProps> = ({ progress }) => {
                 </div>
                 <span className="cine-processing-percent">{progress.percentComplete}%</span>
             </div>
-        </motion.div>
+        </div>
     );
 };
 
@@ -175,13 +175,15 @@ export const CinematifierApp: React.FC = () => {
     // Hydrate book from IndexedDB on mount
     useEffect(() => {
         if (!book) {
-            loadLatestBook()
-                .then(stored => {
-                    if (stored) setBook(stored);
-                })
-                .catch(() => {
-                    /* IndexedDB unavailable */
-                });
+            import('../lib/cinematifierDb').then(({ loadLatestBook }) =>
+                loadLatestBook()
+                    .then(stored => {
+                        if (stored) setBook(stored);
+                    })
+                    .catch(() => {
+                        /* IndexedDB unavailable */
+                    }),
+            );
         }
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -237,9 +239,107 @@ export const CinematifierApp: React.FC = () => {
 
                 setBook(bookWithId);
 
-                // Phase 3: Cinematify ALL chapters upfront
+                // ── Server-side processing path ──────────────────────
+                // If proxy is available and provider is a server-compatible one,
+                // submit the job to the server and track progress via SSE.
                 const config = getCinematifierAIConfig();
                 const totalChapters = bookWithId.chapters.length;
+
+                if (
+                    isServerProcessingAvailable() &&
+                    config.provider !== 'none' &&
+                    config.provider !== 'chrome'
+                ) {
+                    setProgress({
+                        phase: 'cinematifying',
+                        currentChapter: 0,
+                        totalChapters,
+                        percentComplete: 50,
+                        message: 'Submitting to server for processing...',
+                    });
+
+                    const chaptersPayload = bookWithId.chapters.map(ch => ({
+                        title: ch.title,
+                        originalText: ch.originalText,
+                    }));
+
+                    await submitBookForServerProcessing(
+                        bookWithId.id,
+                        bookWithId.title,
+                        chaptersPayload,
+                        config.provider,
+                    );
+
+                    // Connect SSE and wait for completion
+                    await new Promise<void>((resolve, reject) => {
+                        const cleanup = connectToJobEvents(
+                            bookWithId.id,
+                            // onProgress
+                            event => {
+                                const processed = event.processedChapters ?? 0;
+                                const total = event.totalChapters ?? totalChapters;
+                                const pct = 50 + Math.round((processed / total) * 45);
+                                setProgress({
+                                    phase: 'cinematifying',
+                                    currentChapter: (event.chapterIndex ?? processed) + 1,
+                                    totalChapters: total,
+                                    percentComplete: pct,
+                                    message: `Server processing chapter ${(event.chapterIndex ?? processed) + 1} of ${total}...`,
+                                });
+                            },
+                            // onComplete
+                            async () => {
+                                try {
+                                    // Fetch all chapter results from server
+                                    for (let i = 0; i < totalChapters; i++) {
+                                        const result = await getProcessedChapter(bookWithId.id, i);
+                                        updateChapter(i, {
+                                            cinematifiedBlocks: toClientBlocks(result.blocks),
+                                            cinematifiedText: result.rawText,
+                                            isProcessed: true,
+                                        });
+                                    }
+                                    resolve();
+                                } catch (err) {
+                                    reject(err);
+                                }
+                            },
+                            // onError
+                            errorMsg => {
+                                cleanup();
+                                reject(new Error(errorMsg));
+                            },
+                        );
+                    });
+
+                    // Finalize
+                    updateBook({ status: 'ready' as const });
+
+                    setProgress({
+                        phase: 'complete',
+                        currentChapter: totalChapters,
+                        totalChapters,
+                        percentComplete: 100,
+                        message: 'Ready to read!',
+                    });
+
+                    const finalBook = useCinematifierStore.getState().book;
+                    if (finalBook) {
+                        import('../lib/cinematifierDb').then(({ saveBook }) =>
+                            saveBook(finalBook).catch(err =>
+                                console.warn('[Cinematifier] Failed to persist book:', err),
+                            ),
+                        );
+                    }
+
+                    await new Promise(r => setTimeout(r, 500));
+                    setProcessing(false);
+                    setShowReader(true);
+                    return;
+                }
+
+                // ── Client-side processing path (existing) ───────────
+                // Phase 3: Cinematify ALL chapters upfront
                 const progressPerChapter = 45 / totalChapters; // 50% to 95% across all chapters
 
                 // Accumulate book-level metadata without mutating bookWithId
@@ -365,8 +465,10 @@ export const CinematifierApp: React.FC = () => {
                 // Persist processed book to IndexedDB
                 const finalBook = useCinematifierStore.getState().book;
                 if (finalBook) {
-                    saveBook(finalBook).catch(err =>
-                        console.warn('[Cinematifier] Failed to persist book:', err),
+                    import('../lib/cinematifierDb').then(({ saveBook }) =>
+                        saveBook(finalBook).catch((err: unknown) =>
+                            console.warn('[Cinematifier] Failed to persist book:', err),
+                        ),
                     );
                 }
 
@@ -492,17 +594,13 @@ export const CinematifierApp: React.FC = () => {
 
                         {/* Error Display */}
                         {error && (
-                            <motion.div
-                                className="cine-error"
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                            >
+                            <div className="cine-error cine-fade-in">
                                 <AlertCircle size={24} />
                                 <p className="cine-error-text">{error}</p>
                                 <button className="cine-btn" onClick={() => setError(null)}>
                                     Dismiss
                                 </button>
-                            </motion.div>
+                            </div>
                         )}
 
                         {/* AI Provider Status */}
@@ -526,67 +624,58 @@ export const CinematifierApp: React.FC = () => {
             )}
 
             {/* Processing Overlay */}
-            <AnimatePresence>
-                {isProcessing && <ProcessingOverlay progress={processingProgress} />}
-            </AnimatePresence>
+            {isProcessing && <ProcessingOverlay progress={processingProgress} />}
 
             {/* AI Settings Modal */}
-            <AnimatePresence>
-                {showSettings && (
-                    <motion.div
-                        className="cine-settings-modal-backdrop"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        onClick={() => setShowSettings(false)}
+            {showSettings && (
+                <div
+                    className="cine-settings-modal-backdrop cine-fade-in"
+                    onClick={() => setShowSettings(false)}
+                    style={{
+                        position: 'fixed',
+                        inset: 0,
+                        background: 'rgba(0, 0, 0, 0.8)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        zIndex: 200,
+                    }}
+                >
+                    <div
+                        className="cine-fade-in"
+                        onClick={e => e.stopPropagation()}
                         style={{
-                            position: 'fixed',
-                            inset: 0,
-                            background: 'rgba(0, 0, 0, 0.8)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            zIndex: 200,
+                            background: 'var(--cine-bg-secondary)',
+                            borderRadius: '12px',
+                            padding: '1.5rem',
+                            maxWidth: '500px',
+                            width: '90%',
+                            maxHeight: '80vh',
+                            overflow: 'auto',
                         }}
                     >
-                        <motion.div
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.95 }}
-                            onClick={e => e.stopPropagation()}
+                        <div
                             style={{
-                                background: 'var(--cine-bg-secondary)',
-                                borderRadius: '12px',
-                                padding: '1.5rem',
-                                maxWidth: '500px',
-                                width: '90%',
-                                maxHeight: '80vh',
-                                overflow: 'auto',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                marginBottom: '1rem',
                             }}
                         >
-                            <div
-                                style={{
-                                    display: 'flex',
-                                    justifyContent: 'space-between',
-                                    alignItems: 'center',
-                                    marginBottom: '1rem',
-                                }}
+                            <h2 style={{ margin: 0, fontSize: '1.25rem' }}>AI Settings</h2>
+                            <button
+                                className="cine-btn cine-btn--icon"
+                                onClick={() => setShowSettings(false)}
                             >
-                                <h2 style={{ margin: 0, fontSize: '1.25rem' }}>AI Settings</h2>
-                                <button
-                                    className="cine-btn cine-btn--icon"
-                                    onClick={() => setShowSettings(false)}
-                                >
-                                    <X size={20} />
-                                </button>
-                            </div>
-                            <Suspense fallback={<div>Loading...</div>}>
-                                <CinematifierSettings onClose={() => setShowSettings(false)} />
-                            </Suspense>
-                        </motion.div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <Suspense fallback={<div>Loading...</div>}>
+                            <CinematifierSettings onClose={() => setShowSettings(false)} />
+                        </Suspense>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

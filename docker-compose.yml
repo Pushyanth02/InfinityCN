@@ -1,0 +1,103 @@
+# docker-compose.yml — InfinityCN infrastructure stack
+#
+# Services: Redis, RabbitMQ, API server, Worker(s)
+# Usage:
+#   docker compose up              — start all services
+#   docker compose up --scale worker=3  — run 3 workers
+
+services:
+  # ── Redis ──────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy noeviction
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  # ── RabbitMQ ───────────────────────────────────────────────
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    ports:
+      - "5672:5672"
+      - "15672:15672"  # Management UI
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-infinitycn}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-infinitycn_dev}
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  # ── API Server ─────────────────────────────────────────────
+  api:
+    build:
+      context: ./server
+      target: api
+    ports:
+      - "3001:3001"
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      PORT: 3001
+      REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-infinitycn}:${RABBITMQ_PASS:-infinitycn_dev}@rabbitmq:5672
+      ALLOWED_ORIGINS: http://localhost:5173,http://localhost:4173
+      # AI provider keys (set via .env or docker-compose.override.yml)
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+      CACHE_TTL_SECONDS: ${CACHE_TTL_SECONDS:-1800}
+      MAX_TOKENS_CAP: ${MAX_TOKENS_CAP:-2048}
+    restart: unless-stopped
+
+  # ── Worker ─────────────────────────────────────────────────
+  worker:
+    build:
+      context: ./server
+      target: worker
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    deploy:
+      replicas: 2
+    environment:
+      REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-infinitycn}:${RABBITMQ_PASS:-infinitycn_dev}@rabbitmq:5672
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-1}
+      # AI provider keys
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+      CACHE_TTL_SECONDS: ${CACHE_TTL_SECONDS:-1800}
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+  rabbitmq-data:

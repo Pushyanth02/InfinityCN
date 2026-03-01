@@ -1,0 +1,7 @@
+node_modules
+dist
+.git
+.vercel
+*.md
+.env*
+!.env.example

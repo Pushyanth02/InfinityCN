@@ -87,7 +87,7 @@ export async function extractText(file: File): Promise<string> {
 
 // ─── PDF Extraction ───────────────────────────────────────
 
-export const extractTextFromPDF = async (file: File): Promise<string> => {
+const extractTextFromPDF = async (file: File): Promise<string> => {
     // Dynamic import: pdfjs-dist (~400KB) downloads only when this runs
     let pdfjsLib: Awaited<typeof import('pdfjs-dist')>;
     try {
@@ -119,7 +119,7 @@ export const extractTextFromPDF = async (file: File): Promise<string> => {
                     pdf.getPage(i).then(async page => {
                         const content = await page.getTextContent();
 
-                        let pageText = '';
+                        const textParts: string[] = [];
                         let lastY = -1;
                         for (const item of content.items as Array<{
                             str?: string;
@@ -128,13 +128,15 @@ export const extractTextFromPDF = async (file: File): Promise<string> => {
                             if (!item.str || !item.transform) continue;
                             const y = item.transform[5];
                             if (lastY !== -1 && Math.abs(y - lastY) > 5) {
-                                pageText += '\n';
+                                textParts.push('\n');
                             } else if (lastY !== -1 && item.str.trim()) {
-                                pageText += ' ';
+                                textParts.push(' ');
                             }
-                            pageText += item.str;
+                            textParts.push(item.str);
                             lastY = y;
                         }
+
+                        let pageText = textParts.join('');
 
                         // OCR Fallback for scanned/image-based pages (limited scope)
                         if (pageText.trim().length < 50 && ocrPagesUsed < MAX_OCR_PAGES) {
@@ -152,6 +154,9 @@ export const extractTextFromPDF = async (file: File): Promise<string> => {
                                     const dataUrl = canvas.toDataURL('image/png');
                                     const result = await Tesseract.recognize(dataUrl, 'eng');
                                     pageText = result.data.text;
+                                    // Release canvas memory
+                                    canvas.width = 0;
+                                    canvas.height = 0;
                                 }
                             } catch (ocrErr) {
                                 console.warn('[pdfWorker] OCR failed on page', i, ':', ocrErr);
@@ -177,23 +182,29 @@ export const extractTextFromPDF = async (file: File): Promise<string> => {
         const normalizeLine = (line: string): string =>
             line.trim().replace(/^\d{1,4}$/, '__PAGE_NUM__');
 
-        pages.forEach(page => {
+        // Pre-compute split lines and normalized forms once per page
+        const pageData = pages.map(page => {
             const lines = page
                 .split('\n')
                 .map(l => l.trim())
                 .filter(Boolean);
+            const normalized = lines.map(normalizeLine);
+            return { raw: page, lines, normalized };
+        });
+
+        pageData.forEach(({ lines, normalized }) => {
             if (lines.length === 0) return;
 
             // Top lines (headers)
             const topN = Math.min(SCAN_DEPTH, lines.length);
             for (let k = 0; k < topN; k++) {
-                const key = normalizeLine(lines[k]);
+                const key = normalized[k];
                 if (key) headerCandidates.set(key, (headerCandidates.get(key) || 0) + 1);
             }
             // Bottom lines (footers)
             const bottomStart = Math.max(0, lines.length - SCAN_DEPTH);
             for (let k = bottomStart; k < lines.length; k++) {
-                const key = normalizeLine(lines[k]);
+                const key = normalized[k];
                 if (key) footerCandidates.set(key, (footerCandidates.get(key) || 0) + 1);
             }
         });
@@ -210,20 +221,21 @@ export const extractTextFromPDF = async (file: File): Promise<string> => {
             if (count >= threshold) commonFooters.add(key);
         });
 
-        const cleanedPages = pages.map(page => {
-            const lines = page.split('\n');
+        const cleanedPages = pageData.map(({ raw }) => {
+            const lines = raw.split('\n');
             let startIdx = 0;
             let endIdx = lines.length - 1;
 
-            // Strip header lines from the top
+            // Strip header lines from the top (use cached normalized values)
+            const normalizedFull = lines.map(normalizeLine);
             while (startIdx <= endIdx && startIdx < SCAN_DEPTH) {
-                const norm = normalizeLine(lines[startIdx]);
+                const norm = normalizedFull[startIdx];
                 if (!norm || commonHeaders.has(norm)) startIdx++;
                 else break;
             }
             // Strip footer lines from the bottom
             while (endIdx >= startIdx && endIdx >= lines.length - SCAN_DEPTH) {
-                const norm = normalizeLine(lines[endIdx]);
+                const norm = normalizedFull[endIdx];
                 if (!norm || commonFooters.has(norm)) endIdx--;
                 else break;
             }
@@ -243,12 +255,29 @@ export const extractTextFromPDF = async (file: File): Promise<string> => {
 
 type UnzippedFiles = Record<string, Uint8Array>;
 
+/** Maximum decompressed size: 200 MB (zip bomb protection) */
+const MAX_DECOMPRESSED_SIZE = 200 * 1024 * 1024;
+
 async function unzipFile(file: File): Promise<UnzippedFiles> {
     const { unzipSync } = await import('fflate');
     const buffer = new Uint8Array(await file.arrayBuffer());
     try {
-        return unzipSync(buffer);
-    } catch {
+        const result = unzipSync(buffer);
+        // Check total decompressed size to prevent zip bomb attacks
+        let totalSize = 0;
+        for (const key of Object.keys(result)) {
+            totalSize += result[key].length;
+            if (totalSize > MAX_DECOMPRESSED_SIZE) {
+                throw new Error(
+                    `Decompressed content exceeds ${MAX_DECOMPRESSED_SIZE / (1024 * 1024)} MB limit. The file may be corrupted or malicious.`,
+                );
+            }
+        }
+        return result;
+    } catch (err) {
+        if (err instanceof Error && err.message.includes('Decompressed content exceeds')) {
+            throw err;
+        }
         throw new Error(`Failed to read ${file.name}. The file may be corrupted.`);
     }
 }
@@ -272,6 +301,10 @@ async function extractTextFromEPUB(file: File): Promise<string> {
     const parser = new DOMParser();
     const containerDoc = parser.parseFromString(containerXml, 'application/xml');
 
+    if (containerDoc.querySelector('parsererror')) {
+        throw new Error('Invalid EPUB: container.xml is malformed');
+    }
+
     const rootFileEl = containerDoc.querySelector('rootfile');
     const opfPath = rootFileEl?.getAttribute('full-path');
     if (!opfPath) {
@@ -286,6 +319,10 @@ async function extractTextFromEPUB(file: File): Promise<string> {
 
     const opfDir = opfPath.includes('/') ? opfPath.substring(0, opfPath.lastIndexOf('/') + 1) : '';
     const opfDoc = parser.parseFromString(decodeUTF8(opfData), 'application/xml');
+
+    if (opfDoc.querySelector('parsererror')) {
+        throw new Error('Invalid EPUB: content file is malformed');
+    }
 
     // Build manifest map: id → href
     const manifest = new Map<string, string>();

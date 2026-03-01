@@ -86,10 +86,31 @@ export type CinematicBlockType =
     | 'beat' // Dramatic pause/beat
     | 'transition' // Scene transition
     | 'title_card' // Chapter/scene title
-    | 'flashback_start'
-    | 'flashback_end'
-    | 'montage_start'
-    | 'montage_end';
+    | 'chapter_header'; // Chapter header
+
+/** Runtime list of valid CinematicBlockType values for server response validation */
+export const VALID_BLOCK_TYPES: readonly CinematicBlockType[] = [
+    'action',
+    'dialogue',
+    'inner_thought',
+    'sfx',
+    'beat',
+    'transition',
+    'title_card',
+    'chapter_header',
+];
+
+/** Safely convert server blocks (type: string) to typed CinematicBlock[] */
+export function toClientBlocks(
+    blocks: Array<{ type: string; [key: string]: unknown }>,
+): CinematicBlock[] {
+    return blocks.map(b => ({
+        ...b,
+        type: (VALID_BLOCK_TYPES as readonly string[]).includes(b.type)
+            ? (b.type as CinematicBlockType)
+            : 'action',
+    })) as CinematicBlock[];
+}
 
 export interface CinematicBlock {
     id: string;
@@ -166,17 +187,6 @@ export interface ReadingProgress {
 export type ReaderMode = 'original' | 'cinematified' | 'side-by-side';
 
 export type ImmersionLevel = 'minimal' | 'balanced' | 'cinematic';
-
-export interface ReaderState {
-    mode: ReaderMode;
-    currentChapterIndex: number;
-    scrollPosition: number;
-    fontSize: number;
-    lineSpacing: number; // Line height multiplier (1.4 - 2.4)
-    immersionLevel: ImmersionLevel;
-    dyslexiaFont: boolean;
-    autoScrollSpeed: number; // 0 = off, 1-10 = speed levels
-}
 
 // ─── Processing State ──────────────────────────────────────────────────────────
 
