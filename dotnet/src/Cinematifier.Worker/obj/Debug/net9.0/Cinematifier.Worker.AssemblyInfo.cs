@@ -10,10 +10,11 @@
 using System;
 using System.Reflection;
 
+[assembly: Microsoft.Extensions.Configuration.UserSecrets.UserSecretsIdAttribute("dotnet-Cinematifier.Worker-68bca5f5-abf1-48df-a59e-790503362fef")]
 [assembly: System.Reflection.AssemblyCompanyAttribute("Cinematifier.Worker")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+dadf85b048ac5e899511c4a294e70bc170296f4f")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+44c770b298fe00c82d402efd25a5c53372f583c4")]
 [assembly: System.Reflection.AssemblyProductAttribute("Cinematifier.Worker")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Cinematifier.Worker")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
