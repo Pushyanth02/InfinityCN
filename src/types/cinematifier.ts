@@ -45,6 +45,7 @@ export interface CharacterAppearance {
 export type TransitionType =
     | 'FADE IN'
     | 'FADE OUT'
+    | 'FADE TO BLACK'
     | 'CUT TO'
     | 'DISSOLVE TO'
     | 'SMASH CUT'

@@ -9,7 +9,7 @@
  * - Enhanced dramatic pacing
  */
 
-import { callAIWithDedup } from './ai';
+import { callAIWithDedup, streamAI, MODEL_PRESETS } from './ai';
 import type { AIConfig } from './ai';
 import type {
     CinematicBlock,
@@ -127,7 +127,6 @@ export async function cinematifyText(
 
         try {
             // Check if provider supports streaming (offline algorithms, deepseek in some configs, might not)
-            const { MODEL_PRESETS, streamAI } = await import('./ai');
             const preset = config.provider !== 'none' ? MODEL_PRESETS[config.provider] : null;
             const canStream = preset?.supportsStreaming;
 
@@ -527,8 +526,6 @@ function createFallbackBlocks(text: string): CinematicBlock[] {
         gunshot: ['GUNSHOT', 'loud'],
         shot: ['GUNSHOT', 'loud'],
         fire: ['GUNSHOT', 'loud'],
-        fires: ['GUNSHOT', 'loud'],
-        fired: ['GUNSHOT', 'loud'],
         knock: ['DOOR', 'medium'],
         door: ['DOOR', 'medium'],
         creak: ['DOOR', 'medium'],
@@ -962,14 +959,12 @@ export function segmentChapters(fullText: string): ChapterSegment[] {
         } else if (currentSegment) {
             currentSegment.lines.push(lines[i]);
         } else {
-            // Content before first chapter marker
-            if (!currentSegment) {
-                currentSegment = {
-                    title: 'Introduction',
-                    startLine: 0,
-                    lines: [],
-                };
-            }
+            // Content before first chapter marker — create an implicit introduction segment
+            currentSegment = {
+                title: 'Introduction',
+                startLine: 0,
+                lines: [],
+            };
             currentSegment.lines.push(lines[i]);
         }
     }
@@ -1012,10 +1007,11 @@ export function createBookFromSegments(
         isPublic?: boolean;
     } = {},
 ): import('../types/cinematifier').Book {
-    const bookId = 'book-' + String(SESSION_EPOCH);
+    const bookId = 'book-' + String(Date.now());
+    const epoch = bookId.slice('book-'.length);
 
     const chapters: Chapter[] = segments.map((seg, index) => ({
-        id: 'chapter-' + String(SESSION_EPOCH) + '-' + String(index),
+        id: `chapter-${epoch}-${index}`,
         bookId,
         number: index + 1,
         title: seg.title,
@@ -1077,6 +1073,7 @@ const VALID_BEAT_TYPES = new Set<string>([
 const VALID_TRANSITION_TYPES = new Set<string>([
     'FADE IN',
     'FADE OUT',
+    'FADE TO BLACK',
     'CUT TO',
     'DISSOLVE TO',
     'SMASH CUT',
