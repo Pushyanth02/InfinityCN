@@ -290,6 +290,7 @@ type BeatType = 'BEAT' | 'PAUSE' | 'LONG PAUSE' | 'SILENCE' | 'TENSION' | 'RELEA
 type TransitionType =
     | 'FADE IN'
     | 'FADE OUT'
+    | 'FADE TO BLACK'
     | 'CUT TO'
     | 'DISSOLVE TO'
     | 'SMASH CUT'
@@ -308,6 +309,7 @@ function validateTransitionType(type: string): string {
     const valid: TransitionType[] = [
         'FADE IN',
         'FADE OUT',
+        'FADE TO BLACK',
         'CUT TO',
         'DISSOLVE TO',
         'SMASH CUT',

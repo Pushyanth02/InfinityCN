@@ -31,7 +31,7 @@
 ### Technical
 - **Offline-First** — IndexedDB via Dexie + PWA service worker
 - **Responsive** — 480px mobile to 1200px+ desktop
-- **Backend Proxy** — Optional server for centralized API key management
+- **Backend Server** — Optional Express server with Redis caching, RabbitMQ job queue, and per-IP rate limiting
 
 ## Tech Stack
 
@@ -48,8 +48,14 @@
 | Linting | ESLint + Prettier |
 | Hooks | Husky + lint-staged |
 | CI/CD | GitHub Actions |
+| Server | Express 5 + Redis + RabbitMQ |
 
 ## Getting Started
+
+### Prerequisites
+
+- Node.js `^20.19.0 || >=22.12.0` (see `.nvmrc` — use `nvm use` to switch automatically)
+- npm 8+
 
 ```bash
 # Install dependencies
@@ -83,67 +89,81 @@ npm run build
 
 | Variable | Description | Required |
 |----------|-------------|----------|
-| `VITE_API_PROXY_URL` | Backend proxy URL for server-side API keys | No |
+| `VITE_API_PROXY_URL` | Backend server URL for server-side API keys | No |
 
-AI API keys are configured at runtime through the in-app AI Settings panel and stored encrypted (AES-GCM) in browser localStorage. For production deployments with shared keys, use the optional backend proxy (see below).
+AI API keys are configured at runtime through the in-app AI Settings panel and stored encrypted (AES-GCM) in browser localStorage. For production deployments with shared keys, use the optional backend server (see below).
 
-## Backend Proxy (Recommended for Production)
+## Backend Server (Recommended for Production)
 
-The backend proxy (`server/proxy.ts`) provides several benefits:
+The backend server (`server/src/index.ts`) provides:
 
 - **Centralized API key management** — Store keys server-side, not in browser
-- **Usage tracking** — Monitor and control API usage
-- **Request queuing** — Per-IP rate limiting (30 req/min by default)
+- **Redis caching** — Cache AI responses for 30 minutes (configurable) to reduce API costs
+- **Job queuing** — RabbitMQ-based async cinematification for large books
+- **Per-IP rate limiting** — Sliding window, 30 req/min by default (Redis-backed)
 - **Security** — API keys never exposed to client
 
-### Setup
-
-1. **Configure environment variables** (server-side):
+### Quick Start (Docker)
 
 ```bash
-# Copy the example env file
-cp .env.example .env
+# Start Redis, RabbitMQ, API server, and 2 workers
+docker compose up
 
-# Edit with your API keys
-nano .env
+# Scale workers for throughput
+docker compose up --scale worker=4
 ```
 
-2. **Start the proxy server**:
+### Manual Start
 
 ```bash
-# Using tsx (recommended)
-npx tsx server/proxy.ts
+# Install server dependencies
+cd server && npm install
 
-# Or with ts-node
-npx ts-node server/proxy.ts
+# Start the API server
+npm run dev
+
+# Start a worker (separate terminal)
+npm run dev:worker
 ```
 
-3. **Configure the frontend** to use the proxy:
+### Configure the frontend
 
 ```bash
-# In your .env or shell
+# In your .env
 VITE_API_PROXY_URL=http://localhost:3001
 ```
 
-### Proxy Environment Variables
+### Server Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `PORT` | Proxy server port | `3001` |
-| `ALLOWED_ORIGINS` | Comma-separated allowed CORS origins | `http://localhost:5173` |
+| `PORT` | API server port | `3001` |
+| `ALLOWED_ORIGINS` | Comma-separated CORS origins | `http://localhost:5173` |
+| `REDIS_URL` | Redis connection URL | `redis://localhost:6379` |
+| `RABBITMQ_URL` | RabbitMQ connection URL | `amqp://infinitycn:infinitycn_dev@localhost:5672` |
 | `GEMINI_API_KEY` | Google Gemini API key | — |
 | `OPENAI_API_KEY` | OpenAI API key | — |
 | `ANTHROPIC_API_KEY` | Anthropic API key | — |
 | `GROQ_API_KEY` | Groq API key | — |
 | `DEEPSEEK_API_KEY` | DeepSeek API key | — |
 | `OLLAMA_URL` | Local Ollama server URL | `http://localhost:11434` |
+| `CACHE_TTL_SECONDS` | AI response cache TTL | `1800` |
+| `RATE_WINDOW_MS` | Rate limit window | `60000` |
+| `RATE_MAX_REQUESTS` | Max requests per window per IP | `30` |
+| `MAX_TOKENS_CAP` | Output token cap (cost protection) | `2048` |
+| `WORKER_CONCURRENCY` | Concurrent chapters per worker | `1` |
 
 ### API Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/health` | GET | Health check, lists available providers |
-| `/api/ai/:provider` | POST | Proxy AI request to specified provider |
+| `GET /health` | GET | Health check — Redis, RabbitMQ, available providers |
+| `POST /api/ai/:provider` | POST | Proxy AI request with caching |
+| `POST /api/jobs` | POST | Submit book for server-side cinematification |
+| `GET /api/jobs/:bookId` | GET | Get job status |
+| `GET /api/jobs/:bookId/chapters/:index` | GET | Get processed chapter result |
+| `DELETE /api/jobs/:bookId` | DELETE | Cancel a job |
+| `GET /api/jobs/:bookId/events` | GET | SSE stream for real-time progress |
 
 ## Project Structure
 
@@ -159,12 +179,13 @@ src/
       CinematifierApp.test.tsx  # Component tests
   lib/
     ai.ts                    # Multi-provider AI engine with streaming
-    cinematifier.ts          # Text-to-cinematic transformation
+    cinematifier.ts          # Text-to-cinematic transformation engine
     cinematifierDb.ts        # IndexedDB persistence (Dexie)
     crypto.ts                # AES-GCM key encryption (SubtleCrypto)
     embeddings.ts            # Semantic embeddings (all-MiniLM-L6-v2)
     audioSynth.ts            # Procedural ambient audio (Web Audio API)
     pdfWorker.ts             # Multi-format document extraction
+    serverJobs.ts            # Frontend client for the server job API
   store/
     cinematifierStore.ts     # Zustand state with encrypted persistence
   types/
@@ -175,9 +196,33 @@ src/
   styles.css                 # CSS entry point
   cinematifier.css           # Reader-specific styles
 server/
-  proxy.ts                   # Optional Express API proxy
+  src/
+    index.ts                 # Express API server entry point
+    worker.ts                # RabbitMQ job consumer
+    config.ts                # Centralized config from env vars
+    types.ts                 # Server-side type definitions
+    lib/
+      cinematifier.ts        # Server-side cinematification engine
+      hash.ts                # SHA-256 content hashing
+    middleware/
+      cors.ts                # CORS origin validation
+      rateLimit.ts           # Redis sliding-window rate limiter
+      errorHandler.ts        # Centralized Express error handler
+    routes/
+      ai.ts                  # AI proxy routes with Redis caching
+      jobs.ts                # Job submission, status, SSE events
+      health.ts              # Health check with service status
+    services/
+      aiProvider.ts          # Server-side AI provider calls
+      cache.ts               # Redis AI response cache
+      jobManager.ts          # Job lifecycle state management
+      rabbitmq.ts            # RabbitMQ connection and queue topology
+      redis.ts               # Redis client singleton with Pub/Sub
+  Dockerfile                 # Multi-stage build (api + worker targets)
+  package.json
 .github/
-  workflows/ci.yml           # GitHub Actions CI pipeline
+  workflows/ci.yml           # GitHub Actions CI pipeline (Node 22)
+docker-compose.yml           # Full infrastructure stack
 ```
 
 ## Contributing

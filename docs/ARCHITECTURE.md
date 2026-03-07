@@ -2,10 +2,10 @@
 
 ## Executive Summary
 
-InfinityCN is an AI-enhanced, offline-first reader application that transforms novels and manga into cinematic, interactive panel experiences. Built with React 19 and TypeScript 5.9, it employs a modern, modular architecture with strong separation of concerns.
+InfinityCN is an AI-enhanced, offline-first reader that transforms novels into cinematic, immersive reading experiences. Built with React 19 and TypeScript 5.9, it employs a modern, modular architecture with strong separation of concerns.
 
-**Version:** 15.0.0  
-**Last Updated:** February 2026
+**Version:** 15.0.0
+**Last Updated:** March 2026
 
 ---
 
@@ -17,37 +17,41 @@ InfinityCN is an AI-enhanced, offline-first reader application that transforms n
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────────────┐  │
 │  │   React 19 UI    │  │   Zustand Store  │  │    IndexedDB (Dexie)     │  │
-│  │   Components     │◄─┤   State Mgmt     │◄─┤    Offline Storage       │  │
-│  │   (Lazy-loaded)  │  │   (Persisted)    │  │    Chapters/Settings     │  │
+│  │   Components     │◄─┤  Encrypted Persist│◄─┤  Books + Chapters       │  │
+│  │   (Lazy-loaded)  │  │  (localStorage)  │  │  Settings/Progress       │  │
 │  └────────┬─────────┘  └────────┬─────────┘  └──────────────────────────┘  │
 │           │                     │                                           │
 │           ▼                     ▼                                           │
 │  ┌──────────────────────────────────────────────────────────────────────┐  │
 │  │                      Core Processing Engine                          │  │
-│  │  ┌────────────┐  ┌───────────────┐  ┌─────────────┐  ┌───────────┐   │  │
-│  │  │ PDF Parser │  │ Text-to-Panel │  │  NLP Engine │  │ AI Client │   │  │
-│  │  │ (pdfjs)    │  │   (parser.ts) │  │(algorithms) │  │  (ai.ts)  │   │  │
-│  │  └────────────┘  └───────────────┘  └─────────────┘  └─────┬─────┘   │  │
-│  └──────────────────────────────────────────────────────────────┼───────┘  │
-└─────────────────────────────────────────────────────────────────┼──────────┘
-                                                                  │
-                    ┌─────────────────────────────────────────────┼──────────┐
-                    │                 EXTERNAL SERVICES           │          │
-                    │  ┌────────────────────────────────────────────────┐    │
-                    │  │              AI Providers (7 supported)        │    │
-                    │  │  ┌─────────┐ ┌────────┐ ┌──────────┐ ┌──────┐  │    │
-                    │  │  │ Gemini  │ │ OpenAI │ │Anthropic │ │ Groq │  │    │
-                    │  │  └─────────┘ └────────┘ └──────────┘ └──────┘  │    │
-                    │  │  ┌──────────┐ ┌────────┐ ┌──────────────────┐  │    │
-                    │  │  │ DeepSeek │ │ Ollama │ │ Chrome AI (Nano) │  │    │
-                    │  │  └──────────┘ └────────┘ └──────────────────┘  │    │
-                    │  └────────────────────────────────────────────────┘    │
-                    │                                                        │
-                    │  ┌────────────────────────────────────────────────┐    │
-                    │  │          Optional API Proxy Server             │    │
-                    │  │         (server/proxy.ts - Express)            │    │
-                    │  └────────────────────────────────────────────────┘    │
-                    └────────────────────────────────────────────────────────┘
+│  │  ┌─────────────┐  ┌──────────────────┐  ┌─────────────────────────┐  │  │
+│  │  │ pdfWorker   │  │ cinematifier.ts  │  │      ai.ts              │  │  │
+│  │  │ (PDF/EPUB/  │  │ (Cinematification│  │ (7 AI providers +       │  │  │
+│  │  │  DOCX/PPTX/ │  │  Engine + Segment│  │  streaming + dedup +    │  │  │
+│  │  │  TXT)       │  │  ation + Parsing)│  │  LRU cache + retry)     │  │  │
+│  │  └─────────────┘  └──────────────────┘  └─────────────────────────┘  │  │
+│  │  ┌─────────────┐  ┌──────────────────┐  ┌─────────────────────────┐  │  │
+│  │  │ embeddings  │  │  audioSynth      │  │  serverJobs.ts          │  │  │
+│  │  │ (MiniLM-L6) │  │  (Web Audio API) │  │  (SSE + polling client) │  │  │
+│  │  └─────────────┘  └──────────────────┘  └─────────────────────────┘  │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                          │
+         ┌────────────────────────────────┼─────────────────────────────────┐
+         │             EXTERNAL SERVICES  │                                  │
+         │  ┌─────────────────────────────▼──────────────────────────────┐  │
+         │  │             AI Providers (7 supported)                      │  │
+         │  │  Gemini 2.5 Flash · GPT-4o-mini · Claude 3.5 Sonnet        │  │
+         │  │  Groq Llama 3.3 · DeepSeek · Ollama · Chrome AI Nano       │  │
+         │  └────────────────────────────────────────────────────────────┘  │
+         │                                                                   │
+         │  ┌────────────────────────────────────────────────────────────┐  │
+         │  │          Optional Backend Server (server/src/)              │  │
+         │  │  Express 5 · Redis · RabbitMQ · Per-IP Rate Limiting        │  │
+         │  │  AI proxy /api/ai/:provider  (cached)                       │  │
+         │  │  Job API  /api/jobs          (async cinematification)       │  │
+         │  └────────────────────────────────────────────────────────────┘  │
+         └───────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -58,132 +62,200 @@ InfinityCN is an AI-enhanced, offline-first reader application that transforms n
 
 | Component | Responsibility | Loading Strategy |
 |-----------|---------------|------------------|
-| `App.tsx` | Root component, routing, error boundaries | Eager |
-| `Reader.tsx` | Core reading experience with panels | Lazy |
-| `Upload.tsx` | File drop zone for PDF/TXT | Eager |
-| `AISettings.tsx` | AI provider configuration modal | Lazy |
-| `ThemeStudio.tsx` | Visual theme customization | Eager |
-| `CinematicReader.tsx` | Manga-style panel renderer | Lazy |
+| `CinematifierApp.tsx` | Root flow: upload → process → read | Eager |
+| `CinematicReader.tsx` | Dual-mode reader, ambient audio, bookmarks | Lazy |
+| `CinematifierSettings.tsx` | AI provider configuration modal | Lazy |
 | `ErrorBoundary.tsx` | React error boundary wrapper | Eager |
 
 **Design Decisions:**
-- Heavy components (Reader, AISettings) are lazy-loaded to reduce initial bundle
+- Heavy components (`CinematicReader`, `CinematifierSettings`) are lazy-loaded to reduce the initial bundle
 - Framer Motion handles all animations for consistent 60fps performance
 - Lucide React provides tree-shakeable icons
 
-### 2. State Management Layer (`src/store/`)
+### 2. State Management Layer (`src/store/cinematifferStore.ts`)
 
-**Pattern:** Zustand with persist middleware
+**Pattern:** Zustand with `persist` middleware + async AES-GCM encryption
 
 ```typescript
-// Store structure
+// Persisted to localStorage (API keys encrypted)
 {
-  // UI State (in-memory only)
-  panels: MangaPanel[],
-  characters: Character[],
-  atmosphere: Atmosphere | null,
-  insights: ChapterInsights | null,
-  
-  // Processing State
+  readerMode: 'cinematified' | 'original' | 'side-by-side',
+  fontSize: number,
+  lineSpacing: number,
+  immersionLevel: 'minimal' | 'balanced' | 'cinematic',
+  dyslexiaFont: boolean,
+  darkMode: boolean,
+  aiProvider: 'none' | 'chrome' | 'gemini' | 'openai' | 'anthropic' | 'groq' | 'deepseek' | 'ollama',
+  geminiKey: string,        // AES-GCM encrypted at rest
+  openAiKey: string,        // AES-GCM encrypted at rest
+  anthropicKey: string,     // AES-GCM encrypted at rest
+  groqKey: string,          // AES-GCM encrypted at rest
+  deepseekKey: string,      // AES-GCM encrypted at rest
+  ollamaUrl: string,
+  ollamaModel: string,
+  useSearchGrounding: boolean,
+}
+
+// In-memory only (not persisted)
+{
+  book: Book | null,
+  readingProgress: ReadingProgress | null,
+  currentChapterIndex: number,
   isProcessing: boolean,
-  progress: number,
-  progressLabel: string,
-  
-  // Persisted AI Config (localStorage)
-  aiProvider: 'none' | 'chrome' | 'gemini' | ... ,
-  geminiKey: string,
-  openAiKey: string,
-  // ... other provider keys
+  processingProgress: ProcessingProgress | null,
+  error: string | null,
 }
 ```
 
 **Key Features:**
+- API keys are encrypted with AES-GCM (SubtleCrypto) before every `localStorage` write
+- Async decryption on rehydration with automatic migration from legacy XOR obfuscation
 - Atomic selectors prevent unnecessary re-renders
-- AI configuration persisted to localStorage
-- Panel data kept in memory for performance
 
 ### 3. Business Logic Layer (`src/lib/`)
 
 | Module | Purpose | Dependencies |
 |--------|---------|--------------|
-| `algorithms.ts` | Pure NLP functions (tokenization, sentiment, TF-IDF) | None |
-| `parser.ts` | Text-to-panel conversion engine | algorithms.ts |
-| `narrativeEngine.ts` | Story structure analysis (5-act, character graphs) | algorithms.ts |
-| `ai.ts` | Multi-provider AI client with caching/retry | None (external APIs) |
-| `db.ts` | Dexie IndexedDB schema and operations | dexie |
-| `pdfWorker.ts` | Lazy PDF extraction | pdfjs-dist |
+| `ai.ts` | Multi-provider AI client with streaming, dedup, LRU cache, retry | None (external APIs) |
+| `cinematifier.ts` | Text-to-cinematic transformation, chapter segmentation, block parsing | `ai.ts`, `embeddings.ts` |
+| `cinematifierDb.ts` | Dexie IndexedDB schema and operations | `dexie` |
+| `crypto.ts` | AES-GCM key encryption via SubtleCrypto | None (Web Crypto API) |
+| `embeddings.ts` | Semantic embeddings (all-MiniLM-L6-v2 via @xenova/transformers) | `@xenova/transformers` |
+| `audioSynth.ts` | Procedural ambient audio via Web Audio API | None |
+| `pdfWorker.ts` | Lazy multi-format extraction (PDF/EPUB/DOCX/PPTX/TXT) | `pdfjs-dist`, `fflate`, `tesseract.js` |
+| `serverJobs.ts` | Frontend client for backend job API (SSE + polling fallback) | None |
 
 **Critical Path:**
 ```
-File Upload → pdfWorker.ts → parser.ts → narrativeEngine.ts → Store → UI
-                    ↓
-              algorithms.ts (NLP processing)
+File Upload → pdfWorker.ts → cinematifier.ts (segmentChapters) → ai.ts → Store → UI
+                                    ↓                    ↑
+                              embeddings.ts (context)    cinematifyOffline (fallback)
 ```
 
-### 4. Data Layer (`src/lib/db.ts`)
+### 4. Data Layer (`src/lib/cinematifierDb.ts`)
 
 **Database:** Dexie (IndexedDB wrapper)
 
 **Schema:**
 ```typescript
-interface SavedChapter {
-  id?: number;           // Auto-increment primary key
-  title: string;         // Chapter title
-  createdAt: number;     // Unix timestamp
-  panels: MangaPanel[];  // Compiled panels
-  characters: Character[];
-  recap: string | null;
-  atmosphere: Atmosphere | null;
-  insights: ChapterInsights | null;
-  rawText: string;       // Original text for re-processing
+// books table
+interface Book {
+  id: string;
+  title: string;
+  author?: string;
+  genre: BookGenre;
+  status: 'uploading' | 'processing' | 'ready' | 'error';
+  totalChapters: number;
+  processedChapters: number;
+  totalWordCount: number;
+  chapters: Chapter[];   // embedded — stored as serialized array
+  createdAt: number;
+  updatedAt: number;
+}
+
+// Chapter (part of Book.chapters)
+interface Chapter {
+  id: string;
+  bookId: string;
+  number: number;
+  title: string;
+  originalText: string;
+  cinematifiedBlocks: CinematicBlock[];
+  status: 'pending' | 'processing' | 'ready' | 'error';
+  wordCount: number;
+  estimatedReadTime: number;
+  toneTags?: string[];
 }
 ```
 
-### 5. Optional Backend (`server/proxy.ts`)
+### 5. Optional Backend (`server/src/`)
 
-**Purpose:** Server-side API key management for shared deployments
+**Purpose:** Server-side API key management, caching, and async job processing
 
-**Features:**
-- Per-IP rate limiting (30 req/min sliding window)
-- CORS origin validation
-- Max token capping (2048) to prevent cost abuse
-- Health check endpoint
+**Components:**
+- `index.ts` — Express 5 entry point, graceful shutdown
+- `worker.ts` — RabbitMQ consumer for async cinematification
+- `routes/ai.ts` — AI proxy with Redis response caching
+- `routes/jobs.ts` — Job lifecycle: submit, status, chapter results, cancel, SSE events
+- `routes/health.ts` — Redis + RabbitMQ + provider health check
+- `middleware/rateLimit.ts` — Atomic Lua sliding-window rate limiter (Redis)
+- `services/aiProvider.ts` — Direct AI provider calls with retry
+- `services/cache.ts` — SHA-256 keyed Redis cache (30min TTL)
+- `services/jobManager.ts` — Redis hash-based job state with Pub/Sub events
+- `services/rabbitmq.ts` — amqplib with dead-letter queues and auto-reconnect
 
 ---
 
 ## Data Flow
 
-### 1. File Processing Pipeline
+### 1. Client-Side File Processing Pipeline
 
 ```
-┌──────────┐    ┌─────────────┐    ┌────────────┐    ┌──────────────┐
-│  Upload  │───►│ PDF/TXT     │───►│ Text-to-   │───►│ IndexedDB    │
-│  (Drop)  │    │ Extraction  │    │ Panel      │    │ Persistence  │
-└──────────┘    └─────────────┘    │ Parser     │    └──────────────┘
-                                   └─────┬──────┘
-                                         │
-              ┌──────────────────────────┴────────────────────────┐
-              ▼                          ▼                        ▼
-    ┌─────────────────┐      ┌────────────────────┐    ┌─────────────────┐
-    │ Sentiment/      │      │ Scene Boundary     │    │ Atmosphere      │
-    │ Tension Scoring │      │ Detection          │    │ Classification  │
-    └─────────────────┘      └────────────────────┘    └─────────────────┘
+┌──────────┐    ┌──────────────┐    ┌─────────────────┐    ┌──────────────┐
+│  Upload  │───►│ detectFormat │───►│  extractText    │───►│segmentChapters│
+│  (Drop)  │    │ (50MB check) │    │ (PDF/EPUB/etc.) │    │ (NLP-based)  │
+└──────────┘    └──────────────┘    └─────────────────┘    └──────┬───────┘
+                                                                   │
+                                              ┌────────────────────┘
+                                              ▼
+                                  ┌────────────────────┐    ┌──────────────┐
+                                  │ cinematifyText     │───►│ Dexie (IDB)  │
+                                  │ (chunk → AI call   │    │ persistence  │
+                                  │  → block parsing   │    └──────────────┘
+                                  │  → streaming UI)   │
+                                  └────────────────────┘
 ```
 
-### 2. AI Enhancement Flow
+### 2. AI Enhancement Flow (Client)
 
 ```
-┌────────────┐    ┌──────────────┐    ┌───────────────────┐
-│ User       │───►│ Rate Limiter │───►│ Request Dedup     │
-│ Request    │    │ (Token Bucket)│   │ (In-flight Cache) │
-└────────────┘    └──────────────┘    └─────────┬─────────┘
-                                                │
-                   ┌────────────────────────────┴─────┐
-                   ▼                                  ▼
-          ┌───────────────┐                  ┌───────────────┐
-          │ Cache Check   │                  │ Provider Call │
-          │ (TTL: 30min)  │                  │ (With Retry)  │
-          └───────────────┘                  └───────────────┘
+┌────────────┐    ┌──────────────────┐    ┌──────────────────────┐
+│ Chunk text │───►│ Token Bucket     │───►│ Request Dedup        │
+│ (3500 char)│    │ Rate Limiter     │    │ (In-flight Map)      │
+└────────────┘    └──────────────────┘    └──────────┬───────────┘
+                                                     │
+                          ┌──────────────────────────┤
+                          ▼                          ▼
+               ┌────────────────────┐     ┌──────────────────────┐
+               │ LRU Cache          │     │ AI Provider Call     │
+               │ (30min TTL, 50 max)│     │ (stream if supported)│
+               └────────────────────┘     └──────────────────────┘
+                                                     │
+                          ┌──────────────────────────┘
+                          ▼
+               ┌────────────────────┐     ┌──────────────────────┐
+               │ parseCinematified  │───►│ Semantic Embedding   │
+               │ Text (block parser)│     │ (for next chunk ctx) │
+               └────────────────────┘     └──────────────────────┘
+```
+
+### 3. Server-Side Job Flow
+
+```
+POST /api/jobs
+      │
+      ▼
+┌───────────────┐    ┌───────────────┐    ┌─────────────────────────────┐
+│ Validate input│───►│ createJob     │───►│ publishJob (one msg/chapter)│
+│ (chapters,    │    │ (Redis hash)  │    │ → cinematify-jobs queue     │
+│  provider,    │    └───────────────┘    └─────────────────────────────┘
+│  bookId)      │                                        │
+└───────────────┘                                        ▼
+                                              ┌─────────────────────────┐
+                                              │ Worker consumes message │
+                                              │ 1. Cancel check         │
+                                              │ 2. Cache check (Redis)  │
+                                              │ 3. callAIProvider       │
+                                              │ 4. parseCinematified    │
+                                              │ 5. storeChapterResult   │
+                                              │ 6. publishJobEvent      │
+                                              │    (Redis Pub/Sub)      │
+                                              └─────────────────────────┘
+                                                          │
+GET /api/jobs/:id/events                                  │
+      │ SSE (EventSource)                                 │
+      └──────────────────────────────────────────────────►│
+            Redis subscriber receives events
 ```
 
 ---
@@ -195,31 +267,47 @@ interface SavedChapter {
 ```javascript
 // vite.config.ts manualChunks
 {
-  'pdfjs':       ['pdfjs-dist'],          // ~400KB, loaded on PDF drop
-  'motion':      ['framer-motion'],       // ~123KB, animations
-  'lucide':      ['lucide-react'],        // ~8KB, icons
-  'dexie':       ['dexie', 'dexie-react-hooks'],
-  'store':       ['zustand'],
-  'html-to-image': ['html-to-image'],     // Export only
-  'analytics':   ['@vercel/analytics', '@vercel/speed-insights'],
-  'react':       ['react', 'react-dom']
+  'pdfjs':        ['pdfjs-dist'],           // ~400KB, loaded on PDF drop
+  'fflate':       ['fflate'],               // ~5KB, loaded on EPUB/DOCX/PPTX drop
+  'tesseract':    ['tesseract.js'],         // ~16KB, loaded only for scanned PDFs
+  'onnx':         ['onnxruntime-web'],      // ~558KB, shared ML runtime
+  'transformers': ['@xenova/transformers'], // ~225KB, embeddings model
+  'motion':       ['framer-motion'],        // ~123KB, animations
+  'lucide':       ['lucide-react'],         // ~8KB, icons
+  'dexie':        ['dexie'],                // ~95KB, IndexedDB
+  'store':        ['zustand'],              // ~3KB, state
+  'analytics':    ['@vercel/analytics', '@vercel/speed-insights'],
+  'react':        ['react', 'react-dom']    // ~193KB, always needed
 }
 ```
 
-### Lazy Loading Strategy
+### Lazy Loading Triggers
 
-| Resource | Trigger | Impact |
-|----------|---------|--------|
-| `pdfjs-dist` | PDF file dropped | -400KB initial |
-| `Reader.tsx` | Panels available | -46KB initial |
-| `AISettings.tsx` | Settings button clicked | -11KB initial |
-| Analytics | After mount | -10KB initial |
+| Resource | Loaded When | Bundle Impact |
+|----------|-------------|--------------|
+| `pdfjs-dist` | PDF file dropped | −400KB initial |
+| `fflate` | EPUB/DOCX/PPTX dropped | −5KB initial |
+| `tesseract.js` | Scanned PDF page detected | Deferred |
+| `@xenova/transformers` | First AI cinematification | Deferred |
+| `CinematicReader` | Book ready to read | −22KB initial |
+| `CinematifierSettings` | Settings button clicked | −11KB initial |
+| Analytics | After mount | −10KB initial |
 
-### CPU Optimization
+### Client-Side AI Optimizations
 
-1. **Time-slicing in parser.ts**: Yields every 50 panels to keep UI responsive
-2. **Pre-computed sentiment**: Single-pass analysis, reused for tension scoring
-3. **Map-based lookups**: O(1) atmosphere keyword matching vs O(n) regex
+1. **Request deduplication** — identical in-flight requests share one Promise
+2. **LRU cache** — 50-entry cache with 30-minute TTL per provider
+3. **Token bucket** — per-provider rate limiting to avoid 429 errors
+4. **Exponential backoff retry** — classifies errors (rate_limit, auth, network, timeout)
+5. **Streaming** — block-by-block UI updates for providers that support it
+
+### Server-Side AI Optimizations
+
+1. **Redis cache** — SHA-256 keyed, 30-minute TTL, degrades gracefully if Redis down
+2. **Token capping** — `MAX_TOKENS_CAP` (default 2048) prevents cost abuse
+3. **Job queuing** — RabbitMQ distributes work across multiple workers
+4. **Dead-letter queue** — failed messages land in DLQ instead of being lost
+5. **Per-IP rate limiting** — atomic Lua sliding-window, degrades gracefully if Redis down
 
 ---
 
@@ -229,63 +317,27 @@ interface SavedChapter {
 
 | Concern | Mitigation |
 |---------|------------|
-| API Key Storage | User keys in localStorage (user responsibility) |
-| XSS | React's built-in escaping, no dangerouslySetInnerHTML |
-| Input Validation | File size limits (50MB), type checking |
+| API Key Storage | AES-256-GCM encrypted in localStorage with PBKDF2-derived device key |
+| XSS | React's built-in escaping; no `dangerouslySetInnerHTML` |
+| Input Validation | File size limits (50MB), strict MIME/extension type checking |
+| Zip Bomb | 200MB decompressed size limit in `unzipFile()` |
+| Data Privacy | All book data stored in local IndexedDB; nothing sent to third parties except AI APIs |
 
-### Server Proxy (`server/proxy.ts`)
+### Server (`server/src/`)
 
 | Concern | Mitigation |
 |---------|------------|
-| API Key Exposure | Keys stored server-side only |
-| DoS | Per-IP rate limiting (30 req/min) |
-| CORS | Origin whitelist enforcement |
-| Cost Control | Max token capping (2048) |
-| Request Validation | JSON body type checking |
+| API Key Exposure | Keys stored server-side only; never returned to clients |
+| DoS | Per-IP sliding-window rate limiting via Redis (30 req/min) |
+| CORS | Configurable origin allowlist in `config.ts` |
+| Cost Control | `MAX_TOKENS_CAP` clamps all provider max_tokens fields |
+| SSRF | `validateUrl()` in `config.ts` blocks internal IPs (RFC1918, metadata) |
+| Request Validation | JSON body schema checked in each route handler |
+| Payload Size | `express.json({ limit: '1mb' })` + per-chapter and total job size limits |
 
 ---
 
-## Scalability Considerations
-
-### Current Limitations
-
-1. **Single-threaded parsing**: Large files (>10MB) may block UI briefly
-2. **In-memory panels**: Large chapters consume browser memory
-3. **No pagination**: All panels rendered (virtual scrolling recommended)
-
-### Recommended Improvements
-
-1. **Web Workers**: Move NLP processing off main thread
-2. **Virtual List**: Only render visible panels (react-window/react-virtualized)
-3. **Streaming AI**: Use streaming responses for faster perceived latency
-4. **CDN Caching**: Static assets already optimized via Vite
-
----
-
-## Testing Architecture
-
-**Framework:** Vitest + Testing Library
-
-```
-src/
-├── lib/__tests__/
-│   └── algorithms.test.ts    # 47 unit tests for NLP functions
-├── components/__tests__/
-│   └── App.test.tsx          # Component integration tests
-└── test/
-    └── setup.ts              # Jest-DOM matchers
-```
-
-**Coverage Areas:**
-- ✅ Pure algorithm functions
-- ✅ Error boundary behavior
-- ✅ Lazy loading mechanics
-- ⚠️ E2E tests (not implemented)
-- ⚠️ AI integration tests (mocked)
-
----
-
-## Technology Stack Summary
+## Technology Stack
 
 | Layer | Technology | Version |
 |-------|------------|---------|
@@ -296,9 +348,16 @@ src/
 | Database | Dexie (IndexedDB) | 4.3.0 |
 | Animation | Framer Motion | 12.34.3 |
 | PDF Processing | pdfjs-dist | 5.4.624 |
-| Testing | Vitest | 4.0.18 |
+| ZIP Extraction | fflate | 0.8.2 |
+| OCR | tesseract.js | 7.0.0 |
+| Embeddings | @xenova/transformers | 2.17.2 |
+| Testing | Vitest + Testing Library | 4.0.18 / 16.3.2 |
 | PWA | vite-plugin-pwa | 1.2.0 |
 | Linting | ESLint + Prettier | 9.39.1 / 3.8.1 |
+| Server | Express | 5.1.0 |
+| Message Queue | amqplib (RabbitMQ) | 0.10.7 |
+| Cache / Rate Limit | ioredis (Redis) | 5.4.1 |
+| Runtime | Node.js | 22+ |
 
 ---
 
@@ -306,25 +365,38 @@ src/
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Vercel (Recommended)                     │
+│                  Static Hosting (Vercel / Netlify)          │
 ├─────────────────────────────────────────────────────────────┤
 │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────┐  │
 │  │  Static Assets  │  │  Service Worker │  │  Analytics  │  │
-│  │  (dist/*.js)    │  │  (PWA)          │  │  (Optional) │  │
+│  │  (dist/*.js)    │  │  (PWA / offline)│  │  (Vercel)   │  │
 │  └─────────────────┘  └─────────────────┘  └─────────────┘  │
 └─────────────────────────────────────────────────────────────┘
+                              │ VITE_API_PROXY_URL (optional)
+        ┌─────────────────────▼────────────────────────────────┐
+        │            Backend (Docker Compose)                  │
+        │  ┌────────────┐  ┌────────────┐  ┌────────────────┐  │
+        │  │ API Server │  │  Worker×N  │  │  Redis         │  │
+        │  │ :3001      │  │ (consumers)│  │  (cache + rl)  │  │
+        │  └────────────┘  └────────────┘  └────────────────┘  │
+        │  ┌────────────────────────────────────────────────┐  │
+        │  │  RabbitMQ :5672 (jobs) / :15672 (management)  │  │
+        │  └────────────────────────────────────────────────┘  │
+        └──────────────────────────────────────────────────────┘
                               │
-        ┌─────────────────────┼─────────────────────┐
-        ▼                     ▼                     ▼
+       ┌──────────────────────┼──────────────────────┐
+       ▼                      ▼                      ▼
 ┌───────────────┐    ┌───────────────┐    ┌───────────────┐
-│  AI Provider  │    │  AI Provider  │    │  Self-Hosted  │
-│  (Gemini API) │    │  (OpenAI)     │    │  (Ollama)     │
+│  Gemini API   │    │  OpenAI API   │    │  Ollama local │
 └───────────────┘    └───────────────┘    └───────────────┘
 ```
 
 **Production Checklist:**
 - [x] PWA manifest configured
-- [x] Service worker precaching
-- [x] Hidden sourcemaps for debugging
+- [x] Service worker precaching (vite-plugin-pwa)
+- [x] Hidden sourcemaps (`sourcemap: 'hidden'`)
 - [x] Chunk size warnings configured
-- [x] Analytics integration ready
+- [x] Vercel Analytics integration
+- [x] Node 22+ enforced via `engines` field and `.nvmrc`
+- [x] All 5 dependency CVEs resolved (`npm audit` → 0 vulnerabilities)
+

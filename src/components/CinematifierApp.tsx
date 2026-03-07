@@ -233,7 +233,6 @@ export const CinematifierApp: React.FC = () => {
 
                 const bookWithId: Book = {
                     ...bookData,
-                    id: `book-${Date.now()}`,
                     status: 'processing',
                 };
 

@@ -8,12 +8,17 @@
    cd InfinityCN
    ```
 
-2. **Install dependencies**
+2. **Use the correct Node version** (via [nvm](https://github.com/nvm-sh/nvm))
+   ```bash
+   nvm use   # reads .nvmrc → Node 22
+   ```
+
+3. **Install frontend dependencies**
    ```bash
    npm install
    ```
 
-3. **Start the dev server**
+4. **Start the dev server**
    ```bash
    npm run dev
    ```
@@ -72,12 +77,13 @@ src/
 │       └── CinematifierApp.test.tsx  # Component tests
 ├── lib/
 │   ├── ai.ts                    # Multi-provider AI engine (7 providers)
-│   ├── cinematifier.ts          # Cinematification transformation
+│   ├── cinematifier.ts          # Cinematification transformation engine
 │   ├── cinematifierDb.ts        # IndexedDB persistence (Dexie)
 │   ├── crypto.ts                # AES-GCM encryption (SubtleCrypto)
 │   ├── embeddings.ts            # Semantic embeddings (MiniLM)
 │   ├── audioSynth.ts            # Ambient audio (Web Audio API)
-│   └── pdfWorker.ts             # Document extraction (PDF/EPUB/DOCX/PPTX/TXT)
+│   ├── pdfWorker.ts             # Document extraction (PDF/EPUB/DOCX/PPTX/TXT)
+│   └── serverJobs.ts            # Frontend client for the server job API
 ├── store/
 │   └── cinematifierStore.ts     # Zustand state with encrypted persistence
 ├── types/
@@ -88,7 +94,28 @@ src/
 ├── styles.css                   # CSS entry (imports partials)
 └── cinematifier.css             # Reader styles
 server/
-└── proxy.ts                     # Optional API proxy server
+└── src/
+    ├── index.ts                 # Express API server entry point
+    ├── worker.ts                # RabbitMQ job consumer
+    ├── config.ts                # Centralized config from env vars
+    ├── types.ts                 # Server-side type definitions
+    ├── lib/
+    │   ├── cinematifier.ts      # Server-side cinematification engine
+    │   └── hash.ts              # SHA-256 content hashing
+    ├── middleware/
+    │   ├── cors.ts              # CORS origin validation
+    │   ├── rateLimit.ts         # Redis sliding-window rate limiter
+    │   └── errorHandler.ts      # Centralized Express error handler
+    ├── routes/
+    │   ├── ai.ts                # AI proxy routes with Redis caching
+    │   ├── jobs.ts              # Job submission, status, SSE events
+    │   └── health.ts            # Health check with service status
+    └── services/
+        ├── aiProvider.ts        # Server-side AI provider calls
+        ├── cache.ts             # Redis AI response cache
+        ├── jobManager.ts        # Job lifecycle state management
+        ├── rabbitmq.ts          # RabbitMQ connection and topology
+        └── redis.ts             # Redis client singleton with Pub/Sub
 ```
 
 ## Architecture Notes
@@ -101,12 +128,19 @@ server/
 5. **Streaming Display** — Block-by-block rendering with emotion-aware animations
 
 ### AI Provider System
-The AI engine (`src/lib/ai.ts`) supports 7 providers with unified interface:
-- Request deduplication to prevent duplicate API calls
+The AI engine (`src/lib/ai.ts`) supports 7 providers with a unified interface:
+- Request deduplication to prevent duplicate in-flight API calls
 - Token bucket rate limiting per provider
 - LRU cache with 30-minute TTL
 - Automatic retry with exponential backoff
 - Streaming support for Gemini, OpenAI, Anthropic, Groq
+
+### Backend Server
+The optional Express server (`server/src/`) adds:
+- **Redis caching** — AI responses cached by content hash, 30-minute TTL
+- **RabbitMQ jobs** — Async cinematification with dead-letter queue and retry
+- **Redis rate limiting** — Atomic Lua-based sliding-window per IP
+- **SSE events** — Real-time job progress via Redis Pub/Sub
 
 ### Encrypted Storage
 API keys are encrypted using AES-GCM (Web Crypto API) with a device-derived key:
@@ -126,9 +160,27 @@ Zustand with `persist` middleware. API keys are encrypted before localStorage pe
 
 | Variable | Required | Description |
 |---|---|---|
-| `VITE_API_PROXY_URL` | No | URL of the API proxy server (e.g., `http://localhost:3001`) |
+| `VITE_API_PROXY_URL` | No | URL of the API server (e.g., `http://localhost:3001`) |
 
 AI provider keys are entered by the user in the AI Settings panel and stored in browser localStorage.
+
+## Server Development
+
+```bash
+cd server
+
+# Install dependencies
+npm install
+
+# Start API server in watch mode
+npm run dev
+
+# Start worker in watch mode (separate terminal)
+npm run dev:worker
+
+# Type-check server code
+npm run typecheck
+```
 
 ## Code Style
 
