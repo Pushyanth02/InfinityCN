@@ -1019,6 +1019,12 @@
     margin: 0;
 }
 
+.cine-upload-error {
+    font-size: 0.875rem;
+    color: #ef4444;
+    margin: 0.5rem 0 0;
+}
+
 /* Processing Overlay */
 .cine-processing-overlay {
     position: fixed;

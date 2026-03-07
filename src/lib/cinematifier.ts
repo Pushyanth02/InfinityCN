@@ -1077,6 +1077,7 @@ const VALID_BEAT_TYPES = new Set<string>([
 const VALID_TRANSITION_TYPES = new Set<string>([
     'FADE IN',
     'FADE OUT',
+    'FADE TO BLACK',
     'CUT TO',
     'DISSOLVE TO',
     'SMASH CUT',
