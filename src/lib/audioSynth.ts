@@ -91,7 +91,7 @@ export class AmbientAudioSynth {
 
     /** Fully release the AudioContext and all resources. Call on component unmount. */
     public destroy() {
-        this.stop();
+        if (this.isPlaying) this.stop();
         // Allow fade-out to finish before closing
         setTimeout(() => {
             this.stopCurrentSources();

@@ -38,6 +38,9 @@ import type { CinematicBlock, Chapter } from '../types/cinematifier';
 // Hoisted constant to avoid recreating the threshold array on every render cycle
 const OBSERVER_THRESHOLDS: number[] = [0, 0.25, 0.5, 0.75, 1];
 
+// Delay before revoking blob URLs to give the browser time to start the download
+const DOWNLOAD_REVOKE_DELAY_MS = 1000;
+
 interface CinematicReaderProps {
     onClose: () => void;
 }
@@ -786,7 +789,7 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                             a.download = `${book.title}_Original_Text.txt`;
                             a.click();
                             // Defer revocation to allow the browser to start the download
-                            setTimeout(() => URL.revokeObjectURL(url), 1000);
+                            setTimeout(() => URL.revokeObjectURL(url), DOWNLOAD_REVOKE_DELAY_MS);
                         }}
                         title="Export Original Text"
                         aria-label="Export Original Text"
