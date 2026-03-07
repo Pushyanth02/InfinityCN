@@ -77,12 +77,30 @@ export class AmbientAudioSynth {
 
     public stop() {
         this.isPlaying = false;
+        if (this.crossfadeTimeout) {
+            clearTimeout(this.crossfadeTimeout);
+            this.crossfadeTimeout = null;
+        }
         if (this.masterGain && this.ctx) {
             this.masterGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.2);
             setTimeout(() => {
                 this.stopCurrentSources();
             }, 500);
         }
+    }
+
+    /** Fully release the AudioContext and all resources. Call on component unmount. */
+    public destroy() {
+        this.stop();
+        // Allow fade-out to finish before closing
+        setTimeout(() => {
+            this.stopCurrentSources();
+            if (this.ctx && this.ctx.state !== 'closed') {
+                this.ctx.close().catch(() => {});
+            }
+            this.ctx = null;
+            this.masterGain = null;
+        }, 600);
     }
 
     private stopCurrentSources() {

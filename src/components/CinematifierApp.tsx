@@ -43,6 +43,7 @@ interface UploadZoneProps {
 
 const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelect, isProcessing }) => {
     const [isDragging, setIsDragging] = useState(false);
+    const [dropError, setDropError] = useState<string | null>(null);
     const inputRef = useRef<HTMLInputElement>(null);
 
     const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -62,6 +63,7 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelect, isProcessing }) =
             e.preventDefault();
             e.stopPropagation();
             setIsDragging(false);
+            setDropError(null);
 
             const files = e.dataTransfer.files;
             if (files.length > 0) {
@@ -69,8 +71,8 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelect, isProcessing }) =
                 try {
                     detectFormat(file);
                     onFileSelect(file);
-                } catch {
-                    // Unsupported format — silently ignore drag
+                } catch (err) {
+                    setDropError(err instanceof Error ? err.message : 'Unsupported file format');
                 }
             }
         },
@@ -100,6 +102,7 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelect, isProcessing }) =
             onClick={handleClick}
             role="button"
             tabIndex={0}
+            aria-label="Upload a document file"
             onKeyDown={e => {
                 if (e.key === 'Enter' || e.key === ' ') {
                     handleClick();
@@ -120,6 +123,11 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelect, isProcessing }) =
                     {isDragging ? 'Drop your file here' : 'Drop a document or click to upload'}
                 </p>
                 <p className="cine-upload-hint">PDF, EPUB, DOCX, PPTX, TXT supported</p>
+                {dropError && (
+                    <p className="cine-upload-error" role="alert">
+                        {dropError}
+                    </p>
+                )}
             </div>
         </div>
     );
@@ -135,11 +143,18 @@ const ProcessingOverlay: React.FC<ProcessingOverlayProps> = ({ progress }) => {
     if (!progress) return null;
 
     return (
-        <div className="cine-processing-overlay cine-fade-in">
+        <div className="cine-processing-overlay cine-fade-in" role="status" aria-live="polite">
             <div className="cine-processing-content">
-                <div className="cine-processing-spinner" />
+                <div className="cine-processing-spinner" aria-hidden="true" />
                 <p className="cine-processing-phase">{progress.message}</p>
-                <div className="cine-processing-bar">
+                <div
+                    className="cine-processing-bar"
+                    role="progressbar"
+                    aria-valuenow={progress.percentComplete}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label={`Processing: ${progress.percentComplete}%`}
+                >
                     <div
                         className="cine-processing-bar-fill"
                         style={{ width: `${progress.percentComplete}%` }}
@@ -530,6 +545,9 @@ export const CinematifierApp: React.FC = () => {
                                 className="cine-btn cine-btn--icon"
                                 onClick={toggleDarkMode}
                                 title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+                                aria-label={
+                                    darkMode ? 'Switch to light mode' : 'Switch to dark mode'
+                                }
                             >
                                 {darkMode ? <Sun size={20} /> : <Moon size={20} />}
                             </button>
@@ -537,6 +555,7 @@ export const CinematifierApp: React.FC = () => {
                                 className="cine-btn cine-btn--icon"
                                 onClick={() => setShowSettings(true)}
                                 title="AI Settings"
+                                aria-label="AI Settings"
                             >
                                 <Settings size={20} />
                             </button>
@@ -593,8 +612,8 @@ export const CinematifierApp: React.FC = () => {
 
                         {/* Error Display */}
                         {error && (
-                            <div className="cine-error cine-fade-in">
-                                <AlertCircle size={24} />
+                            <div className="cine-error cine-fade-in" role="alert">
+                                <AlertCircle size={24} aria-hidden="true" />
                                 <p className="cine-error-text">{error}</p>
                                 <button className="cine-btn" onClick={() => setError(null)}>
                                     Dismiss

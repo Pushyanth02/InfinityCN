@@ -415,7 +415,7 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
     // Initialize audio synth
     useEffect(() => {
         ambientSynthRef.current = new AmbientAudioSynth();
-        return () => ambientSynthRef.current?.stop();
+        return () => ambientSynthRef.current?.destroy();
     }, []);
 
     // Sync audio theme with scrolling/reading position
@@ -505,14 +505,16 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
             if (config.provider === 'none') {
                 result = cinematifyOffline(currentChapter.originalText);
             } else {
+                const accumulatedBlocks: CinematicBlock[] = [];
                 result = await cinematifyText(
                     currentChapter.originalText,
                     config,
                     undefined,
                     (blocks, isDone) => {
-                        // Stream parsed blocks incrementally
+                        // Accumulate streamed blocks so previous chunks aren't lost
+                        accumulatedBlocks.push(...blocks);
                         updateChapter(currentChapterIndex, {
-                            cinematifiedBlocks: blocks,
+                            cinematifiedBlocks: [...accumulatedBlocks],
                             isProcessed: isDone,
                         });
                     },
@@ -694,6 +696,7 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                         className="cine-btn cine-btn--icon"
                         onClick={() => setShowChapterNav(true)}
                         title="Chapter list"
+                        aria-label="Chapter list"
                     >
                         <List size={20} />
                     </button>
@@ -741,6 +744,9 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                         title={
                             isAmbientSoundEnabled ? 'Disable Ambient Sound' : 'Enable Ambient Sound'
                         }
+                        aria-label={
+                            isAmbientSoundEnabled ? 'Disable Ambient Sound' : 'Enable Ambient Sound'
+                        }
                     >
                         <Volume2
                             size={20}
@@ -751,6 +757,7 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                         className={`cine-btn cine-btn--icon ${isAutoScrolling ? 'cine-btn--active' : ''}`}
                         onClick={() => setIsAutoScrolling(!isAutoScrolling)}
                         title={isAutoScrolling ? 'Stop Auto-Scroll' : 'Start Auto-Scroll'}
+                        aria-label={isAutoScrolling ? 'Stop Auto-Scroll' : 'Start Auto-Scroll'}
                     >
                         {isAutoScrolling ? (
                             <Square size={20} color="var(--cine-red)" />
@@ -762,6 +769,7 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                         className={`cine-btn cine-btn--icon ${isBookmarked ? 'cine-btn--bookmarked' : ''}`}
                         onClick={() => toggleBookmark(currentChapterIndex)}
                         title={isBookmarked ? 'Remove bookmark' : 'Bookmark chapter'}
+                        aria-label={isBookmarked ? 'Remove bookmark' : 'Bookmark chapter'}
                     >
                         {isBookmarked ? <BookmarkCheck size={20} /> : <Bookmark size={20} />}
                     </button>
@@ -777,9 +785,11 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                             a.href = url;
                             a.download = `${book.title}_Original_Text.txt`;
                             a.click();
-                            URL.revokeObjectURL(url);
+                            // Defer revocation to allow the browser to start the download
+                            setTimeout(() => URL.revokeObjectURL(url), 1000);
                         }}
                         title="Export Original Text"
+                        aria-label="Export Original Text"
                     >
                         <Download size={20} />
                     </button>
@@ -787,10 +797,16 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                         className="cine-btn cine-btn--icon"
                         onClick={() => setShowSettings(!showSettings)}
                         title="Settings"
+                        aria-label="Settings"
                     >
                         <Settings size={20} />
                     </button>
-                    <button className="cine-btn cine-btn--icon" onClick={onClose} title="Close">
+                    <button
+                        className="cine-btn cine-btn--icon"
+                        onClick={onClose}
+                        title="Close"
+                        aria-label="Close reader"
+                    >
                         <X size={20} />
                     </button>
                 </div>

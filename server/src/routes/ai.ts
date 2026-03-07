@@ -152,7 +152,11 @@ router.post('/api/ai/:provider', async (req: Request<{ provider: string }>, res:
             .set('X-Cache', 'MISS')
             .send(body);
     } catch (err) {
-        const message = err instanceof Error ? err.message : 'Proxy request failed';
+        const isTimeout =
+            err instanceof Error && (err.message.includes('timeout') || err.name === 'AbortError');
+        const message = isTimeout
+            ? 'Upstream provider request timed out'
+            : 'Upstream provider request failed';
         res.status(502).json({ error: message });
     }
 });
