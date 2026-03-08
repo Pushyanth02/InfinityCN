@@ -313,6 +313,9 @@ const OriginalTextView = React.memo(function OriginalTextView({ text }: { text: 
 // ─── Emotion Heatmap ───────────────────────────────────────
 
 /** Displays chapter tension as a visual heatmap bar above the content */
+const HEATMAP_MIN_OPACITY = 0.15;
+const HEATMAP_MAX_TENSION = 100;
+
 const EmotionHeatmap = React.memo(function EmotionHeatmap({
     blocks,
 }: {
@@ -333,20 +336,24 @@ const EmotionHeatmap = React.memo(function EmotionHeatmap({
             const avgTension =
                 tensions.length > 0 ? tensions.reduce((a, b) => a + b, 0) / tensions.length : 30;
 
-            // Pick dominant emotion
+            // Pick dominant emotion using pre-computed frequency map
             const emotions = slice
                 .map(b => b.emotion)
                 .filter((e): e is NonNullable<typeof e> => e !== undefined);
-            const dominantEmotion =
-                emotions.length > 0
-                    ? emotions
-                          .sort(
-                              (a, b) =>
-                                  emotions.filter(e => e === a).length -
-                                  emotions.filter(e => e === b).length,
-                          )
-                          .pop() || 'neutral'
-                    : 'neutral';
+            let dominantEmotion = 'neutral';
+            if (emotions.length > 0) {
+                const counts = new Map<string, number>();
+                for (const e of emotions) {
+                    counts.set(e, (counts.get(e) || 0) + 1);
+                }
+                let maxCount = 0;
+                for (const [emotion, count] of counts) {
+                    if (count > maxCount) {
+                        maxCount = count;
+                        dominantEmotion = emotion;
+                    }
+                }
+            }
 
             result.push({ tension: avgTension, emotion: dominantEmotion });
         }
@@ -362,7 +369,9 @@ const EmotionHeatmap = React.memo(function EmotionHeatmap({
                 <div
                     key={i}
                     className={`cine-heatmap-block cine-heatmap-block--${seg.emotion}`}
-                    style={{ opacity: Math.max(0.15, seg.tension / 100) }}
+                    style={{
+                        opacity: Math.max(HEATMAP_MIN_OPACITY, seg.tension / HEATMAP_MAX_TENSION),
+                    }}
                     title={`Tension: ${Math.round(seg.tension)}`}
                 />
             ))}
