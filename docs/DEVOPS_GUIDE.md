@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - Checkout
-      - Setup Node 20
+      - Setup Node 22
       - npm ci (with cache)
       - Format check (prettier)
       - Lint (eslint)
@@ -50,8 +50,8 @@ jobs:
 
 ### Prerequisites
 
-- Node.js 20+
-- npm 10+
+- Node.js `^20.19.0 || >=22.12.0` (use `.nvmrc` → `nvm use` to switch automatically)
+- npm 8+
 
 ### Commands
 
@@ -115,7 +115,7 @@ Deploy the `dist/` directory. Configure:
 ### Docker (Self-Hosted)
 
 ```dockerfile
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
@@ -150,29 +150,44 @@ server {
 
 ---
 
-## API Proxy Server
+## API Server
 
-For production deployments with shared API keys:
+For production deployments with shared API keys, use the Express server with Redis and RabbitMQ:
 
-### Setup
+### Quick Start (Docker — Recommended)
 
 ```bash
-# Install dependencies (proxy uses express)
-npm install express cors
+# Start all services: Redis, RabbitMQ, API server, 2 workers
+docker compose up
+
+# Scale workers for higher throughput
+docker compose up --scale worker=4
+```
+
+### Manual Setup
+
+```bash
+# Install server dependencies
+cd server && npm install
 
 # Set environment variables
 export PORT=3001
 export ALLOWED_ORIGINS=https://your-app.vercel.app
+export REDIS_URL=redis://localhost:6379
+export RABBITMQ_URL=amqp://infinitycn:infinitycn_dev@localhost:5672
 export GEMINI_API_KEY=your-key
 export OPENAI_API_KEY=your-key
 
-# Start proxy
-npx tsx server/proxy.ts
+# Start API server (development)
+npm run dev
+
+# Start worker (separate terminal, development)
+npm run dev:worker
 ```
 
 ### Vercel Serverless Deployment
 
-Convert `server/proxy.ts` to serverless function:
+Convert `server/src/routes/ai.ts` to a serverless function for edge deployments (jobs/SSE require long-lived connections; use dedicated compute for the job worker):
 
 ```typescript
 // api/ai/[provider].ts
@@ -180,7 +195,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { provider } = req.query;
-  // ... proxy logic
+  // ... proxy logic from server/src/routes/ai.ts
 }
 ```
 

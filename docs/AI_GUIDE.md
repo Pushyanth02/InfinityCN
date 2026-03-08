@@ -34,6 +34,9 @@ Keys are stored in browser localStorage and never transmitted to our servers.
 For shared deployments where you don't want to expose API keys to users:
 
 ```bash
+# Install server dependencies
+cd server && npm install
+
 # Set environment variables
 export GEMINI_API_KEY=your-key
 export OPENAI_API_KEY=your-key
@@ -41,11 +44,17 @@ export ANTHROPIC_API_KEY=your-key
 export GROQ_API_KEY=your-key
 export DEEPSEEK_API_KEY=your-key
 
-# Start the proxy
-npx tsx server/proxy.ts
+# Start the API server
+npm run dev
 ```
 
-Then set `VITE_API_PROXY_URL=http://localhost:3001` in your environment.
+Then set `VITE_API_PROXY_URL=http://localhost:3001` in your frontend `.env`.
+
+Or use Docker Compose to start the full stack (API server + workers + Redis + RabbitMQ):
+
+```bash
+docker compose up
+```
 
 ## Architecture
 

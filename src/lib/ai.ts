@@ -1,5 +1,5 @@
 /**
- * ai.ts — InfinityCN Multi-Provider AI Engine (V17)
+ * ai.ts — InfinityCN Multi-Provider AI Engine (V18)
  *
  * Providers:
  *   • 'none'   → fast offline algorithms only (no API calls)
@@ -11,14 +11,13 @@
  *   • 'groq' → Groq API (llama-3.3-70b)
  *   • 'deepseek' → DeepSeek API
  *
- * V17 Improvements:
- *   • Unified API client with request deduplication
- *   • Model presets and token limits per provider
- *   • Enhanced caching with TTL
- *   • Request batching support
- *   • Proper rate limiting with token bucket
- *   • Streaming support for supported providers
- *   • Error categorization and recovery
+ * V18 Improvements over V17:
+ *   • MAX_RETRY_DELAY_MS cap (30 s) prevents unbounded backoff
+ *   • Adaptive timeouts: 30 s for JSON calls, 60 s for cinematification (rawTextMode)
+ *   • Retry-After header parsing for 429 responses — uses provider's stated wait time
+ *   • handleHttpError() deduplicates error handling; 5xx errors marked retryable
+ *   • AbortSignal.timeout added to all streaming fetch calls (previously could hang)
+ *   • Gemini streaming proxy URL fixed (removed stale ?stream=true query param)
  */
 
 import type { AIConnectionStatus } from '../types/cinematifier';
@@ -319,6 +318,9 @@ function classifyError(err: unknown, provider: string): AIError {
 // ── RETRY WITH EXPONENTIAL BACKOFF ─────────────────────────
 // ═══════════════════════════════════════════════════════════
 
+/** Maximum back-off delay — prevents unbounded waits even when retryAfterMs is large. */
+const MAX_RETRY_DELAY_MS = 30_000;
+
 async function withRetry<T>(
     fn: () => Promise<T>,
     provider: string,
@@ -337,7 +339,8 @@ async function withRetry<T>(
                 throw lastError;
             }
 
-            const delay = lastError.retryAfterMs ?? baseDelayMs * Math.pow(2, attempt);
+            const rawDelay = lastError.retryAfterMs ?? baseDelayMs * Math.pow(2, attempt);
+            const delay = Math.min(rawDelay, MAX_RETRY_DELAY_MS);
             await new Promise(r => setTimeout(r, delay));
         }
     }
@@ -351,6 +354,15 @@ async function withRetry<T>(
 
 const API_PROXY_URL = import.meta.env.VITE_API_PROXY_URL as string | undefined;
 
+/**
+ * Returns an appropriate fetch timeout for this call type.
+ * Cinematification (rawTextMode) generates up to 4096 tokens of dense narrative
+ * per chunk, which can take 60 s+ on slower providers — use a longer timeout.
+ */
+function getTimeoutMs(rawTextMode?: boolean): number {
+    return rawTextMode ? 60_000 : 30_000;
+}
+
 /** If a proxy URL is configured, route provider requests through it instead of calling the API directly. */
 async function proxyFetch(
     provider: string,
@@ -363,6 +375,29 @@ async function proxyFetch(
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(timeoutMs),
     });
+}
+
+/**
+ * Centralised HTTP-error handler for provider responses.
+ * Parses the `Retry-After` header on 429 responses so the retry backoff
+ * uses the provider's own stated wait time rather than a hard-coded guess.
+ */
+async function handleHttpError(res: Response, provider: string): Promise<never> {
+    if (res.status === 429) {
+        const retryAfter = res.headers.get('Retry-After');
+        const waitMs = retryAfter
+            ? Math.min(parseFloat(retryAfter) * 1000, MAX_RETRY_DELAY_MS)
+            : 5000;
+        throw new AIError(`${provider} rate limit exceeded`, 'rate_limit', provider, true, waitMs);
+    }
+    // Try to include a snippet of the body for better diagnostics
+    const body = await res.text().catch(() => res.statusText);
+    throw new AIError(
+        `${provider} error ${res.status}: ${body.slice(0, 200)}`,
+        res.status >= 500 ? 'model_unavailable' : 'unknown',
+        provider,
+        res.status >= 500, // 5xx are retryable
+    );
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -380,6 +415,7 @@ async function callAI(prompt: string, config: AIConfig): Promise<string> {
     const sysPrompt = config.systemPrompt ?? SYSTEM_PROMPT;
     const useJSON = !config.rawTextMode;
     const maxTokens = config.rawTextMode ? Math.min(preset.maxTokens, 4096) : 800;
+    const timeoutMs = getTimeoutMs(config.rawTextMode);
 
     // ── CHROME NANO ──────────────────────────────────────────
     if (config.provider === 'chrome') {
@@ -420,7 +456,7 @@ async function callAI(prompt: string, config: AIConfig): Promise<string> {
         };
 
         const res = API_PROXY_URL
-            ? await proxyFetch('gemini', geminiBody)
+            ? await proxyFetch('gemini', geminiBody, timeoutMs)
             : await fetch(
                   `https://generativelanguage.googleapis.com/v1beta/models/${preset.model}:generateContent`,
                   {
@@ -429,14 +465,11 @@ async function callAI(prompt: string, config: AIConfig): Promise<string> {
                           'Content-Type': 'application/json',
                           'x-goog-api-key': config.geminiKey,
                       },
-                      signal: AbortSignal.timeout(30_000),
+                      signal: AbortSignal.timeout(timeoutMs),
                       body: JSON.stringify(geminiBody),
                   },
               );
-        if (!res.ok) {
-            const errBody = await res.text();
-            throw new Error(`Gemini API error ${res.status}: ${errBody.slice(0, 200)}`);
-        }
+        if (!res.ok) await handleHttpError(res, 'gemini');
         const data = await res.json();
         result = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
     }
@@ -455,17 +488,17 @@ async function callAI(prompt: string, config: AIConfig): Promise<string> {
             temperature: preset.temperature,
         };
         const res = API_PROXY_URL
-            ? await proxyFetch('openai', openaiBody)
+            ? await proxyFetch('openai', openaiBody, timeoutMs)
             : await fetch('https://api.openai.com/v1/chat/completions', {
                   method: 'POST',
                   headers: {
                       'Content-Type': 'application/json',
                       Authorization: `Bearer ${config.openAiKey}`,
                   },
-                  signal: AbortSignal.timeout(30_000),
+                  signal: AbortSignal.timeout(timeoutMs),
                   body: JSON.stringify(openaiBody),
               });
-        if (!res.ok) throw new Error(`OpenAI error ${res.status}: ${res.statusText}`);
+        if (!res.ok) await handleHttpError(res, 'openai');
         const data = await res.json();
         result = data.choices?.[0]?.message?.content ?? '';
     }
@@ -482,7 +515,7 @@ async function callAI(prompt: string, config: AIConfig): Promise<string> {
             temperature: preset.temperature,
         };
         const res = API_PROXY_URL
-            ? await proxyFetch('anthropic', anthropicBody)
+            ? await proxyFetch('anthropic', anthropicBody, timeoutMs)
             : await fetch('https://api.anthropic.com/v1/messages', {
                   method: 'POST',
                   headers: {
@@ -494,13 +527,10 @@ async function callAI(prompt: string, config: AIConfig): Promise<string> {
                       // Safe here because the key is user-provided and stored locally.
                       'anthropic-dangerous-direct-browser-access': 'true',
                   },
-                  signal: AbortSignal.timeout(30_000),
+                  signal: AbortSignal.timeout(timeoutMs),
                   body: JSON.stringify(anthropicBody),
               });
-        if (!res.ok) {
-            const errText = await res.text();
-            throw new Error(`Anthropic error ${res.status}: ${errText.substring(0, 100)}`);
-        }
+        if (!res.ok) await handleHttpError(res, 'anthropic');
         const data = await res.json();
         result = data.content?.[0]?.text ?? '';
     }
@@ -519,17 +549,17 @@ async function callAI(prompt: string, config: AIConfig): Promise<string> {
             temperature: preset.temperature,
         };
         const res = API_PROXY_URL
-            ? await proxyFetch('groq', groqBody)
+            ? await proxyFetch('groq', groqBody, timeoutMs)
             : await fetch('https://api.groq.com/openai/v1/chat/completions', {
                   method: 'POST',
                   headers: {
                       'Content-Type': 'application/json',
                       Authorization: `Bearer ${config.groqKey}`,
                   },
-                  signal: AbortSignal.timeout(30_000),
+                  signal: AbortSignal.timeout(timeoutMs),
                   body: JSON.stringify(groqBody),
               });
-        if (!res.ok) throw new Error(`Groq error ${res.status}: ${res.statusText}`);
+        if (!res.ok) await handleHttpError(res, 'groq');
         const data = await res.json();
         result = data.choices?.[0]?.message?.content ?? '';
     }
@@ -548,17 +578,17 @@ async function callAI(prompt: string, config: AIConfig): Promise<string> {
             temperature: preset.temperature,
         };
         const res = API_PROXY_URL
-            ? await proxyFetch('deepseek', deepseekBody)
+            ? await proxyFetch('deepseek', deepseekBody, timeoutMs)
             : await fetch('https://api.deepseek.com/chat/completions', {
                   method: 'POST',
                   headers: {
                       'Content-Type': 'application/json',
                       Authorization: `Bearer ${config.deepseekKey}`,
                   },
-                  signal: AbortSignal.timeout(30_000),
+                  signal: AbortSignal.timeout(timeoutMs),
                   body: JSON.stringify(deepseekBody),
               });
-        if (!res.ok) throw new Error(`DeepSeek error ${res.status}: ${res.statusText}`);
+        if (!res.ok) await handleHttpError(res, 'deepseek');
         const data = await res.json();
         result = data.choices?.[0]?.message?.content ?? '';
     }
@@ -572,14 +602,14 @@ async function callAI(prompt: string, config: AIConfig): Promise<string> {
             ...(useJSON ? { format: 'json' } : {}),
         };
         const res = API_PROXY_URL
-            ? await proxyFetch('ollama', ollamaBody)
+            ? await proxyFetch('ollama', ollamaBody, timeoutMs)
             : await fetch(`${config.ollamaUrl.replace(/\/$/, '')}/api/generate`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  signal: AbortSignal.timeout(30_000),
+                  signal: AbortSignal.timeout(timeoutMs),
                   body: JSON.stringify(ollamaBody),
               });
-        if (!res.ok) throw new Error(`Ollama error ${res.status}: ${res.statusText}`);
+        if (!res.ok) await handleHttpError(res, 'ollama');
         const data = await res.json();
         result = data.response ?? '';
     }
@@ -600,6 +630,11 @@ async function callAI(prompt: string, config: AIConfig): Promise<string> {
 
 /**
  * Main entry point for AI calls with deduplication, caching, and rate limiting.
+ *
+ * Deduplication is guaranteed even for truly-concurrent callers: the shared
+ * promise is created and registered in `inflightRequests` synchronously (before
+ * the first `await`) so any subsequent call with the same key joins the already-
+ * running request rather than launching a duplicate.
  */
 export async function callAIWithDedup(prompt: string, config: AIConfig): Promise<string> {
     const cacheKey = getCacheKey(prompt, config.provider);
@@ -608,17 +643,20 @@ export async function callAIWithDedup(prompt: string, config: AIConfig): Promise
     const cached = getFromCache(cacheKey);
     if (cached) return cached;
 
-    // Check for inflight request with same key
+    // If an identical request is already in flight, share its promise.
     if (inflightRequests.has(cacheKey)) {
         return inflightRequests.get(cacheKey)!;
     }
 
-    // Acquire rate limit token
-    const limiter = getRateLimiter(config.provider);
-    await limiter.acquire();
+    // Register the promise synchronously — before the first `await` — so that
+    // any concurrent caller that reaches this point will hit the check above
+    // instead of launching a duplicate network request.
+    const requestPromise = (async () => {
+        const limiter = getRateLimiter(config.provider);
+        await limiter.acquire();
+        return withRetry(() => callAI(prompt, config), config.provider);
+    })();
 
-    // Create and track the request
-    const requestPromise = withRetry(() => callAI(prompt, config), config.provider);
     inflightRequests.set(cacheKey, requestPromise);
 
     try {
@@ -700,6 +738,7 @@ export async function* streamAI(prompt: string, config: AIConfig): AsyncGenerato
 
     const sysPrompt = config.systemPrompt ?? SYSTEM_PROMPT;
     const maxTokens = config.rawTextMode ? Math.min(preset.maxTokens, 4096) : 800;
+    const timeoutMs = getTimeoutMs(config.rawTextMode);
     // Acquire rate limit token
     const limiter = getRateLimiter(config.provider);
     await limiter.acquire();
@@ -733,14 +772,15 @@ export async function* streamAI(prompt: string, config: AIConfig): AsyncGenerato
             stream: true,
         };
         const res = API_PROXY_URL
-            ? await proxyFetch('ollama', ollamaBody)
+            ? await proxyFetch('ollama', ollamaBody, timeoutMs)
             : await fetch(`${config.ollamaUrl.replace(/\/$/, '')}/api/generate`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
+                  signal: AbortSignal.timeout(timeoutMs),
                   body: JSON.stringify(ollamaBody),
               });
 
-        if (!res.ok) throw new Error(`Ollama error ${res.status}`);
+        if (!res.ok) await handleHttpError(res, 'ollama');
         if (!res.body) throw new Error('No response body from Ollama');
 
         const reader = res.body.getReader();
@@ -799,8 +839,13 @@ export async function* streamAI(prompt: string, config: AIConfig): AsyncGenerato
             temperature: preset.temperature,
         };
 
-        const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
-        if (!res.ok) throw new Error(`${config.provider} error ${res.status}`);
+        const res = await fetch(url, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(body),
+            signal: AbortSignal.timeout(timeoutMs),
+        });
+        if (!res.ok) await handleHttpError(res, config.provider);
         if (!res.body) throw new Error('No response body');
 
         yield* parseSSEStream(res.body.getReader(), sseExtractors.openai);
@@ -819,14 +864,23 @@ export async function* streamAI(prompt: string, config: AIConfig): AsyncGenerato
         };
 
         const url = API_PROXY_URL
-            ? `${API_PROXY_URL}/api/ai/gemini?stream=true`
+            ? // When using the backend proxy, the standard /api/ai/gemini endpoint is used.
+              // The proxy forwards the full request body (which includes stream mode via the
+              // :streamGenerateContent upstream URL).  A stale ?stream=true query param was
+              // previously appended here but the proxy never read it — removed to avoid confusion.
+              `${API_PROXY_URL}/api/ai/gemini`
             : `https://generativelanguage.googleapis.com/v1beta/models/${preset.model}:streamGenerateContent?alt=sse`;
 
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
         if (!API_PROXY_URL) headers['x-goog-api-key'] = config.geminiKey;
 
-        const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(geminiBody) });
-        if (!res.ok) throw new Error(`Gemini error ${res.status}`);
+        const res = await fetch(url, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(geminiBody),
+            signal: AbortSignal.timeout(timeoutMs),
+        });
+        if (!res.ok) await handleHttpError(res, 'gemini');
         if (!res.body) throw new Error('No response body');
 
         yield* parseSSEStream(res.body.getReader(), sseExtractors.gemini);
@@ -864,8 +918,9 @@ export async function* streamAI(prompt: string, config: AIConfig): AsyncGenerato
             method: 'POST',
             headers,
             body: JSON.stringify(anthropicBody),
+            signal: AbortSignal.timeout(timeoutMs),
         });
-        if (!res.ok) throw new Error(`Anthropic error ${res.status}`);
+        if (!res.ok) await handleHttpError(res, 'anthropic');
         if (!res.body) throw new Error('No response body');
 
         yield* parseSSEStream(res.body.getReader(), sseExtractors.anthropic);

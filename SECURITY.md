@@ -25,9 +25,9 @@ API keys entered in the AI Settings panel are encrypted before storage:
 | **Input Validation** | File size limits (50MB), file type checking |
 | **Data Storage** | IndexedDB for offline data. All data stays on-device |
 
-### Backend Proxy (Recommended for Production)
+### Backend Server (Recommended for Production)
 
-When using the optional API proxy (`server/proxy.ts`):
+When using the optional API server (`server/src/index.ts`):
 
 | Area | Implementation |
 |------|----------------|
