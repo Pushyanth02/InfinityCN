@@ -95,17 +95,6 @@ export async function incrementProcessedChapters(bookId: string): Promise<number
     return newCount;
 }
 
-// ─── Check if Job is Complete ───────────────────────────────
-
-export async function isJobComplete(bookId: string): Promise<boolean> {
-    const redis = await getRedis();
-    const [processed, total] = await Promise.all([
-        redis.hget(JOB_KEY(bookId), 'processedChapters'),
-        redis.hget(JOB_KEY(bookId), 'totalChapters'),
-    ]);
-    return Number(processed) >= Number(total);
-}
-
 // ─── Cancel Job ─────────────────────────────────────────────
 
 export async function cancelJob(bookId: string): Promise<boolean> {

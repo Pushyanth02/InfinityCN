@@ -12,10 +12,15 @@ export function errorHandler(
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _next: NextFunction,
 ): void {
-    console.error('[Server] Unhandled error:', err.message);
+    console.error('[Server] Unhandled error:', err);
 
     if (err.message.includes('not allowed by CORS') || err.message.includes('CORS')) {
         res.status(403).json({ error: 'Not allowed by CORS' });
+        return;
+    }
+
+    if (err instanceof SyntaxError && 'body' in err) {
+        res.status(400).json({ error: 'Invalid JSON in request body' });
         return;
     }
 
