@@ -3,7 +3,7 @@
  *
  * Ported from src/lib/cinematifier.ts for Node.js worker usage.
  * Includes: chunkText, parseCinematifiedText, cinematifyOffline,
- * createFallbackBlocks, extractOverallMetadata, and validation helpers.
+ * createFallbackBlocks, and validation helpers.
  */
 
 import type { CinematicBlock, ChapterResult } from '../types.js';
@@ -502,61 +502,4 @@ export function createFallbackBlocks(text: string): CinematicBlock[] {
     }
 
     return blocks;
-}
-
-// ─── Metadata Extraction ────────────────────────────────────
-
-export interface NarrativeMetadata {
-    genre?: string;
-    toneTags?: string[];
-    characters: Record<string, { appearances: number[]; dialogueCount: number }>;
-}
-
-export function extractOverallMetadata(
-    rawText: string | undefined,
-    blocks: CinematicBlock[],
-): NarrativeMetadata {
-    const metadata: NarrativeMetadata = { characters: {} };
-
-    if (rawText) {
-        const genreMatch = rawText.match(/\[GENRE:\s*([^\]]+)\]/i);
-        if (genreMatch) {
-            const rawGenre = genreMatch[1].trim().toLowerCase().replace(/\s+/g, '_');
-            const validGenres = [
-                'fantasy',
-                'romance',
-                'thriller',
-                'sci_fi',
-                'mystery',
-                'historical',
-                'literary_fiction',
-                'horror',
-                'adventure',
-            ];
-            if (validGenres.includes(rawGenre)) {
-                metadata.genre = rawGenre;
-            }
-        }
-
-        const toneMatch = rawText.match(/\[TONE:\s*([^\]]+)\]/i);
-        if (toneMatch) {
-            metadata.toneTags = toneMatch[1]
-                .split(',')
-                .map(t => t.trim().toLowerCase())
-                .filter(Boolean);
-        }
-    }
-
-    blocks.forEach((block, index) => {
-        if (block.type === 'dialogue' && block.speaker) {
-            const name = block.speaker.toUpperCase();
-            if (!metadata.characters[name]) {
-                metadata.characters[name] = { appearances: [], dialogueCount: 0 };
-            }
-            metadata.characters[name].appearances.push(index);
-            metadata.characters[name].dialogueCount++;
-        }
-    });
-
-    return metadata;
 }

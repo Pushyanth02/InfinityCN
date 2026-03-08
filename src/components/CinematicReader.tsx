@@ -38,6 +38,9 @@ import type { CinematicBlock, Chapter } from '../types/cinematifier';
 // Hoisted constant to avoid recreating the threshold array on every render cycle
 const OBSERVER_THRESHOLDS: number[] = [0, 0.25, 0.5, 0.75, 1];
 
+// Delay before revoking blob URLs to give the browser time to start the download
+const DOWNLOAD_REVOKE_DELAY_MS = 1000;
+
 interface CinematicReaderProps {
     onClose: () => void;
 }
@@ -87,11 +90,24 @@ const CinematicBlockView = React.memo(function CinematicBlockView({
         },
     };
 
+    // Tension-driven layout: higher tension = more dramatic spacing
+    const tensionClass =
+        block.tensionScore !== undefined
+            ? block.tensionScore > 80
+                ? 'cine-block--tension-extreme'
+                : block.tensionScore > 60
+                  ? 'cine-block--tension-high'
+                  : block.tensionScore > 30
+                    ? 'cine-block--tension-medium'
+                    : ''
+            : '';
+
     const blockClasses = [
         'cine-block',
         `cine-block--${block.type}`,
         `cine-block--${block.intensity}`,
         block.timing ? `cine-block--timing-${block.timing}` : '',
+        tensionClass,
     ]
         .filter(Boolean)
         .join(' ');
@@ -294,6 +310,75 @@ const OriginalTextView = React.memo(function OriginalTextView({ text }: { text: 
     );
 });
 
+// ─── Emotion Heatmap ───────────────────────────────────────
+
+/** Displays chapter tension as a visual heatmap bar above the content */
+const HEATMAP_MIN_OPACITY = 0.15;
+const HEATMAP_MAX_TENSION = 100;
+
+const EmotionHeatmap = React.memo(function EmotionHeatmap({
+    blocks,
+}: {
+    blocks: CinematicBlock[];
+}) {
+    // Group blocks into segments and compute average tension per segment
+    const segments = useMemo(() => {
+        if (blocks.length === 0) return [];
+
+        const SEGMENT_SIZE = Math.max(1, Math.ceil(blocks.length / 30));
+        const result: { tension: number; emotion: string }[] = [];
+
+        for (let i = 0; i < blocks.length; i += SEGMENT_SIZE) {
+            const slice = blocks.slice(i, i + SEGMENT_SIZE);
+            const tensions = slice
+                .map(b => b.tensionScore)
+                .filter((t): t is number => t !== undefined);
+            const avgTension =
+                tensions.length > 0 ? tensions.reduce((a, b) => a + b, 0) / tensions.length : 30;
+
+            // Pick dominant emotion using pre-computed frequency map
+            const emotions = slice
+                .map(b => b.emotion)
+                .filter((e): e is NonNullable<typeof e> => e !== undefined);
+            let dominantEmotion = 'neutral';
+            if (emotions.length > 0) {
+                const counts = new Map<string, number>();
+                for (const e of emotions) {
+                    counts.set(e, (counts.get(e) || 0) + 1);
+                }
+                let maxCount = 0;
+                for (const [emotion, count] of counts) {
+                    if (count > maxCount) {
+                        maxCount = count;
+                        dominantEmotion = emotion;
+                    }
+                }
+            }
+
+            result.push({ tension: avgTension, emotion: dominantEmotion });
+        }
+
+        return result;
+    }, [blocks]);
+
+    if (segments.length === 0) return null;
+
+    return (
+        <div className="cine-emotion-heatmap" aria-label="Chapter tension heatmap">
+            {segments.map((seg, i) => (
+                <div
+                    key={i}
+                    className={`cine-heatmap-block cine-heatmap-block--${seg.emotion}`}
+                    style={{
+                        opacity: Math.max(HEATMAP_MIN_OPACITY, seg.tension / HEATMAP_MAX_TENSION),
+                    }}
+                    title={`Tension: ${Math.round(seg.tension)}`}
+                />
+            ))}
+        </div>
+    );
+});
+
 // ─── Chapter Navigation ────────────────────────────────────
 
 const ChapterNav = React.memo(function ChapterNav({
@@ -415,7 +500,7 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
     // Initialize audio synth
     useEffect(() => {
         ambientSynthRef.current = new AmbientAudioSynth();
-        return () => ambientSynthRef.current?.stop();
+        return () => ambientSynthRef.current?.destroy();
     }, []);
 
     // Sync audio theme with scrolling/reading position
@@ -505,14 +590,16 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
             if (config.provider === 'none') {
                 result = cinematifyOffline(currentChapter.originalText);
             } else {
+                const accumulatedBlocks: CinematicBlock[] = [];
                 result = await cinematifyText(
                     currentChapter.originalText,
                     config,
                     undefined,
                     (blocks, isDone) => {
-                        // Stream parsed blocks incrementally
+                        // Accumulate streamed blocks so previous chunks aren't lost
+                        accumulatedBlocks.push(...blocks);
                         updateChapter(currentChapterIndex, {
-                            cinematifiedBlocks: blocks,
+                            cinematifiedBlocks: [...accumulatedBlocks],
                             isProcessed: isDone,
                         });
                     },
@@ -694,6 +781,7 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                         className="cine-btn cine-btn--icon"
                         onClick={() => setShowChapterNav(true)}
                         title="Chapter list"
+                        aria-label="Chapter list"
                     >
                         <List size={20} />
                     </button>
@@ -741,6 +829,9 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                         title={
                             isAmbientSoundEnabled ? 'Disable Ambient Sound' : 'Enable Ambient Sound'
                         }
+                        aria-label={
+                            isAmbientSoundEnabled ? 'Disable Ambient Sound' : 'Enable Ambient Sound'
+                        }
                     >
                         <Volume2
                             size={20}
@@ -751,6 +842,7 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                         className={`cine-btn cine-btn--icon ${isAutoScrolling ? 'cine-btn--active' : ''}`}
                         onClick={() => setIsAutoScrolling(!isAutoScrolling)}
                         title={isAutoScrolling ? 'Stop Auto-Scroll' : 'Start Auto-Scroll'}
+                        aria-label={isAutoScrolling ? 'Stop Auto-Scroll' : 'Start Auto-Scroll'}
                     >
                         {isAutoScrolling ? (
                             <Square size={20} color="var(--cine-red)" />
@@ -762,6 +854,7 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                         className={`cine-btn cine-btn--icon ${isBookmarked ? 'cine-btn--bookmarked' : ''}`}
                         onClick={() => toggleBookmark(currentChapterIndex)}
                         title={isBookmarked ? 'Remove bookmark' : 'Bookmark chapter'}
+                        aria-label={isBookmarked ? 'Remove bookmark' : 'Bookmark chapter'}
                     >
                         {isBookmarked ? <BookmarkCheck size={20} /> : <Bookmark size={20} />}
                     </button>
@@ -777,9 +870,11 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                             a.href = url;
                             a.download = `${book.title}_Original_Text.txt`;
                             a.click();
-                            URL.revokeObjectURL(url);
+                            // Defer revocation to allow the browser to start the download
+                            setTimeout(() => URL.revokeObjectURL(url), DOWNLOAD_REVOKE_DELAY_MS);
                         }}
                         title="Export Original Text"
+                        aria-label="Export Original Text"
                     >
                         <Download size={20} />
                     </button>
@@ -787,10 +882,16 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                         className="cine-btn cine-btn--icon"
                         onClick={() => setShowSettings(!showSettings)}
                         title="Settings"
+                        aria-label="Settings"
                     >
                         <Settings size={20} />
                     </button>
-                    <button className="cine-btn cine-btn--icon" onClick={onClose} title="Close">
+                    <button
+                        className="cine-btn cine-btn--icon"
+                        onClick={onClose}
+                        title="Close"
+                        aria-label="Close reader"
+                    >
                         <X size={20} />
                     </button>
                 </div>
@@ -904,6 +1005,11 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                     <span>{currentChapter.estimatedReadTime} min read</span>
                 </div>
             </div>
+
+            {/* Emotion Heatmap — visual tension overview of chapter */}
+            {currentChapter.cinematifiedBlocks.length > 0 && (
+                <EmotionHeatmap blocks={currentChapter.cinematifiedBlocks} />
+            )}
 
             {/* Content Area */}
             <main

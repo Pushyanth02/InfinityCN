@@ -7,6 +7,7 @@
  *   • reconstructParagraphs  — sentence-boundary paragraph building
  *   • segmentChapters        — chapter boundary detection
  *   • cinematifyOffline      — fallback offline cinematification
+ *   • detectSceneBreaks      — heuristic scene detection fallback
  *   • createBookFromSegments — Book entity factory
  *   • createReadingProgress  — ReadingProgress entity factory
  *   • extractOverallMetadata — genre/tone/character metadata extractor
@@ -19,13 +20,12 @@ import {
     reconstructParagraphs,
     segmentChapters,
     cinematifyOffline,
+    detectSceneBreaks,
     createBookFromSegments,
     createReadingProgress,
     extractOverallMetadata,
 } from '../cinematifier';
 import type { ChapterSegment } from '../../types/cinematifier';
-
-// ─── parseCinematifiedText ────────────────────────────────────────────────────
 
 describe('parseCinematifiedText', () => {
     it('returns empty array for empty input', () => {
@@ -171,6 +171,107 @@ describe('parseCinematifiedText', () => {
         const ids = blocks.map(b => b.id);
         const unique = new Set(ids);
         expect(unique.size).toBe(ids.length);
+    });
+
+    // ─── Scene Marker Tests ──────────────────────────────────
+
+    it('parses [SCENE: description] markers as title_card blocks', () => {
+        const blocks = parseCinematifiedText('[SCENE: Abandoned Mountain Path]');
+        expect(blocks.length).toBe(1);
+        expect(blocks[0].type).toBe('title_card');
+        expect(blocks[0].content).toBe('Abandoned Mountain Path');
+    });
+
+    it('parses scene markers with surrounding text', () => {
+        const text = `[SCENE: Forest Clearing]
+
+The wind rustled through the trees.
+
+— ✦ —
+
+[SCENE: Cave Entrance]
+
+The air smelled damp.`;
+        const blocks = parseCinematifiedText(text);
+
+        const titleCards = blocks.filter(b => b.type === 'title_card');
+        expect(titleCards.length).toBe(2);
+        expect(titleCards[0].content).toBe('Forest Clearing');
+        expect(titleCards[1].content).toBe('Cave Entrance');
+
+        const sceneBreaks = blocks.filter(b => b.type === 'beat' && b.content === '— ✦ —');
+        expect(sceneBreaks.length).toBe(1);
+    });
+
+    it('parses scene break markers (— ✦ —)', () => {
+        const blocks = parseCinematifiedText('Some text.\n\n— ✦ —\n\nMore text.');
+        const breaks = blocks.filter(b => b.type === 'beat' && b.content === '— ✦ —');
+        expect(breaks.length).toBe(1);
+        expect(breaks[0].beat?.type).toBe('PAUSE');
+    });
+
+    it('parses *** as scene break', () => {
+        const blocks = parseCinematifiedText('Before.\n\n***\n\nAfter.');
+        const breaks = blocks.filter(b => b.type === 'beat' && b.content === '— ✦ —');
+        expect(breaks.length).toBe(1);
+    });
+
+    // ─── Wrapper Block Tests ─────────────────────────────────
+
+    it('parses [TENSION] wrapper blocks with heightened tension', () => {
+        const text = `[TENSION]
+Footsteps approached.
+Closer.
+Closer.
+[/TENSION]`;
+        const blocks = parseCinematifiedText(text);
+
+        // All content inside [TENSION] should be action blocks with heightened tension
+        expect(blocks.length).toBe(3);
+        blocks.forEach(block => {
+            expect(block.type).toBe('action');
+            expect(block.intensity).toBe('emphasis');
+            expect(block.tensionScore).toBe(80);
+            expect(block.emotion).toBe('suspense');
+        });
+    });
+
+    it('parses [REFLECTION] wrapper blocks as inner_thought', () => {
+        const text = `[REFLECTION]
+She remembered the old house.
+The way the light fell through the window.
+[/REFLECTION]`;
+        const blocks = parseCinematifiedText(text);
+
+        expect(blocks.length).toBe(2);
+        blocks.forEach(block => {
+            expect(block.type).toBe('inner_thought');
+            expect(block.intensity).toBe('whisper');
+        });
+    });
+
+    it('parses mixed content with scene markers, SFX, and wrappers', () => {
+        const text = `[SCENE: Forest Clearing]
+
+The wind rustled through the trees.
+
+— ✦ —
+
+"You shouldn't have followed me."
+
+SFX: distant thunder
+
+[TENSION]
+Footsteps approached.
+Closer.
+[/TENSION]`;
+        const blocks = parseCinematifiedText(text);
+
+        expect(blocks.some(b => b.type === 'title_card')).toBe(true);
+        expect(blocks.some(b => b.type === 'beat' && b.content === '— ✦ —')).toBe(true);
+        expect(blocks.some(b => b.type === 'dialogue')).toBe(true);
+        expect(blocks.some(b => b.type === 'sfx')).toBe(true);
+        expect(blocks.some(b => b.type === 'action' && b.tensionScore === 80)).toBe(true);
     });
 });
 
@@ -372,8 +473,68 @@ Suddenly, an explosion shook the building.
         const result = cinematifyOffline('');
         expect(result.blocks).toBeDefined();
     });
+
+    it('inserts scene title cards when scene breaks are detected', () => {
+        const text =
+            'The sun was bright and warm.\n\nHours later, they arrived at the dark cabin.\n\nThe fire was already lit.';
+        const result = cinematifyOffline(text);
+
+        const titleCards = result.blocks.filter(b => b.type === 'title_card');
+        // Should have at least one scene title when multiple scenes detected
+        expect(titleCards.length).toBeGreaterThanOrEqual(1);
+    });
 });
 
+// ─── detectSceneBreaks ────────────────────────────────────────────────────────
+
+describe('detectSceneBreaks', () => {
+    it('detects scene breaks from time-shift phrases', () => {
+        const paragraphs = [
+            'The sun was bright.',
+            'They walked along the river.',
+            'Hours later, they arrived at the cabin.',
+            'The fire was already lit.',
+        ];
+        const scenes = detectSceneBreaks(paragraphs);
+        expect(scenes.length).toBe(2);
+        expect(scenes[0].length).toBe(2);
+        expect(scenes[1].length).toBe(2);
+    });
+
+    it('detects "meanwhile" as scene break', () => {
+        const paragraphs = [
+            'John was at home.',
+            'Meanwhile, Sarah was running.',
+            'She turned the corner.',
+        ];
+        const scenes = detectSceneBreaks(paragraphs);
+        expect(scenes.length).toBe(2);
+    });
+
+    it('returns single scene if no breaks detected', () => {
+        const paragraphs = ['First.', 'Second.', 'Third.'];
+        const scenes = detectSceneBreaks(paragraphs);
+        expect(scenes.length).toBe(1);
+        expect(scenes[0].length).toBe(3);
+    });
+
+    it('handles empty input', () => {
+        const scenes = detectSceneBreaks([]);
+        expect(scenes.length).toBe(0);
+    });
+
+    it('detects multiple scene signals', () => {
+        const paragraphs = [
+            'Morning.',
+            'The next morning, everything changed.',
+            'New beginning.',
+            'Elsewhere, trouble was brewing.',
+            'End.',
+        ];
+        const scenes = detectSceneBreaks(paragraphs);
+        expect(scenes.length).toBe(3);
+    });
+});
 // ─── createBookFromSegments ───────────────────────────────────────────────────
 
 describe('createBookFromSegments', () => {

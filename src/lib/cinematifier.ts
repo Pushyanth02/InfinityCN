@@ -16,6 +16,8 @@ import type {
     CinematificationResult,
     Chapter,
     ChapterSegment,
+    BeatType,
+    TransitionType,
 } from '../types/cinematifier';
 import { generateEmbedding, retrieveRelevantContext } from './embeddings';
 import type { ChunkEmbedding } from './embeddings';
@@ -57,18 +59,24 @@ const CINEMATIFICATION_SYSTEM_PROMPT = `You are a master cinematic storyteller. 
 
 RULES:
 1. Keep ALL original content, characters, plot, dialogue (never remove)
-2. Add cinematic pacing:
+2. Segment the text into cinematic scenes using scene markers:
+   - [SCENE: location or transition description]
+   - Detect location changes, time shifts, emotional resets, character focus changes
+   - Use scene break markers between scenes: — ✦ —
+3. Add cinematic pacing:
    - Short, punchy sentences for action scenes
    - Longer, flowing prose for emotional moments
-3. Add SFX annotations: SFX: [sound description]
+4. Add SFX annotations: SFX: [sound description]
    Examples: SFX: CRASH!, SFX: distant thunder, SFX: silence...
-4. Add dramatic beats: BEAT, PAUSE
-5. Add scene transitions: CUT TO: [location], FADE IN, FADE TO BLACK
-6. Append inline narrative tags to lines:
+5. Add dramatic beats: BEAT, PAUSE
+6. Add scene transitions: CUT TO: [location], FADE IN, FADE TO BLACK
+7. Mark reflective/introspective passages with [REFLECTION] and [/REFLECTION]
+8. Mark high-tension sequences with [TENSION] and [/TENSION]
+9. Append inline narrative tags to lines:
    - [EMOTION: joy|fear|sadness|suspense|anger|surprise|neutral]
    - [TENSION: 0-100] (0 = calm, 100 = extreme stress/climax)
    Example: "I can't believe it." [EMOTION: surprise] [TENSION: 40]
-7. At the end of the text, optionally append overall tags:
+10. At the end of the text, optionally append overall tags:
    - [GENRE: fantasy|romance|thriller|sci_fi|mystery|historical|literary_fiction|horror|adventure|other] (Only if it's the first chapter)
    - [TONE: dark, romantic, suspenseful, humorous, etc] (Comma separated)
    - [SUMMARY: Brief 1-2 sentence summary of current characters, location, and action to maintain context]
@@ -239,11 +247,16 @@ export async function cinematifyText(
 
 /**
  * Parse AI-generated cinematified text into structured CinematicBlock[].
- * Handles: SFX: annotations, BEAT/PAUSE markers, CUT TO/FADE IN transitions,
- * dialogue in quotes, camera directions in parens, and regular action text.
+ * Handles: [SCENE:] markers, SFX: annotations, BEAT/PAUSE markers, CUT TO/FADE IN transitions,
+ * scene breaks (— ✦ —), [REFLECTION]/[TENSION] wrappers, dialogue, camera directions,
+ * and regular action text.
  */
 export function parseCinematifiedText(text: string): CinematicBlock[] {
     const blocks: CinematicBlock[] = [];
+
+    // Track wrapper state for [TENSION] and [REFLECTION] blocks
+    let inTensionBlock = false;
+    let inReflectionBlock = false;
 
     // Extract metadata tags at the end of the response: [GENRE: fantasy] [TONE: dark, suspenseful]
     // (We'll handle these later in the orchestration layer by exporting a util to scrape them from text)
@@ -262,6 +275,54 @@ export function parseCinematifiedText(text: string): CinematicBlock[] {
             .filter(Boolean);
 
         for (const line of lines) {
+            // [SCENE: description] marker — scene title
+            const sceneMatch = line.match(/^\[SCENE:\s*(.+?)\]\s*$/i);
+            if (sceneMatch) {
+                blocks.push({
+                    id: generateBlockId(),
+                    type: 'title_card',
+                    content: sceneMatch[1].trim(),
+                    intensity: 'normal',
+                });
+                continue;
+            }
+
+            // Scene break: — ✦ — or *** or ---
+            if (/^(—\s*✦\s*—|\*{3,}|-{3,})\s*$/.test(line)) {
+                blocks.push({
+                    id: generateBlockId(),
+                    type: 'beat',
+                    content: '— ✦ —',
+                    intensity: 'normal',
+                    beat: { type: 'PAUSE' },
+                });
+                continue;
+            }
+
+            // [TENSION] wrapper open
+            if (/^\[TENSION\]\s*$/i.test(line)) {
+                inTensionBlock = true;
+                continue;
+            }
+
+            // [/TENSION] wrapper close
+            if (/^\[\/TENSION\]\s*$/i.test(line)) {
+                inTensionBlock = false;
+                continue;
+            }
+
+            // [REFLECTION] wrapper open
+            if (/^\[REFLECTION\]\s*$/i.test(line)) {
+                inReflectionBlock = true;
+                continue;
+            }
+
+            // [/REFLECTION] wrapper close
+            if (/^\[\/REFLECTION\]\s*$/i.test(line)) {
+                inReflectionBlock = false;
+                continue;
+            }
+
             // BEAT / PAUSE / SILENCE (standalone marker)
             if (/^(BEAT|PAUSE|SILENCE|TENSION|RELEASE)\.?\s*$/i.test(line)) {
                 const beatType = line.replace(/[.\s]+$/, '').toUpperCase();
@@ -332,6 +393,39 @@ export function parseCinematifiedText(text: string): CinematicBlock[] {
                     intensity: 'normal',
                     cameraDirection: direction,
                 });
+                continue;
+            }
+
+            // Content inside [REFLECTION] wrapper → inner_thought
+            if (inReflectionBlock) {
+                const { cleaned, emotion, tensionScore } = extractBlockMetadata(line);
+                if (cleaned) {
+                    blocks.push({
+                        id: generateBlockId(),
+                        type: 'inner_thought',
+                        content: cleaned,
+                        intensity: 'whisper',
+                        emotion,
+                        tensionScore,
+                    });
+                }
+                continue;
+            }
+
+            // Content inside [TENSION] wrapper → action with heightened tension
+            if (inTensionBlock) {
+                const { cleaned, emotion } = extractBlockMetadata(line);
+                if (cleaned) {
+                    blocks.push({
+                        id: generateBlockId(),
+                        type: 'action',
+                        content: cleaned,
+                        intensity: 'emphasis',
+                        timing: cleaned.split(/\s+/).length <= 4 ? 'rapid' : 'quick',
+                        emotion: emotion || 'suspense',
+                        tensionScore: 80,
+                    });
+                }
                 continue;
             }
 
@@ -500,9 +594,61 @@ export function cinematifyOffline(text: string): CinematificationResult {
     };
 }
 
+// ─── Heuristic Scene Detection (Fallback) ─────────────────
+
+/** Matches time shifts, location changes, and narrative jumps that typically indicate scene breaks */
+const SCENE_BREAK_SIGNALS =
+    /(later that night|meanwhile|hours later|at dawn|suddenly|in another place|elsewhere|the next (morning|day|evening|night)|days later|weeks later|months later|years later|across town|back at|far away|on the other side)/i;
+
+/** Matches preposition + optional article + capitalized location name (e.g., "in the Forest", "at Castle Rock") */
+const LOCATION_PATTERN =
+    /\b(?:in|at|on|near|beside|inside|outside|beneath|above|across)\s+(?:the\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/;
+
+/** Matches time-of-day or temporal phrases for scene title derivation */
+const TIME_PATTERN =
+    /\b(that night|that morning|the next day|at dawn|at dusk|hours later|days later|meanwhile)\b/i;
+
+/**
+ * Detect scene breaks in paragraphs using heuristic patterns.
+ * Used as fallback when AI scene segmentation is unavailable.
+ */
+export function detectSceneBreaks(paragraphs: string[]): string[][] {
+    const scenes: string[][] = [];
+    let currentScene: string[] = [];
+
+    for (const p of paragraphs) {
+        if (SCENE_BREAK_SIGNALS.test(p) && currentScene.length > 0) {
+            scenes.push(currentScene);
+            currentScene = [];
+        }
+
+        currentScene.push(p);
+    }
+
+    if (currentScene.length) scenes.push(currentScene);
+
+    return scenes;
+}
+
+/** Derive a simple scene title from the first paragraph of a scene group */
+function deriveSceneTitle(sceneParagraphs: string[], sceneNumber: number): string {
+    const first = sceneParagraphs[0] || '';
+    // Try to extract a location or time indicator
+    const locationMatch = first.match(LOCATION_PATTERN);
+    if (locationMatch) return locationMatch[1];
+
+    const timeMatch = first.match(TIME_PATTERN);
+    if (timeMatch) return timeMatch[1].charAt(0).toUpperCase() + timeMatch[1].slice(1);
+
+    return `Scene ${sceneNumber}`;
+}
+
 function createFallbackBlocks(text: string): CinematicBlock[] {
     const blocks: CinematicBlock[] = [];
     const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim());
+
+    // Use heuristic scene detection to group paragraphs into scenes
+    const scenes = detectSceneBreaks(paragraphs);
 
     // Scene transition patterns
     const transitionPatterns = [
@@ -556,6 +702,33 @@ function createFallbackBlocks(text: string): CinematicBlock[] {
     for (let i = 0; i < paragraphs.length; i++) {
         const para = paragraphs[i].trim();
         if (!para) continue;
+
+        // Insert scene title cards at the start of each detected scene (if multiple scenes)
+        if (scenes.length > 1) {
+            for (let s = 0; s < scenes.length; s++) {
+                if (scenes[s][0] === para && (s > 0 || i === 0)) {
+                    if (s > 0) {
+                        // Add scene break before new scene
+                        blocks.push({
+                            id: generateBlockId(),
+                            type: 'beat',
+                            content: '— ✦ —',
+                            intensity: 'normal',
+                            beat: { type: 'PAUSE' },
+                        });
+                    }
+                    // Derive a scene title from context
+                    const sceneTitle = deriveSceneTitle(scenes[s], s + 1);
+                    blocks.push({
+                        id: generateBlockId(),
+                        type: 'title_card',
+                        content: sceneTitle,
+                        intensity: 'normal',
+                    });
+                    break;
+                }
+            }
+        }
 
         // Check for scene transition
         if (transitionPatterns.some(p => p.test(para))) {
@@ -1059,8 +1232,6 @@ export function createReadingProgress(
 }
 
 // ─── Validation Helpers ────────────────────────────────────
-
-import type { BeatType, TransitionType } from '../types/cinematifier';
 
 const VALID_BEAT_TYPES = new Set<string>([
     'BEAT',
