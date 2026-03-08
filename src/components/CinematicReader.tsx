@@ -90,11 +90,24 @@ const CinematicBlockView = React.memo(function CinematicBlockView({
         },
     };
 
+    // Tension-driven layout: higher tension = more dramatic spacing
+    const tensionClass =
+        block.tensionScore !== undefined
+            ? block.tensionScore > 80
+                ? 'cine-block--tension-extreme'
+                : block.tensionScore > 60
+                  ? 'cine-block--tension-high'
+                  : block.tensionScore > 30
+                    ? 'cine-block--tension-medium'
+                    : ''
+            : '';
+
     const blockClasses = [
         'cine-block',
         `cine-block--${block.type}`,
         `cine-block--${block.intensity}`,
         block.timing ? `cine-block--timing-${block.timing}` : '',
+        tensionClass,
     ]
         .filter(Boolean)
         .join(' ');
@@ -292,6 +305,66 @@ const OriginalTextView = React.memo(function OriginalTextView({ text }: { text: 
                 >
                     {para}
                 </motion.p>
+            ))}
+        </div>
+    );
+});
+
+// ─── Emotion Heatmap ───────────────────────────────────────
+
+/** Displays chapter tension as a visual heatmap bar above the content */
+const EmotionHeatmap = React.memo(function EmotionHeatmap({
+    blocks,
+}: {
+    blocks: CinematicBlock[];
+}) {
+    // Group blocks into segments and compute average tension per segment
+    const segments = useMemo(() => {
+        if (blocks.length === 0) return [];
+
+        const SEGMENT_SIZE = Math.max(1, Math.ceil(blocks.length / 30));
+        const result: { tension: number; emotion: string }[] = [];
+
+        for (let i = 0; i < blocks.length; i += SEGMENT_SIZE) {
+            const slice = blocks.slice(i, i + SEGMENT_SIZE);
+            const tensions = slice
+                .map(b => b.tensionScore)
+                .filter((t): t is number => t !== undefined);
+            const avgTension =
+                tensions.length > 0 ? tensions.reduce((a, b) => a + b, 0) / tensions.length : 30;
+
+            // Pick dominant emotion
+            const emotions = slice
+                .map(b => b.emotion)
+                .filter((e): e is NonNullable<typeof e> => e !== undefined);
+            const dominantEmotion =
+                emotions.length > 0
+                    ? emotions
+                          .sort(
+                              (a, b) =>
+                                  emotions.filter(e => e === a).length -
+                                  emotions.filter(e => e === b).length,
+                          )
+                          .pop() || 'neutral'
+                    : 'neutral';
+
+            result.push({ tension: avgTension, emotion: dominantEmotion });
+        }
+
+        return result;
+    }, [blocks]);
+
+    if (segments.length === 0) return null;
+
+    return (
+        <div className="cine-emotion-heatmap" aria-label="Chapter tension heatmap">
+            {segments.map((seg, i) => (
+                <div
+                    key={i}
+                    className={`cine-heatmap-block cine-heatmap-block--${seg.emotion}`}
+                    style={{ opacity: Math.max(0.15, seg.tension / 100) }}
+                    title={`Tension: ${Math.round(seg.tension)}`}
+                />
             ))}
         </div>
     );
@@ -923,6 +996,11 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                     <span>{currentChapter.estimatedReadTime} min read</span>
                 </div>
             </div>
+
+            {/* Emotion Heatmap — visual tension overview of chapter */}
+            {currentChapter.cinematifiedBlocks.length > 0 && (
+                <EmotionHeatmap blocks={currentChapter.cinematifiedBlocks} />
+            )}
 
             {/* Content Area */}
             <main

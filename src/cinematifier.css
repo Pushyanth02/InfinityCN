@@ -1681,3 +1681,74 @@
     background: #22c55e;
     flex-shrink: 0;
 }
+
+/* ─── Emotion Heatmap ──────────────────────────────────── */
+
+.cine-emotion-heatmap {
+    display: flex;
+    gap: 3px;
+    margin: 0 auto 2rem;
+    max-width: 760px;
+    padding: 0 2rem;
+    flex-wrap: wrap;
+}
+
+.cine-heatmap-block {
+    width: 18px;
+    height: 6px;
+    background: var(--cine-text-primary, #eae7e1);
+    border-radius: 1px;
+    transition: opacity 0.3s ease;
+}
+
+.cine-heatmap-block--fear,
+.cine-heatmap-block--suspense {
+    background: #ef4444;
+}
+
+.cine-heatmap-block--joy,
+.cine-heatmap-block--surprise {
+    background: #f59e0b;
+}
+
+.cine-heatmap-block--sadness {
+    background: #6366f1;
+}
+
+.cine-heatmap-block--anger {
+    background: #dc2626;
+}
+
+.cine-heatmap-block--neutral {
+    background: var(--cine-text-primary, #eae7e1);
+}
+
+/* ─── Tension-Driven Spacing ────────────────────────────── */
+
+.cine-block--tension-medium {
+    margin-top: 2rem;
+    margin-bottom: 2rem;
+}
+
+.cine-block--tension-high {
+    margin-top: 2.4rem;
+    margin-bottom: 2.4rem;
+    letter-spacing: 0.3px;
+}
+
+.cine-block--tension-extreme {
+    margin-top: 3rem;
+    margin-bottom: 3rem;
+    letter-spacing: 0.5px;
+}
+
+/* ─── Scene Break Marker ───────────────────────────────── */
+
+.cine-block--beat .cine-beat-label {
+    font-size: 0.875rem;
+}
+
+/* Scene break with star marker (— ✦ —) gets special styling */
+.cine-block--beat:has(.cine-beat-label:empty) + .cine-block--title_card {
+    margin-top: 2rem;
+}
