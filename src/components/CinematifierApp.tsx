@@ -685,6 +685,7 @@ export const CinematifierApp: React.FC = () => {
                             <button
                                 className="cine-btn cine-btn--icon"
                                 onClick={() => setShowSettings(false)}
+                                aria-label="Close settings"
                             >
                                 <X size={20} />
                             </button>

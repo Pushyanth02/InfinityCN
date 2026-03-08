@@ -9,13 +9,15 @@
  * - Enhanced dramatic pacing
  */
 
-import { callAIWithDedup } from './ai';
+import { callAIWithDedup, MODEL_PRESETS, streamAI } from './ai';
 import type { AIConfig } from './ai';
 import type {
     CinematicBlock,
     CinematificationResult,
     Chapter,
     ChapterSegment,
+    BeatType,
+    TransitionType,
 } from '../types/cinematifier';
 import { generateEmbedding, retrieveRelevantContext } from './embeddings';
 import type { ChunkEmbedding } from './embeddings';
@@ -126,8 +128,7 @@ export async function cinematifyText(
         let lastProcessedIndex = 0;
 
         try {
-            // Check if provider supports streaming (offline algorithms, deepseek in some configs, might not)
-            const { MODEL_PRESETS, streamAI } = await import('./ai');
+            // Check if provider supports streaming
             const preset = config.provider !== 'none' ? MODEL_PRESETS[config.provider] : null;
             const canStream = preset?.supportsStreaming;
 
@@ -1063,8 +1064,6 @@ export function createReadingProgress(
 }
 
 // ─── Validation Helpers ────────────────────────────────────
-
-import type { BeatType, TransitionType } from '../types/cinematifier';
 
 const VALID_BEAT_TYPES = new Set<string>([
     'BEAT',
