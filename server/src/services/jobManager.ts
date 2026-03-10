@@ -10,6 +10,7 @@
 import { getClient as getRedis } from './redis.js';
 import { config } from '../config.js';
 import type { JobState, JobStatus, JobEvent, ChapterResult } from '../types.js';
+import { sha256Hex } from '../lib/hash.js';
 
 const KEY_PREFIX = config.redisKeyPrefix;
 const JOB_KEY = (bookId: string) => `${KEY_PREFIX}job:${bookId}`;
@@ -24,6 +25,7 @@ export async function createJob(
     title: string,
     totalChapters: number,
     provider: string,
+    accessToken: string,
 ): Promise<JobState> {
     const redis = await getRedis();
     const now = Date.now();
@@ -41,7 +43,10 @@ export async function createJob(
         updatedAt: now,
     };
 
-    await redis.hset(JOB_KEY(bookId), serializeJobState(state));
+    const record = serializeJobState(state);
+    record.accessTokenHash = sha256Hex(accessToken);
+
+    await redis.hset(JOB_KEY(bookId), record);
 
     // Expire job state after 48 hours
     await redis.expire(JOB_KEY(bookId), 172_800);
@@ -56,6 +61,13 @@ export async function getJob(bookId: string): Promise<JobState | null> {
     const data = await redis.hgetall(JOB_KEY(bookId));
     if (!data || Object.keys(data).length === 0) return null;
     return deserializeJobState(data);
+}
+
+export async function verifyJobAccessToken(bookId: string, token: string): Promise<boolean> {
+    const redis = await getRedis();
+    const storedHash = await redis.hget(JOB_KEY(bookId), 'accessTokenHash');
+    if (!storedHash) return false;
+    return storedHash === sha256Hex(token);
 }
 
 // ─── Update Job Status ──────────────────────────────────────

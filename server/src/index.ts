@@ -1,17 +1,13 @@
 /**
  * index.ts — InfinityCN API Server
- *
- * Express server with Redis caching/rate-limiting and RabbitMQ job queuing.
- * Replaces the legacy server/proxy.ts with full infrastructure support.
- *
- * Run: npx tsx src/index.ts
  */
 
 import express from 'express';
 import { config } from './config.js';
 import { corsMiddleware } from './middleware/cors.js';
-import { rateLimitMiddleware } from './middleware/rateLimit.js';
+import { jobsRateLimitMiddleware, rateLimitMiddleware } from './middleware/rateLimit.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import { securityHeaders } from './middleware/securityHeaders.js';
 import aiRoutes from './routes/ai.js';
 import healthRoutes from './routes/health.js';
 import jobRoutes from './routes/jobs.js';
@@ -24,13 +20,27 @@ import {
 
 const app = express();
 
+function enforceProductionSafety(): void {
+    if (config.nodeEnv !== 'production') return;
+
+    if (config.rabbitmqUrl.includes('infinitycn_dev')) {
+        throw new Error('Unsafe default RabbitMQ credentials detected in production.');
+    }
+
+    if (config.allowedOrigins.some(origin => origin.includes('localhost'))) {
+        console.warn('[Server] localhost is present in ALLOWED_ORIGINS while NODE_ENV=production');
+    }
+}
+
 // ── Middleware ────────────────────────────────────────────────
 
+app.use(securityHeaders);
 app.use(corsMiddleware);
 app.use(express.json({ limit: '1mb' }));
 
-// Rate limiting on AI proxy routes only
+// Rate limiting
 app.use('/api/ai', rateLimitMiddleware);
+app.use('/api/jobs', jobsRateLimitMiddleware);
 
 // ── Routes ───────────────────────────────────────────────────
 
@@ -45,6 +55,8 @@ app.use(errorHandler);
 // ── Startup ──────────────────────────────────────────────────
 
 async function start(): Promise<void> {
+    enforceProductionSafety();
+
     // Connect to Redis (non-blocking — degrades gracefully if unavailable)
     try {
         await getRedis();
@@ -79,25 +91,17 @@ async function start(): Promise<void> {
 async function shutdown(signal: string): Promise<void> {
     console.log(`\n[Server] ${signal} received, shutting down...`);
 
-    const timeout = setTimeout(() => {
-        console.error('[Server] Shutdown timeout, forcing exit');
-        process.exit(1);
-    }, 30_000);
+    await Promise.allSettled([disconnectRabbitMQ(), disconnectRedis()]);
 
-    try {
-        await Promise.all([disconnectRedis(), disconnectRabbitMQ()]);
-    } catch (err) {
-        console.error('[Server] Error during shutdown:', (err as Error).message);
-    }
-
-    clearTimeout(timeout);
     process.exit(0);
 }
 
-process.on('SIGTERM', () => void shutdown('SIGTERM'));
-process.on('SIGINT', () => void shutdown('SIGINT'));
-
-void start().catch(err => {
-    console.error('[Server] Fatal startup error:', (err as Error).message);
-    process.exit(1);
+process.on('SIGINT', () => {
+    void shutdown('SIGINT');
 });
+
+process.on('SIGTERM', () => {
+    void shutdown('SIGTERM');
+});
+
+void start();

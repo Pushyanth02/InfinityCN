@@ -31,8 +31,10 @@ When using the optional API server (`server/src/index.ts`):
 
 | Area | Implementation |
 |------|----------------|
-| **Rate Limiting** | 30 requests/minute per IP (sliding window) |
+| **Rate Limiting** | AI + Jobs API sliding-window limits per IP |
+| **Job Access Control** | Per-job access token required for read/cancel/SSE routes |
 | **CORS** | Configurable origin whitelist |
+| **Security Headers** | Nosniff, frame deny, referrer and permissions policies |
 | **Token Capping** | Maximum 2048 output tokens to prevent cost abuse |
 | **Request Validation** | JSON body type checking |
 

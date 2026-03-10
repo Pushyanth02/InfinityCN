@@ -35,6 +35,14 @@ function parsePositiveInt(value: string | undefined, fallback: number): number {
     return Math.floor(n);
 }
 
+function parseBoolean(value: string | undefined, fallback: boolean): boolean {
+    if (value === undefined) return fallback;
+    const normalized = value.trim().toLowerCase();
+    if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+    if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+    return fallback;
+}
+
 export const config = {
     // Server
     port: parsePositiveInt(process.env.PORT, 3001),
@@ -58,6 +66,11 @@ export const config = {
     // Rate limiting
     rateWindowMs: parsePositiveInt(process.env.RATE_WINDOW_MS, 60_000),
     rateMaxRequests: parsePositiveInt(process.env.RATE_MAX_REQUESTS, 30),
+    jobsRateWindowMs: parsePositiveInt(process.env.JOBS_RATE_WINDOW_MS, 60_000),
+    jobsRateMaxRequests: parsePositiveInt(process.env.JOBS_RATE_MAX_REQUESTS, 20),
+
+    // Job access control
+    requireJobToken: parseBoolean(process.env.REQUIRE_JOB_TOKEN, true),
 
     // AI Provider keys
     geminiKey: process.env.GEMINI_API_KEY || '',

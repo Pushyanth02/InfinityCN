@@ -116,6 +116,7 @@ export interface SubmitJobResponse {
     bookId: string;
     status: JobStatus;
     totalChapters: number;
+    accessToken: string;
 }
 
 // ─── Provider Config ─────────────────────────────────────────

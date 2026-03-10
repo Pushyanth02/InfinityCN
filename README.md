@@ -149,7 +149,10 @@ VITE_API_PROXY_URL=http://localhost:3001
 | `OLLAMA_URL` | Local Ollama server URL | `http://localhost:11434` |
 | `CACHE_TTL_SECONDS` | AI response cache TTL | `1800` |
 | `RATE_WINDOW_MS` | Rate limit window | `60000` |
-| `RATE_MAX_REQUESTS` | Max requests per window per IP | `30` |
+| `RATE_MAX_REQUESTS` | Max AI proxy requests per window per IP | `30` |
+| `JOBS_RATE_WINDOW_MS` | Job API rate-limit window | `60000` |
+| `JOBS_RATE_MAX_REQUESTS` | Max job API requests per window per IP | `20` |
+| `REQUIRE_JOB_TOKEN` | Require per-job access token for read/cancel/SSE routes | `true` |
 | `MAX_TOKENS_CAP` | Output token cap (cost protection) | `2048` |
 | `WORKER_CONCURRENCY` | Concurrent chapters per worker | `1` |
 

@@ -1,11 +1,16 @@
 /**
  * serverJobs.ts — Frontend client for the server-side job API
- *
- * Provides functions to submit books for server processing,
- * poll job status, fetch chapter results, and stream SSE events.
  */
 
-const API_BASE = import.meta.env.VITE_API_PROXY_URL as string | undefined;
+const jobAccessTokens = new Map<string, string>();
+
+function getConfiguredApiBase(): string | undefined {
+    const viteValue = import.meta.env.VITE_API_PROXY_URL as string | undefined;
+    const maybeProcess = globalThis as unknown as {
+        process?: { env?: Record<string, string | undefined> };
+    };
+    return viteValue || maybeProcess.process?.env?.VITE_API_PROXY_URL;
+}
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -61,13 +66,19 @@ export interface ServerJobEvent {
 // ─── API Helpers ────────────────────────────────────────────
 
 function getBaseUrl(): string {
-    if (!API_BASE) throw new Error('Server API not configured (VITE_API_PROXY_URL not set)');
-    return API_BASE;
+    const apiBase = getConfiguredApiBase();
+    if (!apiBase) throw new Error('Server API not configured (VITE_API_PROXY_URL not set)');
+    return apiBase;
+}
+
+function getTokenHeaders(bookId: string): HeadersInit {
+    const token = jobAccessTokens.get(bookId);
+    return token ? { 'X-Job-Token': token } : {};
 }
 
 /** Check if server-side job processing is available */
 export function isServerProcessingAvailable(): boolean {
-    return Boolean(API_BASE);
+    return Boolean(getConfiguredApiBase());
 }
 
 // ─── Submit Job ─────────────────────────────────────────────
@@ -90,13 +101,29 @@ export async function submitBookForServerProcessing(
         throw new Error(body.error || `Server error: ${res.status}`);
     }
 
-    return res.json();
+    const data = (await res.json()) as {
+        bookId: string;
+        status: string;
+        totalChapters: number;
+        accessToken?: string;
+    };
+
+    if (data.accessToken && data.bookId) {
+        jobAccessTokens.set(data.bookId, data.accessToken);
+    }
+
+    return {
+        bookId: data.bookId,
+        status: data.status,
+        totalChapters: data.totalChapters,
+    };
 }
 
 // ─── Job Status ─────────────────────────────────────────────
 
 export async function getJobStatus(bookId: string): Promise<ServerJobState> {
     const res = await fetch(`${getBaseUrl()}/api/jobs/${bookId}`, {
+        headers: getTokenHeaders(bookId),
         signal: AbortSignal.timeout(10_000),
     });
 
@@ -114,6 +141,7 @@ export async function getProcessedChapter(
     chapterIndex: number,
 ): Promise<ServerChapterResult> {
     const res = await fetch(`${getBaseUrl()}/api/jobs/${bookId}/chapters/${chapterIndex}`, {
+        headers: getTokenHeaders(bookId),
         signal: AbortSignal.timeout(10_000),
     });
 
@@ -126,12 +154,6 @@ export async function getProcessedChapter(
 
 // ─── SSE Event Stream ───────────────────────────────────────
 
-/**
- * Connect to the server's SSE endpoint for real-time job events.
- * Falls back to polling if EventSource fails.
- *
- * @returns Cleanup function to close the connection
- */
 export function connectToJobEvents(
     bookId: string,
     onProgress: (event: ServerJobEvent) => void,
@@ -139,7 +161,7 @@ export function connectToJobEvents(
     onError: (error: string) => void,
 ): () => void {
     let closed = false;
-    let settled = false; // Prevents onComplete/onError from firing twice
+    let settled = false;
     let eventSource: EventSource | null = null;
     let pollTimer: ReturnType<typeof setInterval> | null = null;
     let pollInFlight = false;
@@ -157,10 +179,11 @@ export function connectToJobEvents(
     };
 
     try {
-        const url = `${getBaseUrl()}/api/jobs/${bookId}/events`;
+        const token = jobAccessTokens.get(bookId);
+        const params = token ? `?token=${encodeURIComponent(token)}` : '';
+        const url = `${getBaseUrl()}/api/jobs/${bookId}/events${params}`;
         eventSource = new EventSource(url);
 
-        // Handle specific event types
         eventSource.addEventListener('status', (e: MessageEvent) => {
             if (closed) return;
             try {
@@ -228,11 +251,9 @@ export function connectToJobEvents(
             }
         });
 
-        // If EventSource itself errors, close it fully and fall back to polling
         eventSource.onerror = () => {
             if (closed) return;
             console.warn('[ServerJobs] SSE disconnected, falling back to polling');
-            // Fully close and nullify EventSource to prevent auto-reconnect
             if (eventSource) {
                 const es = eventSource;
                 eventSource = null;
@@ -241,7 +262,6 @@ export function connectToJobEvents(
             startPolling();
         };
     } catch {
-        // EventSource not available or URL invalid — poll instead
         startPolling();
     }
 
@@ -263,42 +283,28 @@ export function connectToJobEvents(
                 });
 
                 if (status.status === 'completed') {
-                    if (settled) {
-                        cleanup();
-                        return;
+                    if (!settled) {
+                        settled = true;
+                        onComplete({ type: 'job_completed', bookId, timestamp: Date.now() });
                     }
-                    settled = true;
-                    onComplete({
-                        type: 'job_completed',
-                        bookId: status.bookId,
-                        processedChapters: status.processedChapters,
-                        totalChapters: status.totalChapters,
-                        timestamp: Date.now(),
-                    });
                     cleanup();
-                } else if (status.status === 'failed') {
-                    if (settled) {
-                        cleanup();
-                        return;
+                } else if (status.status === 'failed' || status.status === 'cancelled') {
+                    if (!settled) {
+                        settled = true;
+                        onError(status.errorMessage || `Job ${status.status}`);
                     }
-                    settled = true;
-                    onError(status.errorMessage || 'Job failed');
-                    cleanup();
-                } else if (status.status === 'cancelled') {
-                    if (settled) {
-                        cleanup();
-                        return;
-                    }
-                    settled = true;
-                    onError('Job was cancelled');
                     cleanup();
                 }
             } catch (err) {
-                console.warn('[ServerJobs] Poll failed:', err);
+                if (!settled) {
+                    settled = true;
+                    onError((err as Error).message || 'Polling failed');
+                }
+                cleanup();
             } finally {
                 pollInFlight = false;
             }
-        }, 5_000);
+        }, 2000);
     }
 
     return cleanup;
