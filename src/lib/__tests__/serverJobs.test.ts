@@ -1,25 +1,11 @@
-/**
- * serverJobs.test.ts — Unit tests for serverJobs.ts
- *
- * Covers:
- *   • isServerProcessingAvailable — returns true only when VITE_API_PROXY_URL is set
- *   • submitBookForServerProcessing — happy path and error handling
- *   • getJobStatus                  — happy path and error handling
- *   • getProcessedChapter           — happy path and error handling
- *
- * All network calls are intercepted with vi.stubGlobal('fetch', ...).
- * VITE_API_PROXY_URL is controlled via import.meta.env stubs.
- */
-
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
     isServerProcessingAvailable,
     submitBookForServerProcessing,
     getJobStatus,
     getProcessedChapter,
+    connectToJobEvents,
 } from '../serverJobs';
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function makeJsonResponse(body: unknown, status = 200): Response {
     return new Response(JSON.stringify(body), {
@@ -33,180 +19,126 @@ const SAMPLE_CHAPTERS = [
     { title: 'Chapter 2', originalText: 'The adventure continues.' },
 ];
 
-// ─── isServerProcessingAvailable ─────────────────────────────────────────────
-
-describe('isServerProcessingAvailable', () => {
-    it('returns true when VITE_API_PROXY_URL is set', () => {
-        // The module-level constant captures import.meta.env at load time.
-        // We test the observable contract: the function returns a boolean.
-        expect(typeof isServerProcessingAvailable()).toBe('boolean');
-    });
-
-    it('returns false in the test environment (no VITE_API_PROXY_URL)', () => {
-        // In Vitest, import.meta.env.VITE_API_PROXY_URL is undefined unless explicitly set.
-        expect(isServerProcessingAvailable()).toBe(false);
-    });
-});
-
-// ─── submitBookForServerProcessing ───────────────────────────────────────────
-
-describe('submitBookForServerProcessing', () => {
+describe('serverJobs', () => {
     beforeEach(() => {
-        // Patch the module-level API_BASE so the server path is reachable
-        vi.stubGlobal(
-            'fetch',
-            vi
-                .fn()
-                .mockImplementation(() =>
-                    Promise.resolve(
-                        makeJsonResponse({ bookId: 'book-1', status: 'queued', totalChapters: 2 }),
-                    ),
-                ),
-        );
-        // Patch import.meta.env so getBaseUrl() returns a value
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (import.meta as any).env = { ...import.meta.env, VITE_API_PROXY_URL: 'http://server' };
+        vi.unstubAllGlobals();
     });
 
     afterEach(() => {
         vi.unstubAllGlobals();
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (import.meta as any).env = { ...import.meta.env, VITE_API_PROXY_URL: undefined };
+        vi.unstubAllEnvs();
     });
 
-    it('calls /api/jobs with POST', async () => {
-        await submitBookForServerProcessing('book-1', 'My Novel', SAMPLE_CHAPTERS, 'openai').catch(
-            () => {},
-        );
-        // Whether or not the env patch worked, fetch should have been called
-        // only if the proxy URL is available — we just assert no throw in happy path
+    it('isServerProcessingAvailable reflects VITE_API_PROXY_URL', () => {
+        vi.stubEnv('VITE_API_PROXY_URL', 'http://server');
+        expect(isServerProcessingAvailable()).toBe(true);
+
+        vi.unstubAllEnvs();
+        expect(isServerProcessingAvailable()).toBe(false);
     });
 
-    it('resolves with bookId, status, and totalChapters on success', async () => {
-        try {
-            const result = await submitBookForServerProcessing(
-                'book-1',
-                'My Novel',
-                SAMPLE_CHAPTERS,
-                'openai',
+    it('submitBookForServerProcessing stores token and uses it on status/chapter requests', async () => {
+        vi.stubEnv('VITE_API_PROXY_URL', 'http://server');
+
+        const fetchMock = vi
+            .fn()
+            .mockResolvedValueOnce(
+                makeJsonResponse({
+                    bookId: 'book-1',
+                    status: 'queued',
+                    totalChapters: 2,
+                    accessToken: 'token-123',
+                }),
+            )
+            .mockResolvedValueOnce(
+                makeJsonResponse({
+                    bookId: 'book-1',
+                    title: 'My Novel',
+                    status: 'processing',
+                    provider: 'openai',
+                    totalChapters: 2,
+                    processedChapters: 1,
+                    currentChapter: 1,
+                    errorMessage: '',
+                    createdAt: 1,
+                    updatedAt: 2,
+                }),
+            )
+            .mockResolvedValueOnce(
+                makeJsonResponse({
+                    blocks: [{ id: '1', type: 'action', content: 'Text', intensity: 'normal' }],
+                    rawText: 'Text',
+                    metadata: {
+                        originalWordCount: 1,
+                        cinematifiedWordCount: 1,
+                        sfxCount: 0,
+                        transitionCount: 0,
+                        beatCount: 0,
+                        processingTimeMs: 10,
+                    },
+                }),
             );
-            expect(result.bookId).toBe('book-1');
-            expect(result.status).toBe('queued');
-            expect(result.totalChapters).toBe(2);
-        } catch {
-            // If VITE_API_PROXY_URL isn't patched at module level, getBaseUrl() throws
-            // That is also a valid tested path
-        }
+        vi.stubGlobal('fetch', fetchMock);
+
+        await submitBookForServerProcessing('book-1', 'My Novel', SAMPLE_CHAPTERS, 'openai');
+        await getJobStatus('book-1');
+        await getProcessedChapter('book-1', 0);
+
+        const statusCall = fetchMock.mock.calls[1];
+        const chapterCall = fetchMock.mock.calls[2];
+
+        expect((statusCall[1] as RequestInit).headers).toEqual({ 'X-Job-Token': 'token-123' });
+        expect((chapterCall[1] as RequestInit).headers).toEqual({ 'X-Job-Token': 'token-123' });
     });
 
-    it('throws when the server returns an error response', async () => {
+    it('connectToJobEvents appends token to SSE URL when available', async () => {
+        vi.stubEnv('VITE_API_PROXY_URL', 'http://server');
+
+        vi.stubGlobal(
+            'fetch',
+            vi.fn().mockResolvedValue(
+                makeJsonResponse({
+                    bookId: 'book-1',
+                    status: 'queued',
+                    totalChapters: 1,
+                    accessToken: 'token-xyz',
+                }),
+            ),
+        );
+
+        const eventSourceCtor = vi.fn().mockImplementation(function (this: {
+            close: () => void;
+            addEventListener: () => void;
+            onerror: (() => void) | null;
+        }) {
+            this.close = vi.fn();
+            this.addEventListener = vi.fn();
+            this.onerror = null;
+            return this;
+        });
+        vi.stubGlobal('EventSource', eventSourceCtor as unknown as typeof EventSource);
+
+        await submitBookForServerProcessing('book-1', 'My Novel', SAMPLE_CHAPTERS, 'openai');
+
+        connectToJobEvents('book-1', vi.fn(), vi.fn(), vi.fn());
+
+        expect(eventSourceCtor.mock.calls[0][0]).toContain(
+            '/api/jobs/book-1/events?token=token-xyz',
+        );
+    });
+
+    it('throws on non-OK API responses', async () => {
+        vi.stubEnv('VITE_API_PROXY_URL', 'http://server');
+
         vi.stubGlobal(
             'fetch',
             vi.fn().mockResolvedValue(makeJsonResponse({ error: 'Internal server error' }, 500)),
         );
+
         await expect(
             submitBookForServerProcessing('book-1', 'My Novel', SAMPLE_CHAPTERS, 'openai'),
-        ).rejects.toThrow();
-    });
-});
-
-// ─── getJobStatus ─────────────────────────────────────────────────────────────
-
-describe('getJobStatus', () => {
-    const MOCK_JOB_STATE = {
-        bookId: 'book-1',
-        title: 'My Novel',
-        status: 'processing',
-        provider: 'openai',
-        totalChapters: 2,
-        processedChapters: 1,
-        currentChapter: 2,
-        errorMessage: '',
-        createdAt: 1000,
-        updatedAt: 2000,
-    };
-
-    beforeEach(() => {
-        vi.stubGlobal(
-            'fetch',
-            vi.fn().mockImplementation(() => Promise.resolve(makeJsonResponse(MOCK_JOB_STATE))),
-        );
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (import.meta as any).env = { ...import.meta.env, VITE_API_PROXY_URL: 'http://server' };
-    });
-
-    afterEach(() => {
-        vi.unstubAllGlobals();
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (import.meta as any).env = { ...import.meta.env, VITE_API_PROXY_URL: undefined };
-    });
-
-    it('resolves with the ServerJobState on success', async () => {
-        try {
-            const state = await getJobStatus('book-1');
-            expect(state.bookId).toBe('book-1');
-            expect(state.status).toBe('processing');
-            expect(state.processedChapters).toBe(1);
-        } catch {
-            // Acceptable if proxy URL is not patched at module level
-        }
-    });
-
-    it('throws when the server returns 404', async () => {
-        vi.stubGlobal(
-            'fetch',
-            vi.fn().mockResolvedValue(makeJsonResponse({ error: 'Not found' }, 404)),
-        );
-        await expect(getJobStatus('nonexistent')).rejects.toThrow();
-    });
-});
-
-// ─── getProcessedChapter ──────────────────────────────────────────────────────
-
-describe('getProcessedChapter', () => {
-    const MOCK_CHAPTER = {
-        blocks: [{ id: '1', type: 'action', content: 'Text.', intensity: 'normal' }],
-        rawText: 'Text.',
-        metadata: {
-            originalWordCount: 1,
-            cinematifiedWordCount: 1,
-            sfxCount: 0,
-            transitionCount: 0,
-            beatCount: 0,
-            processingTimeMs: 10,
-        },
-    };
-
-    beforeEach(() => {
-        vi.stubGlobal(
-            'fetch',
-            vi.fn().mockImplementation(() => Promise.resolve(makeJsonResponse(MOCK_CHAPTER))),
-        );
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (import.meta as any).env = { ...import.meta.env, VITE_API_PROXY_URL: 'http://server' };
-    });
-
-    afterEach(() => {
-        vi.unstubAllGlobals();
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (import.meta as any).env = { ...import.meta.env, VITE_API_PROXY_URL: undefined };
-    });
-
-    it('resolves with the ServerChapterResult on success', async () => {
-        try {
-            const chapter = await getProcessedChapter('book-1', 0);
-            expect(chapter.blocks).toHaveLength(1);
-            expect(chapter.rawText).toBe('Text.');
-        } catch {
-            // Acceptable if proxy URL is not patched at module level
-        }
-    });
-
-    it('throws when the chapter is not yet ready (404)', async () => {
-        vi.stubGlobal(
-            'fetch',
-            vi.fn().mockResolvedValue(makeJsonResponse({ error: 'Chapter not ready' }, 404)),
-        );
+        ).rejects.toThrow('Internal server error');
+        await expect(getJobStatus('book-1')).rejects.toThrow();
         await expect(getProcessedChapter('book-1', 0)).rejects.toThrow();
     });
 });

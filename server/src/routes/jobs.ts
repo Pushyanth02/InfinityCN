@@ -1,16 +1,9 @@
 /**
  * routes/jobs.ts — Job submission, status, and SSE event endpoints
- *
- * Endpoints:
- *   POST   /api/jobs                    — Submit a book for server-side cinematification
- *   GET    /api/jobs/:bookId            — Get job status
- *   GET    /api/jobs/:bookId/chapters/:index — Get processed chapter result
- *   DELETE /api/jobs/:bookId            — Cancel a job
- *   GET    /api/jobs/:bookId/events     — SSE stream for real-time progress
  */
 
-import { Router, type Request, type Response } from 'express';
-import { v4 as uuidv4 } from 'uuid';
+import { Router, type Request, type Response, type NextFunction } from 'express';
+import { randomUUID } from 'node:crypto';
 import { publishJob, isHealthy as isRabbitHealthy, QUEUES } from '../services/rabbitmq.js';
 import {
     createJob,
@@ -18,9 +11,11 @@ import {
     cancelJob,
     getChapterResult,
     getEventsChannel,
+    verifyJobAccessToken,
 } from '../services/jobManager.js';
 import { getSubscriber } from '../services/redis.js';
-import type { CinematifyJobMessage, SubmitJobRequest } from '../types.js';
+import { config } from '../config.js';
+import type { CinematifyJobMessage, SubmitJobRequest, SubmitJobResponse } from '../types.js';
 
 const router = Router();
 
@@ -30,6 +25,49 @@ const MAX_TOTAL_PAYLOAD_BYTES = 50_000_000; // 50MB total
 const MAX_TITLE_LENGTH = 500;
 const VALID_PROVIDERS = new Set(['gemini', 'openai', 'anthropic', 'groq', 'deepseek', 'ollama']);
 const BOOK_ID_RE = /^[a-zA-Z0-9_-]{1,128}$/;
+const JOB_TOKEN_HEADER = 'x-job-token';
+
+function isValidBookId(bookId: string): boolean {
+    return BOOK_ID_RE.test(bookId);
+}
+
+async function requireJobAccess(
+    req: Request<{ bookId: string }>,
+    res: Response,
+    next: NextFunction,
+) {
+    if (!config.requireJobToken) {
+        next();
+        return;
+    }
+
+    const { bookId } = req.params;
+
+    if (!isValidBookId(bookId)) {
+        res.status(400).json({ error: 'Invalid bookId.' });
+        return;
+    }
+
+    const headerToken = req.get(JOB_TOKEN_HEADER) ?? '';
+    const queryToken = typeof req.query.token === 'string' ? req.query.token : '';
+    const token = headerToken || queryToken;
+
+    if (!token) {
+        res.status(401).json({ error: `Missing ${JOB_TOKEN_HEADER} header.` });
+        return;
+    }
+
+    try {
+        const allowed = await verifyJobAccessToken(bookId, token);
+        if (!allowed) {
+            res.status(403).json({ error: 'Invalid job access token.' });
+            return;
+        }
+        next();
+    } catch {
+        res.status(503).json({ error: 'Unable to validate job access token.' });
+    }
+}
 
 // ── POST /api/jobs — Submit a cinematification job ──────────
 
@@ -97,12 +135,13 @@ router.post('/api/jobs', async (req: Request, res: Response) => {
         return;
     }
 
-    const bookId = body.bookId || `book-${Date.now()}`;
+    const bookId = body.bookId || `book-${randomUUID()}`;
+    const accessToken = randomUUID();
     const totalChapters = body.chapters.length;
-    const correlationId = uuidv4();
+    const correlationId = randomUUID();
 
     // Create job state in Redis
-    await createJob(bookId, body.title, totalChapters, body.provider);
+    await createJob(bookId, body.title, totalChapters, body.provider, accessToken);
 
     // Publish one message per chapter to the cinematify-jobs queue
     for (let i = 0; i < totalChapters; i++) {
@@ -121,41 +160,43 @@ router.post('/api/jobs', async (req: Request, res: Response) => {
         await publishJob(QUEUES.CINEMATIFY_JOBS, message);
     }
 
-    res.status(201).json({
+    const response: SubmitJobResponse = {
         bookId,
         status: 'queued',
         totalChapters,
-    });
+        accessToken,
+    };
+
+    res.status(201).json(response);
 });
-
-// ── Param validation helper ─────────────────────────────────
-
-function isValidBookId(bookId: string): boolean {
-    return BOOK_ID_RE.test(bookId);
-}
 
 // ── GET /api/jobs/:bookId — Get job status ──────────────────
 
-router.get('/api/jobs/:bookId', async (req: Request<{ bookId: string }>, res: Response) => {
-    const { bookId } = req.params;
-    if (!isValidBookId(bookId)) {
-        res.status(400).json({ error: 'Invalid bookId.' });
-        return;
-    }
-    const job = await getJob(bookId);
+router.get(
+    '/api/jobs/:bookId',
+    requireJobAccess,
+    async (req: Request<{ bookId: string }>, res: Response) => {
+        const { bookId } = req.params;
+        if (!isValidBookId(bookId)) {
+            res.status(400).json({ error: 'Invalid bookId.' });
+            return;
+        }
+        const job = await getJob(bookId);
 
-    if (!job) {
-        res.status(404).json({ error: 'Job not found.' });
-        return;
-    }
+        if (!job) {
+            res.status(404).json({ error: 'Job not found.' });
+            return;
+        }
 
-    res.json(job);
-});
+        res.json(job);
+    },
+);
 
 // ── GET /api/jobs/:bookId/chapters/:index — Get chapter result
 
 router.get(
     '/api/jobs/:bookId/chapters/:index',
+    requireJobAccess,
     async (req: Request<{ bookId: string; index: string }>, res: Response) => {
         const { bookId, index } = req.params;
         if (!isValidBookId(bookId)) {
@@ -194,117 +235,125 @@ router.get(
 
 // ── DELETE /api/jobs/:bookId — Cancel a job ─────────────────
 
-router.delete('/api/jobs/:bookId', async (req: Request<{ bookId: string }>, res: Response) => {
-    const { bookId } = req.params;
-    if (!isValidBookId(bookId)) {
-        res.status(400).json({ error: 'Invalid bookId.' });
-        return;
-    }
-    const cancelled = await cancelJob(bookId);
+router.delete(
+    '/api/jobs/:bookId',
+    requireJobAccess,
+    async (req: Request<{ bookId: string }>, res: Response) => {
+        const { bookId } = req.params;
+        if (!isValidBookId(bookId)) {
+            res.status(400).json({ error: 'Invalid bookId.' });
+            return;
+        }
+        const cancelled = await cancelJob(bookId);
 
-    if (!cancelled) {
-        res.status(404).json({ error: 'Job not found.' });
-        return;
-    }
+        if (!cancelled) {
+            res.status(404).json({ error: 'Job not found.' });
+            return;
+        }
 
-    res.json({ bookId, status: 'cancelled' });
-});
+        res.json({ bookId, status: 'cancelled' });
+    },
+);
 
 // ── GET /api/jobs/:bookId/events — SSE stream ──────────────
 
-router.get('/api/jobs/:bookId/events', async (req: Request<{ bookId: string }>, res: Response) => {
-    const { bookId } = req.params;
-    if (!isValidBookId(bookId)) {
-        res.status(400).json({ error: 'Invalid bookId.' });
-        return;
-    }
-
-    // Verify job exists
-    const job = await getJob(bookId);
-    if (!job) {
-        res.status(404).json({ error: 'Job not found.' });
-        return;
-    }
-
-    // Set SSE headers
-    res.set({
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        Connection: 'keep-alive',
-        'X-Accel-Buffering': 'no', // Disable nginx buffering
-    });
-    res.flushHeaders();
-
-    // Send initial job state
-    res.write(`event: status\ndata: ${JSON.stringify(job)}\n\n`);
-
-    // If job is already terminal, send final event and close
-    if (job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') {
-        res.write(
-            `event: ${job.status === 'completed' ? 'job_completed' : job.status === 'failed' ? 'job_failed' : 'job_cancelled'}\ndata: ${JSON.stringify({ bookId, status: job.status })}\n\n`,
-        );
-        res.end();
-        return;
-    }
-
-    // Subscribe to Redis Pub/Sub channel for this job
-    let subscriber: Awaited<ReturnType<typeof getSubscriber>> | null = null;
-    let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
-    let closed = false;
-
-    const cleanup = () => {
-        if (closed) return;
-        closed = true;
-        if (heartbeatTimer) clearInterval(heartbeatTimer);
-        if (subscriber) {
-            const channel = getEventsChannel(bookId);
-            subscriber.unsubscribe(channel).catch(() => {});
+router.get(
+    '/api/jobs/:bookId/events',
+    requireJobAccess,
+    async (req: Request<{ bookId: string }>, res: Response) => {
+        const { bookId } = req.params;
+        if (!isValidBookId(bookId)) {
+            res.status(400).json({ error: 'Invalid bookId.' });
+            return;
         }
-    };
 
-    try {
-        subscriber = await getSubscriber();
-        const channel = getEventsChannel(bookId);
+        // Verify job exists
+        const job = await getJob(bookId);
+        if (!job) {
+            res.status(404).json({ error: 'Job not found.' });
+            return;
+        }
 
-        subscriber.on('message', (ch: string, message: string) => {
-            if (ch !== channel || closed) return;
-
-            try {
-                const event = JSON.parse(message);
-                const eventType = event.type || 'progress';
-                res.write(`event: ${eventType}\ndata: ${message}\n\n`);
-
-                // Close the stream on terminal events
-                if (
-                    eventType === 'job_completed' ||
-                    eventType === 'job_failed' ||
-                    eventType === 'job_cancelled'
-                ) {
-                    cleanup();
-                    res.end();
-                }
-            } catch {
-                // Ignore malformed messages
-            }
+        // Set SSE headers
+        res.set({
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            Connection: 'keep-alive',
+            'X-Accel-Buffering': 'no', // Disable nginx buffering
         });
+        res.flushHeaders();
 
-        await subscriber.subscribe(channel);
+        // Send initial job state
+        res.write(`event: status\ndata: ${JSON.stringify(job)}\n\n`);
 
-        // Heartbeat to keep connection alive
-        heartbeatTimer = setInterval(() => {
+        // If job is already terminal, send final event and close
+        if (job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') {
+            res.write(
+                `event: ${job.status === 'completed' ? 'job_completed' : job.status === 'failed' ? 'job_failed' : 'job_cancelled'}\ndata: ${JSON.stringify({ bookId, status: job.status })}\n\n`,
+            );
+            res.end();
+            return;
+        }
+
+        // Subscribe to Redis Pub/Sub channel for this job
+        let subscriber: Awaited<ReturnType<typeof getSubscriber>> | null = null;
+        let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+        let closed = false;
+
+        const cleanup = () => {
             if (closed) return;
-            res.write(':keepalive\n\n');
-        }, 15_000);
+            closed = true;
+            if (heartbeatTimer) clearInterval(heartbeatTimer);
+            if (subscriber) {
+                const channel = getEventsChannel(bookId);
+                subscriber.unsubscribe(channel).catch(() => {});
+            }
+        };
 
-        // Client disconnect cleanup
-        req.on('close', cleanup);
-    } catch {
-        // If Redis subscriber fails, just close the SSE connection
-        res.write(
-            `event: error\ndata: ${JSON.stringify({ error: 'Failed to subscribe to events' })}\n\n`,
-        );
-        res.end();
-    }
-});
+        try {
+            subscriber = await getSubscriber();
+            const channel = getEventsChannel(bookId);
+
+            subscriber.on('message', (ch: string, message: string) => {
+                if (ch !== channel || closed) return;
+
+                try {
+                    const event = JSON.parse(message);
+                    const eventType = event.type || 'progress';
+                    res.write(`event: ${eventType}\ndata: ${message}\n\n`);
+
+                    // Close the stream on terminal events
+                    if (
+                        eventType === 'job_completed' ||
+                        eventType === 'job_failed' ||
+                        eventType === 'job_cancelled'
+                    ) {
+                        cleanup();
+                        res.end();
+                    }
+                } catch {
+                    // Ignore malformed messages
+                }
+            });
+
+            await subscriber.subscribe(channel);
+
+            // Heartbeat to keep connection alive
+            heartbeatTimer = setInterval(() => {
+                if (closed) return;
+                res.write(':keepalive\n\n');
+            }, 15_000);
+
+            // Client disconnect cleanup
+            req.on('close', cleanup);
+        } catch {
+            // If Redis subscriber fails, just close the SSE connection
+            res.write(
+                `event: error\ndata: ${JSON.stringify({ error: 'Failed to subscribe to events' })}\n\n`,
+            );
+            res.end();
+        }
+    },
+);
 
 export default router;
