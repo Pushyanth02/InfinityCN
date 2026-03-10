@@ -223,7 +223,10 @@ async function callAI(prompt: string, provider: string): Promise<string> {
         const data = (await res.json().catch(() => null)) as ProviderResponse | null;
         if (!data) throw new Error('Gemini returned invalid JSON');
         result = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-        if (!result) throw new Error('Gemini response missing text content');
+        if (!result)
+            throw new Error(
+                'Gemini response missing expected candidates[].content.parts[].text structure',
+            );
     }
 
     // ── OPENAI ──────────────────────────────────────────────
@@ -255,7 +258,8 @@ async function callAI(prompt: string, provider: string): Promise<string> {
         const data = (await res.json().catch(() => null)) as ProviderResponse | null;
         if (!data) throw new Error('OpenAI returned invalid JSON');
         result = data.choices?.[0]?.message?.content ?? '';
-        if (!result) throw new Error('OpenAI response missing message content');
+        if (!result)
+            throw new Error('OpenAI response missing expected choices[].message.content structure');
     }
 
     // ── ANTHROPIC ───────────────────────────────────────────
@@ -288,7 +292,8 @@ async function callAI(prompt: string, provider: string): Promise<string> {
         const data = (await res.json().catch(() => null)) as ProviderResponse | null;
         if (!data) throw new Error('Anthropic returned invalid JSON');
         result = data.content?.[0]?.text ?? '';
-        if (!result) throw new Error('Anthropic response missing text content');
+        if (!result)
+            throw new Error('Anthropic response missing expected content[].text structure');
     }
 
     // ── GROQ ────────────────────────────────────────────────
@@ -320,7 +325,8 @@ async function callAI(prompt: string, provider: string): Promise<string> {
         const data = (await res.json().catch(() => null)) as ProviderResponse | null;
         if (!data) throw new Error('Groq returned invalid JSON');
         result = data.choices?.[0]?.message?.content ?? '';
-        if (!result) throw new Error('Groq response missing message content');
+        if (!result)
+            throw new Error('Groq response missing expected choices[].message.content structure');
     }
 
     // ── DEEPSEEK ────────────────────────────────────────────
@@ -352,7 +358,10 @@ async function callAI(prompt: string, provider: string): Promise<string> {
         const data = (await res.json().catch(() => null)) as ProviderResponse | null;
         if (!data) throw new Error('DeepSeek returned invalid JSON');
         result = data.choices?.[0]?.message?.content ?? '';
-        if (!result) throw new Error('DeepSeek response missing message content');
+        if (!result)
+            throw new Error(
+                'DeepSeek response missing expected choices[].message.content structure',
+            );
     }
 
     // ── OLLAMA ──────────────────────────────────────────────
@@ -374,7 +383,7 @@ async function callAI(prompt: string, provider: string): Promise<string> {
         const data = (await res.json().catch(() => null)) as ProviderResponse | null;
         if (!data) throw new Error('Ollama returned invalid JSON');
         result = data.response ?? '';
-        if (!result) throw new Error('Ollama response missing response content');
+        if (!result) throw new Error('Ollama response missing expected response field');
     }
 
     if (result) return result;
