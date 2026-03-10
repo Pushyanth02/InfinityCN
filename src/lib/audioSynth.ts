@@ -96,7 +96,9 @@ export class AmbientAudioSynth {
         setTimeout(() => {
             this.stopCurrentSources();
             if (this.ctx && this.ctx.state !== 'closed') {
-                this.ctx.close().catch(() => {});
+                this.ctx.close().catch(e => {
+                    console.warn('[AmbientAudioSynth] Failed to close AudioContext:', e);
+                });
             }
             this.ctx = null;
             this.masterGain = null;
