@@ -189,32 +189,18 @@ export function connectToJobEvents(
         const url = `${getBaseUrl()}/api/jobs/${bookId}/events${params}`;
         eventSource = new EventSource(url);
 
-        eventSource.addEventListener('status', (e: MessageEvent) => {
+        const handleProgress = (e: MessageEvent) => {
             if (closed) return;
             try {
                 onProgress(JSON.parse(e.data));
             } catch {
-                /* ignore */
+                /* ignore parse errors */
             }
-        });
+        };
 
-        eventSource.addEventListener('chapter_started', (e: MessageEvent) => {
-            if (closed) return;
-            try {
-                onProgress(JSON.parse(e.data));
-            } catch {
-                /* ignore */
-            }
-        });
-
-        eventSource.addEventListener('chapter_completed', (e: MessageEvent) => {
-            if (closed) return;
-            try {
-                onProgress(JSON.parse(e.data));
-            } catch {
-                /* ignore */
-            }
-        });
+        for (const evt of ['status', 'chapter_started', 'chapter_completed'] as const) {
+            eventSource.addEventListener(evt, handleProgress);
+        }
 
         eventSource.addEventListener('job_completed', (e: MessageEvent) => {
             if (closed || settled) return;
