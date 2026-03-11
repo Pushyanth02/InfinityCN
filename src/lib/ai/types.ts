@@ -63,10 +63,8 @@ declare global {
     interface Window {
         ai?: {
             languageModel: {
-                capabilities: () => Promise<{
-                    available: 'no' | 'after-download' | 'readily';
-                }>;
-                create: (options: { systemPrompt: string }) => Promise<{
+                capabilities: () => Promise<{ available: 'readily' | 'after-download' | 'no' }>;
+                create: (options?: Record<string, unknown>) => Promise<{
                     prompt: (text: string) => Promise<string>;
                     promptStreaming: (text: string) => AsyncIterable<string>;
                     destroy: () => void;
