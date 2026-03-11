@@ -3,6 +3,7 @@
  */
 
 const jobAccessTokens = new Map<string, string>();
+const JOBS_FALLBACK_POLL_INTERVAL_MS = 4000;
 
 function getConfiguredApiBase(): string | undefined {
     const viteValue = import.meta.env.VITE_API_PROXY_URL as string | undefined;
@@ -304,7 +305,7 @@ export function connectToJobEvents(
             } finally {
                 pollInFlight = false;
             }
-        }, 2000);
+        }, JOBS_FALLBACK_POLL_INTERVAL_MS);
     }
 
     return cleanup;
