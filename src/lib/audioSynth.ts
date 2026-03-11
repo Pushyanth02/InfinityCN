@@ -1,6 +1,12 @@
 /**
  * Ambient Audio Synthesizer
  * Generates procedural soundscapes using the Web Audio API without external file dependencies.
+ *
+ * Features:
+ *   - Emotion-based soundscape selection (wind, rain, rumble, ethereal, ocean, heartbeat, forest)
+ *   - Tension-driven audio morphing: continuous filter/gain modulation from tension score 0–100
+ *   - Crossfading between emotion changes
+ *   - Lazy AudioContext initialization for auto-play compliance
  */
 
 export class AmbientAudioSynth {
@@ -10,6 +16,12 @@ export class AmbientAudioSynth {
     private activeEmotion: string = '';
     private isPlaying: boolean = false;
     private crossfadeTimeout: ReturnType<typeof setTimeout> | null = null;
+    /** Current tension level (0–100) used for real-time audio morphing */
+    private tensionLevel: number = 0;
+    /** Active filter node for tension modulation */
+    private tensionFilter: BiquadFilterNode | null = null;
+    /** Active gain node for tension modulation */
+    private tensionGain: GainNode | null = null;
 
     constructor() {
         // Initialize lazily to respect auto-play policies
@@ -117,6 +129,35 @@ export class AmbientAudioSynth {
             source.disconnect();
         });
         this.currentSources = [];
+        this.tensionFilter = null;
+        this.tensionGain = null;
+    }
+
+    /**
+     * Set the current tension level (0–100) for real-time audio morphing.
+     * Higher tension = lower filter frequency + louder bass + faster LFO modulation.
+     * This creates an oppressive, claustrophobic soundscape during tense moments.
+     */
+    public setTension(tension: number) {
+        this.tensionLevel = Math.max(0, Math.min(100, tension));
+        if (!this.isPlaying || !this.ctx) return;
+
+        const t = this.tensionLevel / 100; // 0–1
+
+        // Morph filter: high tension → lower cutoff (darker sound)
+        if (this.tensionFilter) {
+            const baseFreq = 800;
+            const targetFreq = baseFreq - t * 600; // 800Hz → 200Hz
+            this.tensionFilter.frequency.setTargetAtTime(targetFreq, this.ctx.currentTime, 0.3);
+            // Increase resonance at high tension for more dramatic effect
+            this.tensionFilter.Q.setTargetAtTime(0.5 + t * 4, this.ctx.currentTime, 0.3);
+        }
+
+        // Morph gain: high tension → slightly louder for impact
+        if (this.tensionGain) {
+            const gain = 1.0 + t * 0.5; // 1.0 → 1.5
+            this.tensionGain.gain.setTargetAtTime(gain, this.ctx.currentTime, 0.3);
+        }
     }
 
     // --- Soundscape Generators ---
@@ -124,16 +165,35 @@ export class AmbientAudioSynth {
     private playEmotionSoundscape(emotion: string) {
         if (!this.ctx || !this.masterGain) return;
 
+        // Create tension processing chain (shared by all soundscapes)
+        this.tensionFilter = this.ctx.createBiquadFilter();
+        this.tensionFilter.type = 'lowpass';
+        this.tensionFilter.frequency.value = 800;
+        this.tensionFilter.Q.value = 0.5;
+
+        this.tensionGain = this.ctx.createGain();
+        this.tensionGain.gain.value = 1.0;
+
+        this.tensionFilter.connect(this.tensionGain);
+        this.tensionGain.connect(this.masterGain);
+        this.currentSources.push(this.tensionFilter, this.tensionGain);
+
         switch (emotion.toLowerCase()) {
             case 'fear':
+                this.generateHeartbeat();
+                break;
             case 'sadness':
                 this.generateRainAndThunder();
                 break;
             case 'anger':
-            case 'suspense':
                 this.generateDeepRumble();
                 break;
+            case 'suspense':
+                this.generateOceanWaves();
+                break;
             case 'joy':
+                this.generateForestAmbience();
+                break;
             case 'surprise':
                 this.generateEtherealHum();
                 break;
@@ -141,6 +201,9 @@ export class AmbientAudioSynth {
                 this.generateWind();
                 break;
         }
+
+        // Apply current tension after soundscape is set up
+        this.setTension(this.tensionLevel);
     }
 
     private createNoiseBuffer(): AudioBuffer | null {
@@ -152,6 +215,11 @@ export class AmbientAudioSynth {
             data[i] = Math.random() * 2 - 1;
         }
         return buffer;
+    }
+
+    /** Get the output node — route through tension filter if available */
+    private getOutputNode(): AudioNode {
+        return this.tensionFilter ?? this.masterGain!;
     }
 
     private generateWind() {
@@ -181,7 +249,7 @@ export class AmbientAudioSynth {
         lfoGain.connect(lowpass.frequency);
 
         noise.connect(lowpass);
-        lowpass.connect(this.masterGain);
+        lowpass.connect(this.getOutputNode());
 
         noise.start();
         lfo.start();
@@ -205,7 +273,7 @@ export class AmbientAudioSynth {
         bandpass.Q.value = 1.0;
 
         noise.connect(bandpass);
-        bandpass.connect(this.masterGain);
+        bandpass.connect(this.getOutputNode());
 
         noise.start();
         this.currentSources.push(noise, bandpass);
@@ -231,7 +299,7 @@ export class AmbientAudioSynth {
 
         noise.connect(lowpass);
         lowpass.connect(localGain);
-        localGain.connect(this.masterGain);
+        localGain.connect(this.getOutputNode());
 
         noise.start();
         this.currentSources.push(noise, lowpass, localGain);
@@ -254,11 +322,157 @@ export class AmbientAudioSynth {
 
         osc1.connect(localGain);
         osc2.connect(localGain);
-        localGain.connect(this.masterGain);
+        localGain.connect(this.getOutputNode());
 
         osc1.start();
         osc2.start();
 
         this.currentSources.push(osc1, osc2, localGain);
+    }
+
+    // --- New Soundscapes ---
+
+    private generateOceanWaves() {
+        if (!this.ctx || !this.masterGain) return;
+
+        const noiseBuffer = this.createNoiseBuffer();
+        if (!noiseBuffer) return;
+
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = noiseBuffer;
+        noise.loop = true;
+
+        // Shape noise into ocean-like rolling waves
+        const lowpass = this.ctx.createBiquadFilter();
+        lowpass.type = 'lowpass';
+        lowpass.frequency.value = 600;
+        lowpass.Q.value = 0.3;
+
+        // Slow amplitude LFO for wave surges (0.08 Hz ≈ every 12 seconds)
+        const waveLfo = this.ctx.createOscillator();
+        waveLfo.type = 'sine';
+        waveLfo.frequency.value = 0.08;
+
+        const waveLfoGain = this.ctx.createGain();
+        waveLfoGain.gain.value = 0.3;
+
+        const waveGain = this.ctx.createGain();
+        waveGain.gain.value = 0.5;
+
+        waveLfo.connect(waveLfoGain);
+        waveLfoGain.connect(waveGain.gain);
+
+        noise.connect(lowpass);
+        lowpass.connect(waveGain);
+        waveGain.connect(this.getOutputNode());
+
+        noise.start();
+        waveLfo.start();
+
+        this.currentSources.push(noise, lowpass, waveLfo, waveLfoGain, waveGain);
+    }
+
+    private generateHeartbeat() {
+        if (!this.ctx || !this.masterGain) return;
+
+        // Create a rhythmic low-frequency pulse (heartbeat)
+        const osc = this.ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.value = 40; // Sub-bass heartbeat
+
+        const pulseGain = this.ctx.createGain();
+        pulseGain.gain.value = 0;
+
+        // Rhythmic amplitude modulation (~72 BPM = 1.2 Hz)
+        const pulseLfo = this.ctx.createOscillator();
+        pulseLfo.type = 'square'; // Sharp on/off for heartbeat feel
+        pulseLfo.frequency.value = 1.2;
+
+        const pulseLfoGain = this.ctx.createGain();
+        pulseLfoGain.gain.value = 0.15;
+
+        pulseLfo.connect(pulseLfoGain);
+        pulseLfoGain.connect(pulseGain.gain);
+
+        osc.connect(pulseGain);
+        pulseGain.connect(this.getOutputNode());
+
+        osc.start();
+        pulseLfo.start();
+
+        this.currentSources.push(osc, pulseGain, pulseLfo, pulseLfoGain);
+    }
+
+    private generateForestAmbience() {
+        if (!this.ctx || !this.masterGain) return;
+
+        const noiseBuffer = this.createNoiseBuffer();
+        if (!noiseBuffer) return;
+
+        // Rustling leaves — bandpassed noise with slow modulation
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = noiseBuffer;
+        noise.loop = true;
+
+        const highpass = this.ctx.createBiquadFilter();
+        highpass.type = 'highpass';
+        highpass.frequency.value = 2000; // Airy, rustling quality
+        highpass.Q.value = 0.3;
+
+        const rustleGain = this.ctx.createGain();
+        rustleGain.gain.value = 0.15;
+
+        // Gentle modulation for natural variation
+        const rustleLfo = this.ctx.createOscillator();
+        rustleLfo.type = 'sine';
+        rustleLfo.frequency.value = 0.15;
+
+        const rustleLfoGain = this.ctx.createGain();
+        rustleLfoGain.gain.value = 0.1;
+
+        rustleLfo.connect(rustleLfoGain);
+        rustleLfoGain.connect(rustleGain.gain);
+
+        // Birdsong-like oscillation (high-pitched sine with vibrato)
+        const birdOsc = this.ctx.createOscillator();
+        birdOsc.type = 'sine';
+        birdOsc.frequency.value = 2400;
+
+        const vibrato = this.ctx.createOscillator();
+        vibrato.type = 'sine';
+        vibrato.frequency.value = 5;
+
+        const vibratoGain = this.ctx.createGain();
+        vibratoGain.gain.value = 200;
+
+        vibrato.connect(vibratoGain);
+        vibratoGain.connect(birdOsc.frequency);
+
+        const birdGain = this.ctx.createGain();
+        birdGain.gain.value = 0.02; // Very subtle
+
+        noise.connect(highpass);
+        highpass.connect(rustleGain);
+        rustleGain.connect(this.getOutputNode());
+
+        birdOsc.connect(birdGain);
+        birdGain.connect(this.getOutputNode());
+
+        noise.start();
+        rustleLfo.start();
+        birdOsc.start();
+        vibrato.start();
+
+        this.currentSources.push(
+            noise,
+            highpass,
+            rustleGain,
+            rustleLfo,
+            rustleLfoGain,
+            birdOsc,
+            birdGain,
+            vibrato,
+            vibratoGain,
+        );
     }
 }
