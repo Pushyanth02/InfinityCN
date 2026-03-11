@@ -86,6 +86,12 @@ describe('computeTextStatistics', () => {
         expect(stats.dialoguePercent).toBeGreaterThan(0);
     });
 
+    it('detects dialogue with typographic (curly) quotes', () => {
+        const text = 'He walked in. \u201CHello there,\u201D he said. She nodded.';
+        const stats = computeTextStatistics(text);
+        expect(stats.dialoguePercent).toBeGreaterThan(0);
+    });
+
     it('dialoguePercent is 0 when no quotes present', () => {
         const stats = computeTextStatistics('No dialogue in this text at all.');
         expect(stats.dialoguePercent).toBe(0);

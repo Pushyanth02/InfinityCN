@@ -211,7 +211,7 @@ export function computeTextStatistics(text: string): TextStatistics {
     const avgWordLength = wordCount > 0 ? totalChars / wordCount : 0;
 
     // Dialogue detection: count characters inside quotes
-    const dialogueMatches = text.match(/"[^"]*"|"[^"]*"/g) || [];
+    const dialogueMatches = text.match(/"[^"]*"|\u201C[^\u201D]*\u201D/g) || [];
     const dialogueChars = dialogueMatches.reduce((acc, m) => acc + m.length, 0);
     const dialoguePercent = characterCount > 0 ? (dialogueChars / characterCount) * 100 : 0;
 
