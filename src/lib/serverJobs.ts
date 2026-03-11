@@ -179,48 +179,39 @@ export function connectToJobEvents(
         }
     };
 
+    const deleteToken = () => {
+        jobAccessTokens.delete(bookId);
+    };
+
     try {
         const token = jobAccessTokens.get(bookId);
         const params = token ? `?token=${encodeURIComponent(token)}` : '';
         const url = `${getBaseUrl()}/api/jobs/${bookId}/events${params}`;
         eventSource = new EventSource(url);
 
-        eventSource.addEventListener('status', (e: MessageEvent) => {
+        const handleProgress = (e: MessageEvent) => {
             if (closed) return;
             try {
                 onProgress(JSON.parse(e.data));
             } catch {
-                /* ignore */
+                /* ignore parse errors */
             }
-        });
+        };
 
-        eventSource.addEventListener('chapter_started', (e: MessageEvent) => {
-            if (closed) return;
-            try {
-                onProgress(JSON.parse(e.data));
-            } catch {
-                /* ignore */
-            }
-        });
-
-        eventSource.addEventListener('chapter_completed', (e: MessageEvent) => {
-            if (closed) return;
-            try {
-                onProgress(JSON.parse(e.data));
-            } catch {
-                /* ignore */
-            }
-        });
+        for (const evt of ['status', 'chapter_started', 'chapter_completed'] as const) {
+            eventSource.addEventListener(evt, handleProgress);
+        }
 
         eventSource.addEventListener('job_completed', (e: MessageEvent) => {
             if (closed || settled) return;
             settled = true;
-            try {
-                onComplete(JSON.parse(e.data));
-            } catch {
-                /* ignore */
-            }
             cleanup();
+            try {
+                const data = JSON.parse(e.data);
+                Promise.resolve(onComplete(data)).finally(deleteToken);
+            } catch {
+                deleteToken();
+            }
         });
 
         eventSource.addEventListener('job_failed', (e: MessageEvent) => {
@@ -233,6 +224,7 @@ export function connectToJobEvents(
                 onError('Job failed');
             }
             cleanup();
+            deleteToken();
         });
 
         eventSource.addEventListener('job_cancelled', () => {
@@ -240,6 +232,7 @@ export function connectToJobEvents(
             settled = true;
             onError('Job was cancelled');
             cleanup();
+            deleteToken();
         });
 
         eventSource.addEventListener('error', (e: MessageEvent) => {
@@ -286,7 +279,9 @@ export function connectToJobEvents(
                 if (status.status === 'completed') {
                     if (!settled) {
                         settled = true;
-                        onComplete({ type: 'job_completed', bookId, timestamp: Date.now() });
+                        Promise.resolve(
+                            onComplete({ type: 'job_completed', bookId, timestamp: Date.now() }),
+                        ).finally(deleteToken);
                     }
                     cleanup();
                 } else if (status.status === 'failed' || status.status === 'cancelled') {
@@ -295,6 +290,7 @@ export function connectToJobEvents(
                         onError(status.errorMessage || `Job ${status.status}`);
                     }
                     cleanup();
+                    deleteToken();
                 }
             } catch (err) {
                 if (!settled) {
@@ -302,6 +298,7 @@ export function connectToJobEvents(
                     onError((err as Error).message || 'Polling failed');
                 }
                 cleanup();
+                deleteToken();
             } finally {
                 pollInFlight = false;
             }

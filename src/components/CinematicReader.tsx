@@ -3,454 +3,44 @@
  *
  * Displays novel content with toggle between Original and Cinematified modes.
  * Features Netflix-inspired dark cinematic UI with ambient effects.
+ *
+ * Sub-components extracted to reader/:
+ *   - CinematicBlockView — Animated block renderer
+ *   - OriginalTextView   — Plain text view
+ *   - EmotionHeatmap     — Tension heatmap
+ *   - ChapterNav         — Chapter navigation sidebar
+ *   - ReaderHeader       — Header bar with controls
+ *   - ReaderSettingsPanel — Settings dropdown
+ *   - ReaderFooter       — Chapter navigation footer
  */
 
-import React, { useCallback, useRef, useEffect, useState, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import {
-    X,
-    ChevronLeft,
-    ChevronRight,
-    Film,
-    BookOpen,
-    Settings,
-    Minus,
-    Plus,
-    Sparkles,
-    Volume2,
-    Moon,
-    Sun,
-    List,
-    Bookmark,
-    BookmarkCheck,
-    Play,
-    Square,
-    Columns,
-    Download,
-} from 'lucide-react';
+import React, { useCallback, useRef, useEffect, useState } from 'react';
+import { AnimatePresence } from 'framer-motion';
+import { Film, Sparkles } from 'lucide-react';
 import { useCinematifierStore, getCinematifierAIConfig } from '../store/cinematifierStore';
 import { cinematifyText, cinematifyOffline } from '../lib/cinematifier';
 import { AmbientAudioSynth } from '../lib/audioSynth';
 import { saveBook, saveReadingProgress, loadReadingProgress } from '../lib/cinematifierDb';
 import { createReadingProgress } from '../lib/cinematifier';
-import type { CinematicBlock, Chapter } from '../types/cinematifier';
+import type { CinematicBlock } from '../types/cinematifier';
+
+// Extracted sub-components
+import {
+    CinematicBlockView,
+    OriginalTextView,
+    EmotionHeatmap,
+    ChapterNav,
+    ReaderHeader,
+    ReaderSettingsPanel,
+    ReaderFooter,
+} from './reader';
 
 // Hoisted constant to avoid recreating the threshold array on every render cycle
 const OBSERVER_THRESHOLDS: number[] = [0, 0.25, 0.5, 0.75, 1];
 
-// Delay before revoking blob URLs to give the browser time to start the download
-const DOWNLOAD_REVOKE_DELAY_MS = 1000;
-
 interface CinematicReaderProps {
     onClose: () => void;
 }
-
-// ─── Block Renderer ────────────────────────────────────────
-
-const CinematicBlockView = React.memo(function CinematicBlockView({
-    block,
-    index,
-    immersionLevel,
-}: {
-    block: CinematicBlock;
-    index: number;
-    immersionLevel: 'minimal' | 'balanced' | 'cinematic';
-}) {
-    const isMinimal = immersionLevel === 'minimal';
-    const durationMult = immersionLevel === 'cinematic' ? 1.5 : 1;
-    const baseDelay = isMinimal ? 0 : Math.min(index * 0.03, 0.5);
-
-    // Different animations based on block type
-    const variants = {
-        hidden: isMinimal
-            ? {
-                  opacity: 1,
-                  y: 0,
-                  scale: 1,
-                  filter: 'blur(0px)',
-              }
-            : {
-                  opacity: 0,
-                  y: block.type === 'sfx' ? 0 : 30,
-                  scale: block.type === 'sfx' ? 0.8 : 1,
-                  filter: 'blur(8px)',
-              },
-        visible: {
-            opacity: 1,
-            y: 0,
-            scale: 1,
-            filter: 'blur(0px)',
-            transition: isMinimal
-                ? { duration: 0 }
-                : {
-                      duration: (block.type === 'beat' ? 0.8 : 0.6) * durationMult,
-                      delay: baseDelay,
-                      ease: [0.16, 1, 0.3, 1] as [number, number, number, number],
-                  },
-        },
-    };
-
-    // Tension-driven layout: higher tension = more dramatic spacing
-    const tensionClass =
-        block.tensionScore !== undefined
-            ? block.tensionScore > 80
-                ? 'cine-block--tension-extreme'
-                : block.tensionScore > 60
-                  ? 'cine-block--tension-high'
-                  : block.tensionScore > 30
-                    ? 'cine-block--tension-medium'
-                    : ''
-            : '';
-
-    const blockClasses = [
-        'cine-block',
-        `cine-block--${block.type}`,
-        `cine-block--${block.intensity}`,
-        block.timing ? `cine-block--timing-${block.timing}` : '',
-        tensionClass,
-    ]
-        .filter(Boolean)
-        .join(' ');
-
-    // Render based on block type
-    switch (block.type) {
-        case 'sfx':
-            return (
-                <motion.div
-                    className={blockClasses}
-                    variants={variants}
-                    initial="hidden"
-                    whileInView="visible"
-                    viewport={{ once: true, margin: '-5% 0px' }}
-                    data-index={index}
-                    data-emotion={block.emotion || ''}
-                    data-tension={block.tensionScore || 0}
-                >
-                    <div className="cine-sfx">
-                        <Volume2 size={16} className="cine-sfx-icon" />
-                        <span className="cine-sfx-text">{block.sfx?.sound || block.content}</span>
-                    </div>
-                </motion.div>
-            );
-
-        case 'beat':
-            return (
-                <motion.div
-                    className={blockClasses}
-                    variants={variants}
-                    initial="hidden"
-                    whileInView="visible"
-                    viewport={{ once: true, margin: '-5% 0px' }}
-                    data-index={index}
-                    data-emotion={block.emotion || ''}
-                    data-tension={block.tensionScore || 0}
-                >
-                    <div className="cine-beat">
-                        <span className="cine-beat-dots">• • •</span>
-                        <span className="cine-beat-label">{block.beat?.type || 'BEAT'}</span>
-                    </div>
-                </motion.div>
-            );
-
-        case 'transition':
-            return (
-                <motion.div
-                    className={blockClasses}
-                    variants={variants}
-                    initial="hidden"
-                    whileInView="visible"
-                    viewport={{ once: true, margin: '-5% 0px' }}
-                    data-index={index}
-                    data-emotion={block.emotion || ''}
-                    data-tension={block.tensionScore || 0}
-                >
-                    <div className="cine-transition">
-                        <div className="cine-transition-line" />
-                        <span className="cine-transition-text">
-                            {block.transition?.type || 'CUT TO'}
-                            {block.transition?.description && `: ${block.transition.description}`}
-                        </span>
-                        <div className="cine-transition-line" />
-                    </div>
-                </motion.div>
-            );
-
-        case 'title_card':
-            return (
-                <motion.div
-                    className={blockClasses}
-                    variants={variants}
-                    initial="hidden"
-                    whileInView="visible"
-                    viewport={{ once: true, margin: '-5% 0px' }}
-                    data-index={index}
-                    data-emotion={block.emotion || ''}
-                    data-tension={block.tensionScore || 0}
-                >
-                    <h2 className="cine-title-card">{block.content}</h2>
-                </motion.div>
-            );
-
-        case 'dialogue':
-            return (
-                <motion.div
-                    className={blockClasses}
-                    variants={variants}
-                    initial="hidden"
-                    whileInView="visible"
-                    viewport={{ once: true, margin: '-5% 0px' }}
-                    data-index={index}
-                    data-emotion={block.emotion || ''}
-                    data-tension={block.tensionScore || 0}
-                >
-                    {block.speaker && <div className="cine-speaker">{block.speaker}</div>}
-                    <div className="cine-dialogue">
-                        <span className="cine-quote">"</span>
-                        {block.content}
-                        <span className="cine-quote">"</span>
-                    </div>
-                    {/* Emotion Tag */}
-                    {block.emotion && (
-                        <div className={`cine-emotion-tag cine-emotion--${block.emotion}`}>
-                            {block.emotion}
-                        </div>
-                    )}
-                </motion.div>
-            );
-
-        case 'inner_thought':
-            return (
-                <motion.div
-                    className={blockClasses}
-                    variants={variants}
-                    initial="hidden"
-                    whileInView="visible"
-                    viewport={{ once: true, margin: '-5% 0px' }}
-                    data-index={index}
-                    data-emotion={block.emotion || ''}
-                    data-tension={block.tensionScore || 0}
-                >
-                    <div className="cine-thought">
-                        <em>{block.content}</em>
-                    </div>
-                    {/* Emotion Tag */}
-                    {block.emotion && (
-                        <div className={`cine-emotion-tag cine-emotion--${block.emotion}`}>
-                            {block.emotion}
-                        </div>
-                    )}
-                </motion.div>
-            );
-
-        case 'action':
-        default:
-            return (
-                <motion.div
-                    className={blockClasses}
-                    variants={variants}
-                    initial="hidden"
-                    whileInView="visible"
-                    viewport={{ once: true, margin: '-5% 0px' }}
-                    data-index={index}
-                    data-emotion={block.emotion || ''}
-                    data-tension={block.tensionScore || 0}
-                >
-                    {block.cameraDirection && (
-                        <div className="cine-camera">({block.cameraDirection})</div>
-                    )}
-                    <p className="cine-action">{block.content}</p>
-
-                    {/* Emotion & Tension UI */}
-                    <div className="cine-action-metadata">
-                        {block.emotion && (
-                            <div className={`cine-emotion-tag cine-emotion--${block.emotion}`}>
-                                {block.emotion}
-                            </div>
-                        )}
-                        {block.tensionScore !== undefined && block.tensionScore > 0 && (
-                            <div
-                                className="cine-tension-meter"
-                                title={`Tension: ${block.tensionScore}`}
-                            >
-                                <div
-                                    className="cine-tension-bar"
-                                    style={{
-                                        width: `${block.tensionScore}%`,
-                                        backgroundColor: `hsl(${120 - block.tensionScore * 1.2}, 80%, 50%)`,
-                                    }}
-                                />
-                            </div>
-                        )}
-                    </div>
-                </motion.div>
-            );
-    }
-});
-
-// ─── Original Text Renderer ────────────────────────────────
-
-const OriginalTextView = React.memo(function OriginalTextView({ text }: { text: string }) {
-    const paragraphs = useMemo(() => text.split(/\n\s*\n/).filter(p => p.trim()), [text]);
-
-    return (
-        <div className="original-text-view">
-            {paragraphs.map((para, i) => (
-                <motion.p
-                    key={`p-${i}-${para.slice(0, 32)}`}
-                    className="original-paragraph"
-                    initial={{ opacity: 0, y: 20 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true, margin: '-5% 0px' }}
-                    transition={{ duration: 0.5, delay: Math.min(i * 0.02, 0.3) }}
-                >
-                    {para}
-                </motion.p>
-            ))}
-        </div>
-    );
-});
-
-// ─── Emotion Heatmap ───────────────────────────────────────
-
-/** Displays chapter tension as a visual heatmap bar above the content */
-const HEATMAP_MIN_OPACITY = 0.15;
-const HEATMAP_MAX_TENSION = 100;
-
-const EmotionHeatmap = React.memo(function EmotionHeatmap({
-    blocks,
-}: {
-    blocks: CinematicBlock[];
-}) {
-    // Group blocks into segments and compute average tension per segment
-    const segments = useMemo(() => {
-        if (blocks.length === 0) return [];
-
-        const SEGMENT_SIZE = Math.max(1, Math.ceil(blocks.length / 30));
-        const result: { tension: number; emotion: string }[] = [];
-
-        for (let i = 0; i < blocks.length; i += SEGMENT_SIZE) {
-            const slice = blocks.slice(i, i + SEGMENT_SIZE);
-            const tensions = slice
-                .map(b => b.tensionScore)
-                .filter((t): t is number => t !== undefined);
-            const avgTension =
-                tensions.length > 0 ? tensions.reduce((a, b) => a + b, 0) / tensions.length : 30;
-
-            // Pick dominant emotion using pre-computed frequency map
-            const emotions = slice
-                .map(b => b.emotion)
-                .filter((e): e is NonNullable<typeof e> => e !== undefined);
-            let dominantEmotion = 'neutral';
-            if (emotions.length > 0) {
-                const counts = new Map<string, number>();
-                for (const e of emotions) {
-                    counts.set(e, (counts.get(e) || 0) + 1);
-                }
-                let maxCount = 0;
-                for (const [emotion, count] of counts) {
-                    if (count > maxCount) {
-                        maxCount = count;
-                        dominantEmotion = emotion;
-                    }
-                }
-            }
-
-            result.push({ tension: avgTension, emotion: dominantEmotion });
-        }
-
-        return result;
-    }, [blocks]);
-
-    if (segments.length === 0) return null;
-
-    return (
-        <div className="cine-emotion-heatmap" aria-label="Chapter tension heatmap">
-            {segments.map((seg, i) => (
-                <div
-                    key={`hm-${i}-${seg.emotion}`}
-                    className={`cine-heatmap-block cine-heatmap-block--${seg.emotion}`}
-                    style={{
-                        opacity: Math.max(HEATMAP_MIN_OPACITY, seg.tension / HEATMAP_MAX_TENSION),
-                    }}
-                    title={`Tension: ${Math.round(seg.tension)}`}
-                />
-            ))}
-        </div>
-    );
-});
-
-// ─── Chapter Navigation ────────────────────────────────────
-
-const ChapterNav = React.memo(function ChapterNav({
-    chapters,
-    currentIndex,
-    bookmarks,
-    onSelect,
-    isOpen,
-    onClose,
-}: {
-    chapters: Chapter[];
-    currentIndex: number;
-    bookmarks: number[];
-    onSelect: (index: number) => void;
-    isOpen: boolean;
-    onClose: () => void;
-}) {
-    return (
-        <AnimatePresence>
-            {isOpen && (
-                <>
-                    <motion.div
-                        className="chapter-nav-backdrop"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        onClick={onClose}
-                    />
-                    <motion.nav
-                        className="chapter-nav"
-                        initial={{ x: -300, opacity: 0 }}
-                        animate={{ x: 0, opacity: 1 }}
-                        exit={{ x: -300, opacity: 0 }}
-                        transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-                    >
-                        <div className="chapter-nav-header">
-                            <h3>Chapters</h3>
-                            <button onClick={onClose} className="chapter-nav-close">
-                                <X size={20} />
-                            </button>
-                        </div>
-                        <ul className="chapter-nav-list">
-                            {chapters.map((chapter, i) => (
-                                <li key={chapter.id}>
-                                    <button
-                                        className={`chapter-nav-item ${i === currentIndex ? 'active' : ''}`}
-                                        onClick={() => {
-                                            onSelect(i);
-                                            onClose();
-                                        }}
-                                    >
-                                        <span className="chapter-nav-number">{chapter.number}</span>
-                                        <span className="chapter-nav-title">{chapter.title}</span>
-                                        {bookmarks.includes(i) && (
-                                            <BookmarkCheck
-                                                size={14}
-                                                className="chapter-nav-bookmark"
-                                            />
-                                        )}
-                                        {chapter.isProcessed && (
-                                            <Sparkles size={14} className="chapter-nav-processed" />
-                                        )}
-                                    </button>
-                                </li>
-                            ))}
-                        </ul>
-                    </motion.nav>
-                </>
-            )}
-        </AnimatePresence>
-    );
-});
 
 // ─── Main Reader Component ─────────────────────────────────
 
@@ -524,19 +114,16 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
         if (!book) return;
         if (readingProgress && readingProgress.bookId === book.id) return;
 
-        // Try to load from IndexedDB first
         loadReadingProgress(book.id)
             .then(stored => {
                 if (stored) {
                     setReadingProgress(stored);
-                    // Restore chapter position
                     if (stored.currentChapter > 1) {
                         const idx = stored.currentChapter - 1;
                         if (idx < book.chapters.length) {
                             useCinematifierStore.getState().setCurrentChapter(idx);
                         }
                     }
-                    // Restore reading mode preference
                     if (stored.readingMode) {
                         useCinematifierStore.getState().setReaderMode(stored.readingMode);
                     }
@@ -557,7 +144,6 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
 
         return () => {
             if (readingTimerRef.current) clearInterval(readingTimerRef.current);
-            // Persist progress on unmount
             const progress = useCinematifierStore.getState().readingProgress;
             if (progress)
                 saveReadingProgress(progress).catch(e => {
@@ -571,10 +157,9 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
         if (!readingProgress || !book) return;
 
         updateReadingProgress({ currentChapter: currentChapterIndex + 1 });
-        // Mark the chapter as read after staying on it
         const timer = setTimeout(() => {
             markChapterRead(currentChapterIndex + 1);
-        }, 5_000); // Mark as read after 5 seconds on the chapter
+        }, 5_000);
 
         return () => clearTimeout(timer);
     }, [currentChapterIndex]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -599,7 +184,6 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                     config,
                     undefined,
                     (blocks, isDone) => {
-                        // Accumulate streamed blocks so previous chunks aren't lost
                         accumulatedBlocks.push(...blocks);
                         updateChapter(currentChapterIndex, {
                             cinematifiedBlocks: [...accumulatedBlocks],
@@ -609,13 +193,11 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                 );
             }
 
-            // Final push
             updateChapter(currentChapterIndex, {
                 cinematifiedBlocks: result.blocks,
                 cinematifiedText: result.rawText,
                 isProcessed: true,
             });
-            // Persist to IndexedDB
             const updatedBook = useCinematifierStore.getState().book;
             if (updatedBook)
                 saveBook(updatedBook).catch(e => {
@@ -623,7 +205,6 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                 });
         } catch (err) {
             console.error('[CinematicReader] Process error:', err);
-            // Fall back to offline processing
             const result = cinematifyOffline(currentChapter.originalText);
             updateChapter(currentChapterIndex, {
                 cinematifiedBlocks: result.blocks,
@@ -677,7 +258,6 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
             },
         );
 
-        // Small delay to allow react blocks to render before observing
         const timeout = setTimeout(() => {
             root.querySelectorAll('.cine-block').forEach(block => observer.observe(block));
         }, 100);
@@ -701,14 +281,11 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
             lastTime = time;
 
             if (contentRef.current) {
-                // Base speed is ~40px per second. Tension drastically slows this down to build suspense.
-                // activeTension is 0-100. multiplier goes from 1.0 (chill) to 0.3 (very tense)
                 const speedMultiplier = 1 - ((activeTension || 0) / 100) * 0.7;
                 const pixelsToScroll = (40 * speedMultiplier * dt) / 1000;
 
                 contentRef.current.scrollTop += pixelsToScroll;
 
-                // Stop if bottom is reached
                 if (
                     contentRef.current.scrollTop + contentRef.current.clientHeight >=
                     contentRef.current.scrollHeight - 2
@@ -766,9 +343,6 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
         );
     }
 
-    const canGoPrev = currentChapterIndex > 0;
-    const canGoNext = currentChapterIndex < book.chapters.length - 1;
-
     return (
         <div
             className={`cine-reader cine-reader--immersion-${immersionLevel} ${dyslexiaFont ? 'cine-reader--dyslexia' : ''} ${!darkMode ? 'cine-reader--light' : ''}`}
@@ -784,223 +358,46 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
             )}
 
             {/* Header */}
-            <header className="cine-header">
-                <div className="cine-header-left">
-                    <button
-                        className="cine-btn cine-btn--icon"
-                        onClick={() => setShowChapterNav(true)}
-                        title="Chapter list"
-                        aria-label="Chapter list"
-                    >
-                        <List size={20} />
-                    </button>
-                    <h1 className="cine-title">{book.title}</h1>
-                </div>
-
-                <div className="cine-header-center">
-                    {/* Mode Toggle */}
-                    <div className="cine-mode-toggle">
-                        <button
-                            className={`cine-mode-btn ${readerMode === 'original' ? 'active' : ''}`}
-                            onClick={() => setReaderMode('original')}
-                        >
-                            <BookOpen size={16} />
-                            <span>Original</span>
-                        </button>
-                        <button
-                            className={`cine-mode-btn ${readerMode === 'side-by-side' ? 'active' : ''}`}
-                            onClick={() => setReaderMode('side-by-side')}
-                        >
-                            <Columns size={16} />
-                            <span>Dual</span>
-                        </button>
-                        <button
-                            className={`cine-mode-btn ${readerMode === 'cinematified' ? 'active' : ''}`}
-                            onClick={() => setReaderMode('cinematified')}
-                        >
-                            <Film size={16} />
-                            <span>Cinematic</span>
-                        </button>
-                    </div>
-                </div>
-
-                <div className="cine-header-right">
-                    <button
-                        className={`cine-btn cine-btn--icon ${isAmbientSoundEnabled ? 'cine-btn--active' : ''}`}
-                        onClick={() => {
-                            if (!isAmbientSoundEnabled && ambientSynthRef.current) {
-                                ambientSynthRef.current.play();
-                            } else if (ambientSynthRef.current) {
-                                ambientSynthRef.current.stop();
-                            }
-                            setIsAmbientSoundEnabled(!isAmbientSoundEnabled);
-                        }}
-                        title={
-                            isAmbientSoundEnabled ? 'Disable Ambient Sound' : 'Enable Ambient Sound'
-                        }
-                        aria-label={
-                            isAmbientSoundEnabled ? 'Disable Ambient Sound' : 'Enable Ambient Sound'
-                        }
-                    >
-                        <Volume2
-                            size={20}
-                            color={isAmbientSoundEnabled ? 'var(--cine-gold)' : undefined}
-                        />
-                    </button>
-                    <button
-                        className={`cine-btn cine-btn--icon ${isAutoScrolling ? 'cine-btn--active' : ''}`}
-                        onClick={() => setIsAutoScrolling(!isAutoScrolling)}
-                        title={isAutoScrolling ? 'Stop Auto-Scroll' : 'Start Auto-Scroll'}
-                        aria-label={isAutoScrolling ? 'Stop Auto-Scroll' : 'Start Auto-Scroll'}
-                    >
-                        {isAutoScrolling ? (
-                            <Square size={20} color="var(--cine-red)" />
-                        ) : (
-                            <Play size={20} />
-                        )}
-                    </button>
-                    <button
-                        className={`cine-btn cine-btn--icon ${isBookmarked ? 'cine-btn--bookmarked' : ''}`}
-                        onClick={() => toggleBookmark(currentChapterIndex)}
-                        title={isBookmarked ? 'Remove bookmark' : 'Bookmark chapter'}
-                        aria-label={isBookmarked ? 'Remove bookmark' : 'Bookmark chapter'}
-                    >
-                        {isBookmarked ? <BookmarkCheck size={20} /> : <Bookmark size={20} />}
-                    </button>
-                    <button
-                        className="cine-btn cine-btn--icon"
-                        onClick={() => {
-                            const text = book.chapters
-                                .map(c => `Chapter ${c.number}: ${c.title}\n\n${c.originalText}`)
-                                .join('\n\n\n');
-                            const blob = new Blob([text], { type: 'text/plain' });
-                            const url = URL.createObjectURL(blob);
-                            const a = document.createElement('a');
-                            a.href = url;
-                            a.download = `${book.title}_Original_Text.txt`;
-                            a.click();
-                            // Defer revocation to allow the browser to start the download
-                            setTimeout(() => URL.revokeObjectURL(url), DOWNLOAD_REVOKE_DELAY_MS);
-                        }}
-                        title="Export Original Text"
-                        aria-label="Export Original Text"
-                    >
-                        <Download size={20} />
-                    </button>
-                    <button
-                        className="cine-btn cine-btn--icon"
-                        onClick={() => setShowSettings(!showSettings)}
-                        title="Settings"
-                        aria-label="Settings"
-                    >
-                        <Settings size={20} />
-                    </button>
-                    <button
-                        className="cine-btn cine-btn--icon"
-                        onClick={onClose}
-                        title="Close"
-                        aria-label="Close reader"
-                    >
-                        <X size={20} />
-                    </button>
-                </div>
-            </header>
+            <ReaderHeader
+                book={book}
+                readerMode={readerMode}
+                setReaderMode={setReaderMode}
+                isBookmarked={isBookmarked}
+                currentChapterIndex={currentChapterIndex}
+                toggleBookmark={toggleBookmark}
+                isAmbientSoundEnabled={isAmbientSoundEnabled}
+                onToggleAmbientSound={() => {
+                    if (!isAmbientSoundEnabled && ambientSynthRef.current) {
+                        ambientSynthRef.current.play();
+                    } else if (ambientSynthRef.current) {
+                        ambientSynthRef.current.stop();
+                    }
+                    setIsAmbientSoundEnabled(!isAmbientSoundEnabled);
+                }}
+                isAutoScrolling={isAutoScrolling}
+                onToggleAutoScroll={() => setIsAutoScrolling(!isAutoScrolling)}
+                onToggleSettings={() => setShowSettings(!showSettings)}
+                onShowChapterNav={() => setShowChapterNav(true)}
+                onClose={onClose}
+            />
 
             {/* Settings Panel */}
             <AnimatePresence>
                 {showSettings && (
-                    <motion.div
-                        className="cine-settings"
-                        initial={{ opacity: 0, y: -20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -20 }}
-                    >
-                        <div className="cine-settings-group">
-                            <label>Font Size</label>
-                            <div className="cine-settings-row">
-                                <button
-                                    className="cine-btn cine-btn--sm"
-                                    onClick={() => setFontSize(fontSize - 2)}
-                                >
-                                    <Minus size={14} />
-                                </button>
-                                <span className="cine-settings-value">{fontSize}px</span>
-                                <button
-                                    className="cine-btn cine-btn--sm"
-                                    onClick={() => setFontSize(fontSize + 2)}
-                                >
-                                    <Plus size={14} />
-                                </button>
-                            </div>
-                        </div>
-                        <div className="cine-settings-group">
-                            <label>Line Spacing</label>
-                            <div className="cine-settings-row">
-                                <button
-                                    className="cine-btn cine-btn--sm"
-                                    onClick={() => setLineSpacing(lineSpacing - 0.2)}
-                                >
-                                    <Minus size={14} />
-                                </button>
-                                <span className="cine-settings-value">
-                                    {lineSpacing.toFixed(1)}
-                                </span>
-                                <button
-                                    className="cine-btn cine-btn--sm"
-                                    onClick={() => setLineSpacing(lineSpacing + 0.2)}
-                                >
-                                    <Plus size={14} />
-                                </button>
-                            </div>
-                        </div>
-                        <div className="cine-settings-group">
-                            <label>Immersion</label>
-                            <div className="cine-settings-row">
-                                {(['minimal', 'balanced', 'cinematic'] as const).map(level => (
-                                    <button
-                                        key={level}
-                                        className={`cine-btn cine-btn--sm ${immersionLevel === level ? 'active' : ''}`}
-                                        onClick={() => setImmersionLevel(level)}
-                                    >
-                                        {level.charAt(0).toUpperCase() + level.slice(1)}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                        <div className="cine-settings-group">
-                            <label>Dyslexia Font</label>
-                            <button
-                                className={`cine-btn cine-btn--toggle ${dyslexiaFont ? 'active' : ''}`}
-                                onClick={toggleDyslexiaFont}
-                            >
-                                {dyslexiaFont ? 'On' : 'Off'}
-                            </button>
-                        </div>
-                        <div className="cine-settings-group">
-                            <label>Theme</label>
-                            <button
-                                className={`cine-btn cine-btn--toggle ${darkMode ? 'active' : ''}`}
-                                onClick={toggleDarkMode}
-                            >
-                                {darkMode ? <Moon size={16} /> : <Sun size={16} />}
-                                {darkMode ? 'Dark' : 'Light'}
-                            </button>
-                        </div>
-                        <div className="cine-settings-group">
-                            <label>AI Provider</label>
-                            <span className="cine-settings-value cine-settings-value--muted">
-                                {aiProvider === 'none' ? 'Offline' : aiProvider}
-                            </span>
-                        </div>
-                        {bookmarks.length > 0 && (
-                            <div className="cine-settings-group">
-                                <label>Bookmarks</label>
-                                <span className="cine-settings-value cine-settings-value--muted">
-                                    {bookmarks.length} chapter{bookmarks.length !== 1 ? 's' : ''}
-                                </span>
-                            </div>
-                        )}
-                    </motion.div>
+                    <ReaderSettingsPanel
+                        fontSize={fontSize}
+                        setFontSize={setFontSize}
+                        lineSpacing={lineSpacing}
+                        setLineSpacing={setLineSpacing}
+                        immersionLevel={immersionLevel}
+                        setImmersionLevel={setImmersionLevel}
+                        dyslexiaFont={dyslexiaFont}
+                        toggleDyslexiaFont={toggleDyslexiaFont}
+                        darkMode={darkMode}
+                        toggleDarkMode={toggleDarkMode}
+                        aiProvider={aiProvider}
+                        bookmarkCount={bookmarks.length}
+                    />
                 )}
             </AnimatePresence>
 
@@ -1015,7 +412,7 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                 </div>
             </div>
 
-            {/* Emotion Heatmap — visual tension overview of chapter */}
+            {/* Emotion Heatmap */}
             {currentChapter.cinematifiedBlocks.length > 0 && (
                 <EmotionHeatmap blocks={currentChapter.cinematifiedBlocks} />
             )}
@@ -1114,50 +511,12 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
             </main>
 
             {/* Chapter Navigation Footer */}
-            <footer className="cine-footer">
-                <button
-                    className="cine-nav-btn"
-                    onClick={() => setCurrentChapter(currentChapterIndex - 1)}
-                    disabled={!canGoPrev}
-                >
-                    <ChevronLeft size={24} />
-                    <span>Previous</span>
-                </button>
-
-                <div className="cine-progress">
-                    <span>
-                        {currentChapterIndex + 1} / {book.chapters.length}
-                        {readingProgress && readingProgress.readChapters.length > 0 && (
-                            <span
-                                style={{
-                                    marginLeft: '0.5rem',
-                                    color: 'var(--cine-gold)',
-                                    fontSize: '0.625rem',
-                                }}
-                            >
-                                {readingProgress.readChapters.length} read
-                            </span>
-                        )}
-                    </span>
-                    <div className="cine-progress-bar">
-                        <div
-                            className="cine-progress-fill"
-                            style={{
-                                width: `${((readingProgress?.readChapters.length || 0) / book.chapters.length) * 100}%`,
-                            }}
-                        />
-                    </div>
-                </div>
-
-                <button
-                    className="cine-nav-btn"
-                    onClick={() => setCurrentChapter(currentChapterIndex + 1)}
-                    disabled={!canGoNext}
-                >
-                    <span>Next</span>
-                    <ChevronRight size={24} />
-                </button>
-            </footer>
+            <ReaderFooter
+                book={book}
+                currentChapterIndex={currentChapterIndex}
+                setCurrentChapter={setCurrentChapter}
+                readingProgress={readingProgress}
+            />
 
             {/* Chapter Navigation Sidebar */}
             <ChapterNav

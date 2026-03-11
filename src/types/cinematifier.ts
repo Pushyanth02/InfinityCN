@@ -212,6 +212,12 @@ export interface CinematificationResult {
         beatCount: number;
         processingTimeMs: number;
     };
+    /** Readability metrics (populated when analytics stages are used) */
+    readability?: import('../lib/cinematifier/readability').ReadabilityMetrics;
+    /** Sentiment flow analysis (populated when analytics stages are used) */
+    sentiment?: import('../lib/cinematifier/sentimentTracker').SentimentFlowResult;
+    /** Pacing analysis (populated when analytics stages are used) */
+    pacing?: import('../lib/cinematifier/pacingAnalyzer').PacingMetrics;
 }
 
 export interface ChapterSegment {

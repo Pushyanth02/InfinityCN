@@ -40,8 +40,14 @@ export async function generateEmbedding(
 
 /**
  * Computes cosine similarity between two vectors.
+ * Throws if vectors have different dimensions.
  */
 function cosineSimilarity(vecA: number[], vecB: number[]): number {
+    if (vecA.length !== vecB.length) {
+        throw new Error(
+            `Vector dimension mismatch: vecA has ${vecA.length} dimensions, vecB has ${vecB.length}`,
+        );
+    }
     let dotProduct = 0;
     let normA = 0;
     let normB = 0;

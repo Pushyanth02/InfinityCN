@@ -428,6 +428,27 @@ describe('segmentChapters', () => {
     it('returns empty array for empty input', () => {
         expect(segmentChapters('')).toHaveLength(0);
     });
+
+    it('chapter titles include space between label and number', () => {
+        const text = `Chapter 5\n${makeContent()}\nChapter 10\n${makeContent()}`;
+        const segments = segmentChapters(text);
+        // Verify no concatenation like "Chapter5" — should be "Chapter 5"
+        for (const seg of segments) {
+            if (/chapter/i.test(seg.title)) {
+                expect(seg.title).toMatch(/Chapter \d/);
+                expect(seg.title).not.toMatch(/Chapter\d/);
+            }
+        }
+    });
+
+    it('chapter titles with subtitles are properly formatted', () => {
+        const text = `Chapter 1: The Beginning\n${makeContent()}\nChapter 2: The Journey\n${makeContent()}`;
+        const segments = segmentChapters(text);
+        const ch1 = segments.find(s => /beginning/i.test(s.title));
+        expect(ch1).toBeDefined();
+        expect(ch1!.title).toContain('Chapter 1');
+        expect(ch1!.title).toContain('The Beginning');
+    });
 });
 
 // ─── cinematifyOffline ────────────────────────────────────────────────────────
@@ -621,6 +642,20 @@ describe('createBookFromSegments', () => {
             const expected = Math.ceil(ch.wordCount / 200);
             expect(ch.estimatedReadTime).toBe(expected);
         }
+    });
+
+    it('word count does not inflate on whitespace-padded content', () => {
+        const paddedSegments: ChapterSegment[] = [
+            {
+                title: 'Padded Chapter',
+                content: '  hello world  ',
+                startIndex: 0,
+                endIndex: 0,
+            },
+        ];
+        const book = createBookFromSegments(paddedSegments);
+        expect(book.chapters[0].wordCount).toBe(2);
+        expect(book.totalWordCount).toBe(2);
     });
 });
 

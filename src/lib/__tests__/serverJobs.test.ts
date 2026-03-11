@@ -127,6 +127,86 @@ describe('serverJobs', () => {
         );
     });
 
+    it('keeps job token available during async onComplete handler', async () => {
+        vi.stubEnv('VITE_API_PROXY_URL', 'http://server');
+
+        const fetchMock = vi
+            .fn()
+            .mockResolvedValueOnce(
+                makeJsonResponse({
+                    bookId: 'book-2',
+                    status: 'queued',
+                    totalChapters: 1,
+                    accessToken: 'token-abc',
+                }),
+            )
+            .mockResolvedValueOnce(
+                makeJsonResponse({
+                    blocks: [],
+                    rawText: '',
+                    metadata: {
+                        originalWordCount: 0,
+                        cinematifiedWordCount: 0,
+                        sfxCount: 0,
+                        transitionCount: 0,
+                        beatCount: 0,
+                        processingTimeMs: 0,
+                    },
+                }),
+            );
+        vi.stubGlobal('fetch', fetchMock);
+
+        // Capture addEventListener calls to simulate SSE events
+        const listeners: Record<string, (e: MessageEvent) => void> = {};
+        const eventSourceCtor = vi.fn().mockImplementation(function (this: {
+            close: () => void;
+            addEventListener: (type: string, cb: (e: MessageEvent) => void) => void;
+            onerror: (() => void) | null;
+        }) {
+            this.close = vi.fn();
+            this.addEventListener = vi.fn((type: string, cb: (e: MessageEvent) => void) => {
+                listeners[type] = cb;
+            });
+            this.onerror = null;
+            return this;
+        });
+        vi.stubGlobal('EventSource', eventSourceCtor as unknown as typeof EventSource);
+
+        await submitBookForServerProcessing('book-2', 'Test', SAMPLE_CHAPTERS, 'openai');
+
+        let tokenDuringComplete: string | undefined;
+        let completeResolve: () => void;
+        const completePromise = new Promise<void>(r => {
+            completeResolve = r;
+        });
+
+        const onComplete = async () => {
+            // Simulate async chapter fetch inside onComplete
+            await getProcessedChapter('book-2', 0);
+            // Check the fetch was called with the token header
+            const lastCall = fetchMock.mock.calls[fetchMock.mock.calls.length - 1];
+            tokenDuringComplete = (lastCall[1] as RequestInit).headers
+                ? ((lastCall[1] as RequestInit).headers as Record<string, string>)['X-Job-Token']
+                : undefined;
+            completeResolve();
+        };
+
+        connectToJobEvents('book-2', vi.fn(), onComplete, vi.fn());
+
+        // Fire the job_completed SSE event
+        listeners['job_completed'](
+            new MessageEvent('job_completed', {
+                data: JSON.stringify({ type: 'job_completed', bookId: 'book-2', timestamp: 1 }),
+            }),
+        );
+
+        // Wait for the async onComplete to finish
+        await completePromise;
+
+        // Token should have been present during the async fetch
+        expect(tokenDuringComplete).toBe('token-abc');
+    });
+
     it('falls back to polling at a rate that stays under server rate limits', async () => {
         vi.stubEnv('VITE_API_PROXY_URL', 'http://server');
 
