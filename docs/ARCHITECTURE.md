@@ -123,7 +123,7 @@ InfinityCN is an AI-enhanced, offline-first reader that transforms novels into c
 | `embeddings.ts` | Semantic embeddings (all-MiniLM-L6-v2 via @xenova/transformers) | `@xenova/transformers` |
 | `audioSynth.ts` | Procedural ambient audio via Web Audio API | None |
 | `pdfWorker.ts` | Lazy multi-format extraction (PDF/EPUB/DOCX/PPTX/TXT) | `pdfjs-dist`, `fflate`, `tesseract.js` |
-| `serverJobs.ts` | Frontend client for backend job API (SSE + polling fallback) | None |
+| `serverJobs.ts` | Frontend client for backend job API (SSE + polling fallback, token management) | None |
 
 **Critical Path:**
 ```
@@ -328,12 +328,25 @@ GET /api/jobs/:id/events                                  │
 | Concern | Mitigation |
 |---------|------------|
 | API Key Exposure | Keys stored server-side only; never returned to clients |
+| Job Access Control | Per-job access tokens generated on submission; required via `X-Job-Token` header |
 | DoS | Per-IP sliding-window rate limiting via Redis (30 req/min) |
 | CORS | Configurable origin allowlist in `config.ts` |
 | Cost Control | `MAX_TOKENS_CAP` clamps all provider max_tokens fields |
 | SSRF | `validateUrl()` in `config.ts` blocks internal IPs (RFC1918, metadata) |
 | Request Validation | JSON body schema checked in each route handler |
 | Payload Size | `express.json({ limit: '1mb' })` + per-chapter and total job size limits |
+
+### Job Token Lifecycle (`serverJobs.ts`)
+
+The frontend manages per-job access tokens to authenticate requests against job endpoints:
+
+1. **Acquisition:** On job submission, the server returns an `accessToken`. The client stores it in a `Map<bookId, token>`.
+2. **Usage:** All subsequent requests (`getJobStatus`, `getProcessedChapter`) include the token via `X-Job-Token` header. SSE connections pass it as a `?token=` query parameter.
+3. **Deferred Deletion:** When a job completes, the token is **not** deleted immediately. Instead, `cleanup()` tears down the SSE/polling connection while the token remains available for any async work performed by the `onComplete` handler (e.g., fetching processed chapters). The token is deleted only after `onComplete` resolves:
+   ```typescript
+   Promise.resolve(onComplete(data)).finally(deleteToken);
+   ```
+   This prevents 401/403 errors when `requireJobToken` middleware is enabled on the server.
 
 ---
 

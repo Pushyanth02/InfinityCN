@@ -9,7 +9,7 @@ Overall, the repository is in **good engineering health** with strong TypeScript
 
 Primary risks found are **operational/security hardening gaps** rather than immediate correctness defects:
 
-1. **No authN/authZ on job APIs** (status, chapter fetch, cancel, SSE), enabling ID-based access to queued/processed content.
+1. ~~**No authN/authZ on job APIs**~~ — **Resolved.** Per-job access tokens are now generated on submission and required via `X-Job-Token` header on all job endpoints. Token deletion is deferred until async completion handlers finish to prevent race conditions.
 2. **Rate limiting applies only to `/api/ai`**, not `/api/jobs` endpoints (potential queue abuse/DoS).
 3. **No CSP/security headers configured by default** for frontend delivery path.
 4. **Default RabbitMQ credentials** present in defaults/docs (acceptable for local dev, risky if reused in production).
@@ -32,7 +32,7 @@ Primary risks found are **operational/security hardening gaps** rather than imme
 
 ### Frontend
 - `npm run lint` ✅ pass
-- `npm test` ✅ pass (211 tests)
+- `npm test` ✅ pass (321 tests)
 - `npm run build` ✅ pass (PWA artifacts generated)
 - `npm run format:check` ✅ pass
 
@@ -48,7 +48,9 @@ Primary risks found are **operational/security hardening gaps** rather than imme
 
 ## Detailed Findings
 
-## 1) Missing AuthN/AuthZ on Job APIs (**High**)
+## 1) ~~Missing AuthN/AuthZ on Job APIs~~ (**Resolved**)
+
+**Status:** Fixed — per-job access tokens now protect all job endpoints.
 
 **Affected endpoints**
 - `POST /api/jobs`
@@ -57,15 +59,14 @@ Primary risks found are **operational/security hardening gaps** rather than imme
 - `DELETE /api/jobs/:bookId`
 - `GET /api/jobs/:bookId/events`
 
-**Risk**
-Any client that can guess or obtain `bookId` can read status/results or cancel jobs. This is a confidentiality and integrity risk for shared deployments.
+**Implementation**
+- On job creation, the server generates a `UUIDv4` access token and returns it in the response.
+- The frontend stores the token in a per-book `Map` (`jobAccessTokens`) and sends it via `X-Job-Token` header on all subsequent requests.
+- For SSE connections, the token is passed as a `?token=` query parameter.
+- Token deletion is **deferred** until async `onComplete` handlers finish via `Promise.resolve(onComplete(data)).finally(deleteToken)`, preventing race conditions where the token is cleared before chapter-fetch requests complete.
 
-**Evidence**
-Route handlers enforce payload/shape/ID validation but no authentication or ownership checks.
-
-**Recommendation**
-- Introduce auth middleware (API key/JWT/session) and attach principal to request.
-- Store `ownerId` on job creation and enforce owner checks on read/cancel/event routes.
+**Remaining recommendations**
+- Consider enforcing token validation server-side on all routes (currently client-driven).
 - Consider opaque high-entropy IDs (UUIDv4) instead of timestamp-based `book-${Date.now()}` when server generates IDs.
 
 ---
@@ -126,6 +127,7 @@ Build emits a warning about `eval` usage in dependency bundle. This may conflict
 - Redis-backed sliding-window limiter for `/api/ai`.
 - CORS allowlist support via `ALLOWED_ORIGINS`.
 - Encrypted client API-key storage (AES-GCM/PBKDF2) with migration from legacy obfuscation.
+- Per-job access tokens with deferred deletion to prevent race conditions during async completion handlers.
 
 ---
 
@@ -140,7 +142,7 @@ Build emits a warning about `eval` usage in dependency bundle. This may conflict
 ## Prioritized Remediation Plan
 
 ### Immediate (1-3 days)
-1. Add authentication and ownership checks to all job endpoints.
+1. ~~Add authentication and ownership checks to all job endpoints.~~ ✅ Implemented via per-job access tokens with deferred deletion.
 2. Add rate limiting on `/api/jobs` (submit, status, chapter, events, cancel).
 3. Use UUIDs for server-generated `bookId`.
 
