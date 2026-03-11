@@ -268,6 +268,11 @@ async function shutdown(signal: string): Promise<void> {
 process.on('SIGTERM', () => void shutdown('SIGTERM'));
 process.on('SIGINT', () => void shutdown('SIGINT'));
 
+process.on('unhandledRejection', (reason: unknown) => {
+    console.error('[Worker] Unhandled promise rejection:', reason);
+    void shutdown('unhandledRejection');
+});
+
 void start().catch(err => {
     console.error('[Worker] Fatal startup error:', (err as Error).message);
     process.exit(1);

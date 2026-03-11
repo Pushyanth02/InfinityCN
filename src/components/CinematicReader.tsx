@@ -296,7 +296,7 @@ const OriginalTextView = React.memo(function OriginalTextView({ text }: { text: 
         <div className="original-text-view">
             {paragraphs.map((para, i) => (
                 <motion.p
-                    key={i}
+                    key={`p-${i}-${para.slice(0, 32)}`}
                     className="original-paragraph"
                     initial={{ opacity: 0, y: 20 }}
                     whileInView={{ opacity: 1, y: 0 }}
@@ -367,7 +367,7 @@ const EmotionHeatmap = React.memo(function EmotionHeatmap({
         <div className="cine-emotion-heatmap" aria-label="Chapter tension heatmap">
             {segments.map((seg, i) => (
                 <div
-                    key={i}
+                    key={`hm-${i}-${seg.emotion}`}
                     className={`cine-heatmap-block cine-heatmap-block--${seg.emotion}`}
                     style={{
                         opacity: Math.max(HEATMAP_MIN_OPACITY, seg.tension / HEATMAP_MAX_TENSION),
@@ -559,7 +559,10 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
             if (readingTimerRef.current) clearInterval(readingTimerRef.current);
             // Persist progress on unmount
             const progress = useCinematifierStore.getState().readingProgress;
-            if (progress) saveReadingProgress(progress).catch(() => {});
+            if (progress)
+                saveReadingProgress(progress).catch(e => {
+                    console.warn('[CinematicReader] Failed to persist reading progress:', e);
+                });
         };
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -614,7 +617,10 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
             });
             // Persist to IndexedDB
             const updatedBook = useCinematifierStore.getState().book;
-            if (updatedBook) saveBook(updatedBook).catch(() => {});
+            if (updatedBook)
+                saveBook(updatedBook).catch(e => {
+                    console.warn('[CinematicReader] Failed to persist book:', e);
+                });
         } catch (err) {
             console.error('[CinematicReader] Process error:', err);
             // Fall back to offline processing
@@ -625,7 +631,10 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                 isProcessed: true,
             });
             const updatedBook = useCinematifierStore.getState().book;
-            if (updatedBook) saveBook(updatedBook).catch(() => {});
+            if (updatedBook)
+                saveBook(updatedBook).catch(e => {
+                    console.warn('[CinematicReader] Failed to persist book:', e);
+                });
         } finally {
             setIsProcessingChapter(false);
         }

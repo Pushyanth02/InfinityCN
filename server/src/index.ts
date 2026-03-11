@@ -104,4 +104,9 @@ process.on('SIGTERM', () => {
     void shutdown('SIGTERM');
 });
 
+process.on('unhandledRejection', (reason: unknown) => {
+    console.error('[Server] Unhandled promise rejection:', reason);
+    void shutdown('unhandledRejection');
+});
+
 void start();

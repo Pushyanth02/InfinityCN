@@ -306,7 +306,9 @@ router.get(
             if (heartbeatTimer) clearInterval(heartbeatTimer);
             if (subscriber) {
                 const channel = getEventsChannel(bookId);
-                subscriber.unsubscribe(channel).catch(() => {});
+                subscriber.unsubscribe(channel).catch(e => {
+                    console.warn('[SSE] Failed to unsubscribe from Redis channel:', e);
+                });
             }
         };
 
