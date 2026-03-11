@@ -2,12 +2,16 @@
  * CinematifierApp.tsx — Main Application Component
  *
  * Handles the full flow: Document Upload → Processing → Reading
+ *
+ * Sub-components extracted to separate files:
+ *   - UploadZone.tsx        — Drag-drop file upload
+ *   - ProcessingOverlay.tsx — Processing status overlay
  */
 
-import React, { useState, useCallback, useRef, useEffect, lazy, Suspense } from 'react';
-import { Film, Upload, Settings, X, Sparkles, AlertCircle, Moon, Sun } from 'lucide-react';
+import React, { useState, useCallback, useEffect, lazy, Suspense } from 'react';
+import { Film, Settings, X, Sparkles, AlertCircle, Moon, Sun } from 'lucide-react';
 import { useCinematifierStore, getCinematifierAIConfig } from '../store/cinematifierStore';
-import { extractText, detectFormat, ACCEPTED_EXTENSIONS } from '../lib/pdfWorker';
+import { extractText } from '../lib/pdfWorker';
 import { saveBook, loadLatestBook } from '../lib/cinematifierDb';
 import {
     segmentChapters,
@@ -24,8 +28,12 @@ import {
     connectToJobEvents,
     getProcessedChapter,
 } from '../lib/serverJobs';
-import type { Book, ProcessingProgress, CharacterAppearance } from '../types/cinematifier';
+import type { Book, CharacterAppearance } from '../types/cinematifier';
 import { toClientBlocks } from '../types/cinematifier';
+
+// Extracted sub-components
+import { UploadZone } from './UploadZone';
+import { ProcessingOverlay } from './ProcessingOverlay';
 
 // Lazy load components
 const CinematicReader = lazy(() =>
@@ -34,138 +42,6 @@ const CinematicReader = lazy(() =>
 const CinematifierSettings = lazy(() =>
     import('./CinematifierSettings').then(m => ({ default: m.CinematifierSettings })),
 );
-
-// ─── Upload Zone Component ─────────────────────────────────
-
-interface UploadZoneProps {
-    onFileSelect: (file: File) => void;
-    isProcessing: boolean;
-}
-
-const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelect, isProcessing }) => {
-    const [isDragging, setIsDragging] = useState(false);
-    const [dropError, setDropError] = useState<string | null>(null);
-    const inputRef = useRef<HTMLInputElement>(null);
-
-    const handleDragOver = useCallback((e: React.DragEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setIsDragging(true);
-    }, []);
-
-    const handleDragLeave = useCallback((e: React.DragEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setIsDragging(false);
-    }, []);
-
-    const handleDrop = useCallback(
-        (e: React.DragEvent) => {
-            e.preventDefault();
-            e.stopPropagation();
-            setIsDragging(false);
-            setDropError(null);
-
-            const files = e.dataTransfer.files;
-            if (files.length > 0) {
-                const file = files[0];
-                try {
-                    detectFormat(file);
-                    onFileSelect(file);
-                } catch (err) {
-                    setDropError(err instanceof Error ? err.message : 'Unsupported file format');
-                }
-            }
-        },
-        [onFileSelect],
-    );
-
-    const handleClick = useCallback(() => {
-        inputRef.current?.click();
-    }, []);
-
-    const handleChange = useCallback(
-        (e: React.ChangeEvent<HTMLInputElement>) => {
-            const files = e.target.files;
-            if (files && files.length > 0) {
-                onFileSelect(files[0]);
-            }
-        },
-        [onFileSelect],
-    );
-
-    return (
-        <div
-            className={`cine-upload-zone ${isDragging ? 'dragging' : ''}`}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            onClick={handleClick}
-            role="button"
-            tabIndex={0}
-            aria-label="Upload a document file"
-            onKeyDown={e => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                    handleClick();
-                }
-            }}
-        >
-            <input
-                ref={inputRef}
-                type="file"
-                accept={ACCEPTED_EXTENSIONS}
-                style={{ display: 'none' }}
-                onChange={handleChange}
-                disabled={isProcessing}
-            />
-            <div className="cine-upload-content">
-                <Upload size={48} className="cine-upload-icon" />
-                <p className="cine-upload-text">
-                    {isDragging ? 'Drop your file here' : 'Drop a document or click to upload'}
-                </p>
-                <p className="cine-upload-hint">PDF, EPUB, DOCX, PPTX, TXT supported</p>
-                {dropError && (
-                    <p className="cine-upload-error" role="alert">
-                        {dropError}
-                    </p>
-                )}
-            </div>
-        </div>
-    );
-};
-
-// ─── Processing Overlay ────────────────────────────────────
-
-interface ProcessingOverlayProps {
-    progress: ProcessingProgress | null;
-}
-
-const ProcessingOverlay: React.FC<ProcessingOverlayProps> = ({ progress }) => {
-    if (!progress) return null;
-
-    return (
-        <div className="cine-processing-overlay cine-fade-in" role="status" aria-live="polite">
-            <div className="cine-processing-content">
-                <div className="cine-processing-spinner" aria-hidden="true" />
-                <p className="cine-processing-phase">{progress.message}</p>
-                <div
-                    className="cine-processing-bar"
-                    role="progressbar"
-                    aria-valuenow={progress.percentComplete}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-label={`Processing: ${progress.percentComplete}%`}
-                >
-                    <div
-                        className="cine-processing-bar-fill"
-                        style={{ width: `${progress.percentComplete}%` }}
-                    />
-                </div>
-                <span className="cine-processing-percent">{progress.percentComplete}%</span>
-            </div>
-        </div>
-    );
-};
 
 // ─── Main App Component ────────────────────────────────────
 
