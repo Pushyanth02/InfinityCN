@@ -127,6 +127,39 @@ describe('serverJobs', () => {
         );
     });
 
+    it('falls back to polling at a rate that stays under server rate limits', async () => {
+        vi.stubEnv('VITE_API_PROXY_URL', 'http://server');
+
+        vi.stubGlobal(
+            'fetch',
+            vi.fn().mockResolvedValue(
+                makeJsonResponse({
+                    bookId: 'book-1',
+                    status: 'queued',
+                    totalChapters: 1,
+                    accessToken: 'token-xyz',
+                }),
+            ),
+        );
+
+        const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
+        vi.stubGlobal(
+            'EventSource',
+            vi.fn().mockImplementation(function () {
+                throw new Error('SSE unavailable');
+            }) as unknown as typeof EventSource,
+        );
+
+        await submitBookForServerProcessing('book-1', 'My Novel', SAMPLE_CHAPTERS, 'openai');
+
+        const cleanup = connectToJobEvents('book-1', vi.fn(), vi.fn(), vi.fn());
+
+        expect(setIntervalSpy).toHaveBeenCalled();
+        expect(setIntervalSpy.mock.calls[0][1]).toBe(4000);
+
+        cleanup();
+        setIntervalSpy.mockRestore();
+    });
     it('throws on non-OK API responses', async () => {
         vi.stubEnv('VITE_API_PROXY_URL', 'http://server');
 
