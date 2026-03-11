@@ -21,6 +21,14 @@
  */
 
 import type { AIConnectionStatus } from '../types/cinematifier';
+import { RateLimiter } from './rateLimiter';
+import {
+    AI_CACHE_TTL_MS,
+    AI_MAX_CACHE_SIZE,
+    AI_MAX_RETRY_DELAY_MS,
+    AI_JSON_TIMEOUT_MS,
+    AI_RAWTEXT_TIMEOUT_MS,
+} from './constants';
 
 // ─── PUBLIC CONFIG TYPE ────────────────────────────────────────────────────────
 
@@ -151,8 +159,6 @@ interface CacheEntry {
 }
 
 const apiCache = new Map<string, CacheEntry>();
-const MAX_CACHE_SIZE = 50;
-const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
 function getCacheKey(prompt: string, provider: string): string {
     // DJB2 hash + length + head/tail substring for collision resistance
@@ -168,7 +174,7 @@ function getCacheKey(prompt: string, provider: string): string {
 function getFromCache(key: string): string | null {
     const entry = apiCache.get(key);
     if (!entry) return null;
-    if (Date.now() - entry.timestamp > CACHE_TTL_MS) {
+    if (Date.now() - entry.timestamp > AI_CACHE_TTL_MS) {
         apiCache.delete(key);
         return null;
     }
@@ -178,7 +184,7 @@ function getFromCache(key: string): string | null {
 }
 
 function setCache(key: string, value: string, provider: string): void {
-    if (apiCache.size >= MAX_CACHE_SIZE) {
+    if (apiCache.size >= AI_MAX_CACHE_SIZE) {
         // Evict the entry with the oldest timestamp
         let oldestKey = '';
         let oldestTs = Infinity;
@@ -195,42 +201,8 @@ function setCache(key: string, value: string, provider: string): void {
 
 // ═══════════════════════════════════════════════════════════
 // ── RATE LIMITER (Token Bucket) ────────────────────────────
+// ── Extracted to src/lib/rateLimiter.ts — imported above ──
 // ═══════════════════════════════════════════════════════════
-
-class RateLimiter {
-    private tokens: number;
-    private lastRefill: number;
-    private readonly maxTokens: number;
-    private readonly refillRate: number; // tokens per second
-
-    constructor(rpm: number) {
-        this.maxTokens = Math.ceil((rpm / 60) * 10); // Allow burst of 10 seconds worth
-        this.tokens = this.maxTokens;
-        this.refillRate = rpm / 60;
-        this.lastRefill = Date.now();
-    }
-
-    async acquire(): Promise<void> {
-        // Loop instead of recursion to avoid stack depth under contention
-        while (true) {
-            this.refill();
-            if (this.tokens >= 1) {
-                this.tokens -= 1;
-                return;
-            }
-            const waitMs = (1 / this.refillRate) * 1000;
-            await new Promise(r => setTimeout(r, waitMs));
-        }
-    }
-
-    private refill(): void {
-        const now = Date.now();
-        const elapsed = (now - this.lastRefill) / 1000;
-        const newTokens = elapsed * this.refillRate;
-        this.tokens = Math.min(this.maxTokens, this.tokens + newTokens);
-        this.lastRefill = now;
-    }
-}
 
 const rateLimiters = new Map<string, RateLimiter>();
 
@@ -318,9 +290,6 @@ function classifyError(err: unknown, provider: string): AIError {
 // ── RETRY WITH EXPONENTIAL BACKOFF ─────────────────────────
 // ═══════════════════════════════════════════════════════════
 
-/** Maximum back-off delay — prevents unbounded waits even when retryAfterMs is large. */
-const MAX_RETRY_DELAY_MS = 30_000;
-
 async function withRetry<T>(
     fn: () => Promise<T>,
     provider: string,
@@ -340,7 +309,7 @@ async function withRetry<T>(
             }
 
             const rawDelay = lastError.retryAfterMs ?? baseDelayMs * Math.pow(2, attempt);
-            const delay = Math.min(rawDelay, MAX_RETRY_DELAY_MS);
+            const delay = Math.min(rawDelay, AI_MAX_RETRY_DELAY_MS);
             await new Promise(r => setTimeout(r, delay));
         }
     }
@@ -360,14 +329,14 @@ const API_PROXY_URL = import.meta.env.VITE_API_PROXY_URL as string | undefined;
  * per chunk, which can take 60 s+ on slower providers — use a longer timeout.
  */
 function getTimeoutMs(rawTextMode?: boolean): number {
-    return rawTextMode ? 60_000 : 30_000;
+    return rawTextMode ? AI_RAWTEXT_TIMEOUT_MS : AI_JSON_TIMEOUT_MS;
 }
 
 /** If a proxy URL is configured, route provider requests through it instead of calling the API directly. */
 async function proxyFetch(
     provider: string,
     body: Record<string, unknown>,
-    timeoutMs = 30_000,
+    timeoutMs = AI_JSON_TIMEOUT_MS,
 ): Promise<Response> {
     return fetch(`${API_PROXY_URL}/api/ai/${provider}`, {
         method: 'POST',
@@ -386,7 +355,7 @@ async function handleHttpError(res: Response, provider: string): Promise<never> 
     if (res.status === 429) {
         const retryAfter = res.headers.get('Retry-After');
         const waitMs = retryAfter
-            ? Math.min(parseFloat(retryAfter) * 1000, MAX_RETRY_DELAY_MS)
+            ? Math.min(parseFloat(retryAfter) * 1000, AI_MAX_RETRY_DELAY_MS)
             : 5000;
         throw new AIError(`${provider} rate limit exceeded`, 'rate_limit', provider, true, waitMs);
     }
