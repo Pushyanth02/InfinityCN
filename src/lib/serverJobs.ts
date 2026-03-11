@@ -177,7 +177,9 @@ export function connectToJobEvents(
             clearInterval(pollTimer);
             pollTimer = null;
         }
-        // Remove the access token to prevent unbounded map growth
+    };
+
+    const deleteToken = () => {
         jobAccessTokens.delete(bookId);
     };
 
@@ -217,12 +219,13 @@ export function connectToJobEvents(
         eventSource.addEventListener('job_completed', (e: MessageEvent) => {
             if (closed || settled) return;
             settled = true;
-            try {
-                onComplete(JSON.parse(e.data));
-            } catch {
-                /* ignore */
-            }
             cleanup();
+            try {
+                const data = JSON.parse(e.data);
+                Promise.resolve(onComplete(data)).finally(deleteToken);
+            } catch {
+                deleteToken();
+            }
         });
 
         eventSource.addEventListener('job_failed', (e: MessageEvent) => {
@@ -235,6 +238,7 @@ export function connectToJobEvents(
                 onError('Job failed');
             }
             cleanup();
+            deleteToken();
         });
 
         eventSource.addEventListener('job_cancelled', () => {
@@ -242,6 +246,7 @@ export function connectToJobEvents(
             settled = true;
             onError('Job was cancelled');
             cleanup();
+            deleteToken();
         });
 
         eventSource.addEventListener('error', (e: MessageEvent) => {
@@ -288,7 +293,9 @@ export function connectToJobEvents(
                 if (status.status === 'completed') {
                     if (!settled) {
                         settled = true;
-                        onComplete({ type: 'job_completed', bookId, timestamp: Date.now() });
+                        Promise.resolve(
+                            onComplete({ type: 'job_completed', bookId, timestamp: Date.now() }),
+                        ).finally(deleteToken);
                     }
                     cleanup();
                 } else if (status.status === 'failed' || status.status === 'cancelled') {
@@ -297,6 +304,7 @@ export function connectToJobEvents(
                         onError(status.errorMessage || `Job ${status.status}`);
                     }
                     cleanup();
+                    deleteToken();
                 }
             } catch (err) {
                 if (!settled) {
@@ -304,6 +312,7 @@ export function connectToJobEvents(
                     onError((err as Error).message || 'Polling failed');
                 }
                 cleanup();
+                deleteToken();
             } finally {
                 pollInFlight = false;
             }
