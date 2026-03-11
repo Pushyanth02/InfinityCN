@@ -56,7 +56,13 @@ export const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelect, isProcessi
         (e: React.ChangeEvent<HTMLInputElement>) => {
             const files = e.target.files;
             if (files && files.length > 0) {
-                onFileSelect(files[0]);
+                const file = files[0];
+                try {
+                    detectFormat(file);
+                    onFileSelect(file);
+                } catch (err) {
+                    setDropError(err instanceof Error ? err.message : 'Unsupported file format');
+                }
             }
         },
         [onFileSelect],

@@ -34,9 +34,9 @@ export function segmentChapters(fullText: string): ChapterSegment[] {
                 isChapterStart = true;
                 // Build chapter title from match groups
                 if (match[3]) {
-                    chapterTitle = match[1] + match[2] + ': ' + match[3];
+                    chapterTitle = match[1].trim() + ' ' + match[2] + ': ' + match[3];
                 } else if (match[2]) {
-                    chapterTitle = match[1] + match[2];
+                    chapterTitle = match[1].trim() + ' ' + match[2];
                 } else if (match[1]) {
                     chapterTitle = match[1].trim();
                 } else {

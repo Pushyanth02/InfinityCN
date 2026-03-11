@@ -29,8 +29,8 @@ export function createBookFromSegments(
         cinematifiedBlocks: [],
         status: 'pending' as const,
         isProcessed: false,
-        wordCount: seg.content.split(/\s+/).length,
-        estimatedReadTime: Math.ceil(seg.content.split(/\s+/).length / 200),
+        wordCount: seg.content.split(/\s+/).filter(Boolean).length,
+        estimatedReadTime: Math.ceil(seg.content.split(/\s+/).filter(Boolean).length / 200),
     }));
 
     return {

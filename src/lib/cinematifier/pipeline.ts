@@ -223,7 +223,7 @@ export class CinematificationPipeline {
                 sfxCount: 0,
                 transitionCount: 0,
                 beatCount: 0,
-                originalWordCount: text.split(/\s+/).length,
+                originalWordCount: text.split(/\s+/).filter(Boolean).length,
             },
             startTime: performance.now(),
             aiConfig: options.aiConfig,
@@ -243,7 +243,7 @@ export class CinematificationPipeline {
             metadata: {
                 originalWordCount: context.metadata.originalWordCount,
                 cinematifiedWordCount: context.blocks.reduce(
-                    (acc, b) => acc + (b.content?.split(/\s+/).length || 0),
+                    (acc, b) => acc + (b.content?.split(/\s+/).filter(Boolean).length || 0),
                     0,
                 ),
                 sfxCount: context.metadata.sfxCount,

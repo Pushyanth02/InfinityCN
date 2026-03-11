@@ -177,6 +177,8 @@ export function connectToJobEvents(
             clearInterval(pollTimer);
             pollTimer = null;
         }
+        // Remove the access token to prevent unbounded map growth
+        jobAccessTokens.delete(bookId);
     };
 
     try {

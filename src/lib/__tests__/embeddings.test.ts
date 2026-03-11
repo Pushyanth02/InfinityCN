@@ -98,4 +98,14 @@ describe('retrieveRelevantContext', () => {
         const result = retrieveRelevantContext(oneHot(0), history, 1);
         expect(typeof result[0]).toBe('string');
     });
+
+    it('throws on vector dimension mismatch', () => {
+        const history: ChunkEmbedding[] = [
+            { id: '1', text: 'mismatched', embedding: oneHot(0, 8) }, // 8-dim
+        ];
+        // Query is 4-dim, history has 8-dim — should throw
+        expect(() => retrieveRelevantContext(oneHot(0, 4), history, 1)).toThrow(
+            /dimension mismatch/i,
+        );
+    });
 });

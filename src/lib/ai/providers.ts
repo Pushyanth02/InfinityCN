@@ -34,6 +34,9 @@ export async function proxyFetch(
     body: Record<string, unknown>,
     timeoutMs = AI_JSON_TIMEOUT_MS,
 ): Promise<Response> {
+    if (!API_PROXY_URL) {
+        throw new Error('API proxy URL is not configured (VITE_API_PROXY_URL not set).');
+    }
     return fetch(`${API_PROXY_URL}/api/ai/${provider}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -258,6 +261,9 @@ export async function callAI(prompt: string, config: AIConfig): Promise<string> 
 
     // ── OLLAMA ────────────────────────────────────────────────
     else if (config.provider === 'ollama') {
+        if (!config.ollamaUrl && !API_PROXY_URL) {
+            throw new Error('Ollama URL is not configured.');
+        }
         const ollamaBody = {
             model: config.ollamaModel || preset.model,
             prompt: `${sysPrompt}\n\n${prompt}`,
@@ -266,7 +272,7 @@ export async function callAI(prompt: string, config: AIConfig): Promise<string> 
         };
         const res = API_PROXY_URL
             ? await proxyFetch('ollama', ollamaBody, timeoutMs)
-            : await fetch(`${config.ollamaUrl.replace(/\/$/, '')}/api/generate`, {
+            : await fetch(`${config.ollamaUrl!.replace(/\/$/, '')}/api/generate`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   signal: AbortSignal.timeout(timeoutMs),
@@ -277,7 +283,7 @@ export async function callAI(prompt: string, config: AIConfig): Promise<string> 
         result = data.response ?? '';
     }
 
-    if (result) return result;
+    if (result !== '') return result;
 
     throw new AIError(
         `Empty response from provider: ${config.provider}`,

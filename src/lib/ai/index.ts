@@ -21,7 +21,9 @@ import { withRetry } from './errors';
 import { callAI } from './providers';
 
 // ─── Streaming ─────────────────────────────────────────────
-export { streamAI, getRateLimiter } from './streaming';
+export { streamAI } from './streaming';
+import { getRateLimiter } from './streaming';
+export { getRateLimiter };
 
 // ─── REQUEST DEDUPLICATION ─────────────────────────────────
 
@@ -29,7 +31,6 @@ const inflightRequests = new Map<string, Promise<string>>();
 
 // ─── UNIFIED API CLIENT (with deduplication + rate limiting)
 
-import { getRateLimiter } from './streaming';
 import type { AIConfig } from './types';
 
 /**
@@ -67,7 +68,11 @@ export async function callAIWithDedup(prompt: string, config: AIConfig): Promise
         const result = await requestPromise;
         setCache(cacheKey, result, config.provider);
         return result;
+    } catch (e) {
+        inflightRequests.delete(cacheKey);
+        throw e;
     } finally {
+        // Clean up if the request succeeded (error path already cleaned up above)
         inflightRequests.delete(cacheKey);
     }
 }

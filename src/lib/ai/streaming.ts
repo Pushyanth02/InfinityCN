@@ -127,6 +127,9 @@ export async function* streamAI(prompt: string, config: AIConfig): AsyncGenerato
 
     // ── OLLAMA STREAMING ─────────────────────────────────────
     if (config.provider === 'ollama') {
+        if (!config.ollamaUrl && !API_PROXY_URL) {
+            throw new Error('Ollama URL is not configured.');
+        }
         const ollamaBody = {
             model: config.ollamaModel || preset.model,
             prompt: `${sysPrompt}\n\n${prompt}`,
@@ -134,7 +137,7 @@ export async function* streamAI(prompt: string, config: AIConfig): AsyncGenerato
         };
         const res = API_PROXY_URL
             ? await proxyFetch('ollama', ollamaBody, timeoutMs)
-            : await fetch(`${config.ollamaUrl.replace(/\/$/, '')}/api/generate`, {
+            : await fetch(`${config.ollamaUrl!.replace(/\/$/, '')}/api/generate`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   signal: AbortSignal.timeout(timeoutMs),

@@ -220,4 +220,27 @@ Suddenly, an explosion shook the building.
         expect(result.metadata.originalWordCount).toBe(2);
         expect(result.metadata.processingTimeMs).toBeGreaterThanOrEqual(0);
     });
+
+    // ─── Word Count Bug Fixes ───────────────────────────────
+
+    it('word count does not inflate on leading/trailing whitespace', async () => {
+        const pipeline = new CinematificationPipeline();
+        const result = await pipeline.execute('  hello world  ');
+
+        expect(result.metadata.originalWordCount).toBe(2);
+    });
+
+    it('word count is 0 for whitespace-only text', async () => {
+        const pipeline = new CinematificationPipeline();
+        const result = await pipeline.execute('   ');
+
+        expect(result.metadata.originalWordCount).toBe(0);
+    });
+
+    it('word count handles empty string', async () => {
+        const pipeline = new CinematificationPipeline();
+        const result = await pipeline.execute('');
+
+        expect(result.metadata.originalWordCount).toBe(0);
+    });
 });
