@@ -8,7 +8,13 @@
 import type { AIConfig } from './types';
 import { MODEL_PRESETS } from './presets';
 import { RateLimiter } from '../rateLimiter';
-import { SYSTEM_PROMPT, API_PROXY_URL, getTimeoutMs, handleHttpError } from './providers';
+import {
+    SYSTEM_PROMPT,
+    API_PROXY_URL,
+    getTimeoutMs,
+    handleHttpError,
+    proxyFetch,
+} from './providers';
 
 // ─── RATE LIMITER (shared with callAI via getRateLimiter) ──
 
@@ -127,7 +133,7 @@ export async function* streamAI(prompt: string, config: AIConfig): AsyncGenerato
             stream: true,
         };
         const res = API_PROXY_URL
-            ? await (await import('./providers')).proxyFetch('ollama', ollamaBody, timeoutMs)
+            ? await proxyFetch('ollama', ollamaBody, timeoutMs)
             : await fetch(`${config.ollamaUrl.replace(/\/$/, '')}/api/generate`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },

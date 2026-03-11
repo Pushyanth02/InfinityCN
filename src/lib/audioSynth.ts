@@ -16,6 +16,10 @@ export class AmbientAudioSynth {
     private activeEmotion: string = '';
     private isPlaying: boolean = false;
     private crossfadeTimeout: ReturnType<typeof setTimeout> | null = null;
+    /** Timer for fade-out before stopping sources */
+    private stopTimeout: ReturnType<typeof setTimeout> | null = null;
+    /** Timer for deferred destroy */
+    private destroyTimeout: ReturnType<typeof setTimeout> | null = null;
     /** Current tension level (0–100) used for real-time audio morphing */
     private tensionLevel: number = 0;
     /** Active filter node for tension modulation */
@@ -93,9 +97,14 @@ export class AmbientAudioSynth {
             clearTimeout(this.crossfadeTimeout);
             this.crossfadeTimeout = null;
         }
+        if (this.stopTimeout) {
+            clearTimeout(this.stopTimeout);
+            this.stopTimeout = null;
+        }
         if (this.masterGain && this.ctx) {
             this.masterGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.2);
-            setTimeout(() => {
+            this.stopTimeout = setTimeout(() => {
+                this.stopTimeout = null;
                 this.stopCurrentSources();
             }, 500);
         }
@@ -104,8 +113,17 @@ export class AmbientAudioSynth {
     /** Fully release the AudioContext and all resources. Call on component unmount. */
     public destroy() {
         if (this.isPlaying) this.stop();
+        if (this.destroyTimeout) {
+            clearTimeout(this.destroyTimeout);
+            this.destroyTimeout = null;
+        }
         // Allow fade-out to finish before closing
-        setTimeout(() => {
+        this.destroyTimeout = setTimeout(() => {
+            this.destroyTimeout = null;
+            if (this.stopTimeout) {
+                clearTimeout(this.stopTimeout);
+                this.stopTimeout = null;
+            }
             this.stopCurrentSources();
             if (this.ctx && this.ctx.state !== 'closed') {
                 this.ctx.close().catch(e => {
