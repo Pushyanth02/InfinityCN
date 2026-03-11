@@ -31,6 +31,18 @@ export { createBookFromSegments, createReadingProgress } from './entities';
 export { extractOverallMetadata } from './metadata';
 export type { NarrativeMetadata } from './metadata';
 
+// ─── Readability Analysis ──────────────────────────────────
+export { analyzeReadability, countSyllables, getDifficultyLabel } from './readability';
+export type { ReadabilityMetrics, ReadabilityLevel } from './readability';
+
+// ─── Sentiment Tracker ─────────────────────────────────────
+export { analyzeSentiment, analyzeSentimentFlow, scoreToEmotion } from './sentimentTracker';
+export type { SentimentResult, SentimentFlowPoint, SentimentFlowResult } from './sentimentTracker';
+
+// ─── Pacing Analyzer ───────────────────────────────────────
+export { analyzePacing } from './pacingAnalyzer';
+export type { PacingMetrics, PacingIssue, PacingRhythm } from './pacingAnalyzer';
+
 // ─── Pipeline Engine ───────────────────────────────────────
 export {
     CinematificationPipeline,
@@ -38,5 +50,8 @@ export {
     ParagraphReconstructionStage,
     AICinematificationStage,
     OfflineCinematificationStage,
+    ReadabilityAnalysisStage,
+    SentimentEnrichmentStage,
+    PacingAnalysisStage,
 } from './pipeline';
 export type { PipelineStage, PipelineContext } from './pipeline';

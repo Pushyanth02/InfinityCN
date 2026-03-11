@@ -27,6 +27,9 @@ import type { CinematicBlock, CinematificationResult } from '../../types/cinemat
 import { cleanExtractedText, reconstructParagraphs } from './textProcessing';
 import { cinematifyOffline } from './offlineEngine';
 import { cinematifyText } from './aiEngine';
+import { analyzeReadability, type ReadabilityMetrics } from './readability';
+import { analyzeSentimentFlow, type SentimentFlowResult } from './sentimentTracker';
+import { analyzePacing, type PacingMetrics } from './pacingAnalyzer';
 
 // ─── Pipeline Context ──────────────────────────────────────
 
@@ -53,6 +56,12 @@ export interface PipelineContext {
     onProgress?: (percent: number, message: string) => void;
     /** Optional chunk callback for streaming updates */
     onChunk?: (blocks: CinematicBlock[], isDone: boolean) => void;
+    /** Readability analysis results (populated by ReadabilityAnalysisStage) */
+    readability?: ReadabilityMetrics;
+    /** Sentiment flow analysis (populated by SentimentEnrichmentStage) */
+    sentiment?: SentimentFlowResult;
+    /** Pacing analysis results (populated by PacingAnalysisStage) */
+    pacing?: PacingMetrics;
 }
 
 // ─── Pipeline Stage Interface ──────────────────────────────
@@ -124,6 +133,50 @@ export class OfflineCinematificationStage implements PipelineStage {
     }
 }
 
+// ─── Analytics Stages ──────────────────────────────────────
+
+/** Post-processing stage: Analyze text readability metrics */
+export class ReadabilityAnalysisStage implements PipelineStage {
+    readonly name = 'Readability Analysis';
+
+    execute(context: PipelineContext): void {
+        context.readability = analyzeReadability(context.text);
+    }
+}
+
+/** Post-processing stage: Enrich blocks with sentiment data */
+export class SentimentEnrichmentStage implements PipelineStage {
+    readonly name = 'Sentiment Enrichment';
+
+    execute(context: PipelineContext): void {
+        context.sentiment = analyzeSentimentFlow(context.text);
+
+        // Enrich blocks that lack emotion tags with sentiment-derived emotions
+        if (context.blocks.length > 0 && context.sentiment.flow.length > 0) {
+            // Map flow points to blocks using proportional indexing
+            const ratio = context.sentiment.flow.length / context.blocks.length;
+            for (let i = 0; i < context.blocks.length; i++) {
+                if (!context.blocks[i].emotion) {
+                    const flowIdx = Math.min(
+                        Math.floor(i * ratio),
+                        context.sentiment.flow.length - 1,
+                    );
+                    context.blocks[i].emotion = context.sentiment.flow[flowIdx].emotion;
+                }
+            }
+        }
+    }
+}
+
+/** Post-processing stage: Analyze pacing of cinematified blocks */
+export class PacingAnalysisStage implements PipelineStage {
+    readonly name = 'Pacing Analysis';
+
+    execute(context: PipelineContext): void {
+        context.pacing = analyzePacing(context.blocks);
+    }
+}
+
 // ─── Pipeline Engine ───────────────────────────────────────
 
 /**
@@ -184,7 +237,7 @@ export class CinematificationPipeline {
 
         const processingTimeMs = Math.round(performance.now() - context.startTime);
 
-        return {
+        const result: CinematificationResult = {
             blocks: context.blocks,
             rawText: context.rawText,
             metadata: {
@@ -199,6 +252,13 @@ export class CinematificationPipeline {
                 processingTimeMs,
             },
         };
+
+        // Attach analytics if computed by analytics stages
+        if (context.readability) result.readability = context.readability;
+        if (context.sentiment) result.sentiment = context.sentiment;
+        if (context.pacing) result.pacing = context.pacing;
+
+        return result;
     }
 
     // ─── Factory Methods ───────────────────────────────────
@@ -225,5 +285,37 @@ export class CinematificationPipeline {
             .addStage(new TextCleaningStage())
             .addStage(new ParagraphReconstructionStage())
             .addStage(new OfflineCinematificationStage());
+    }
+
+    /**
+     * Create an enriched offline pipeline with analytics stages.
+     *
+     * Stages: TextCleaning → ParagraphReconstruction → ReadabilityAnalysis
+     *         → OfflineCinematification → SentimentEnrichment → PacingAnalysis
+     */
+    static createEnrichedOfflinePipeline(): CinematificationPipeline {
+        return new CinematificationPipeline()
+            .addStage(new TextCleaningStage())
+            .addStage(new ParagraphReconstructionStage())
+            .addStage(new ReadabilityAnalysisStage())
+            .addStage(new OfflineCinematificationStage())
+            .addStage(new SentimentEnrichmentStage())
+            .addStage(new PacingAnalysisStage());
+    }
+
+    /**
+     * Create an enriched AI pipeline with analytics stages.
+     *
+     * Stages: TextCleaning → ParagraphReconstruction → ReadabilityAnalysis
+     *         → AICinematification → SentimentEnrichment → PacingAnalysis
+     */
+    static createEnrichedAIPipeline(): CinematificationPipeline {
+        return new CinematificationPipeline()
+            .addStage(new TextCleaningStage())
+            .addStage(new ParagraphReconstructionStage())
+            .addStage(new ReadabilityAnalysisStage())
+            .addStage(new AICinematificationStage())
+            .addStage(new SentimentEnrichmentStage())
+            .addStage(new PacingAnalysisStage());
     }
 }
