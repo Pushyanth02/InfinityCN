@@ -247,6 +247,7 @@ const extractTextFromPDF = async (file: File): Promise<string> => {
         console.error('[pdfWorker] extraction failed:', error);
         throw new Error(
             'Failed to extract text. Please ensure the file is a valid, non-encrypted PDF.',
+            { cause: error },
         );
     }
 };
@@ -278,7 +279,7 @@ async function unzipFile(file: File): Promise<UnzippedFiles> {
         if (err instanceof Error && err.message.includes('Decompressed content exceeds')) {
             throw err;
         }
-        throw new Error(`Failed to read ${file.name}. The file may be corrupted.`);
+        throw new Error(`Failed to read ${file.name}. The file may be corrupted.`, { cause: err });
     }
 }
 

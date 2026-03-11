@@ -8,6 +8,7 @@ import React, { useState, useCallback, useRef, useEffect, lazy, Suspense } from 
 import { Film, Upload, Settings, X, Sparkles, AlertCircle, Moon, Sun } from 'lucide-react';
 import { useCinematifierStore, getCinematifierAIConfig } from '../store/cinematifierStore';
 import { extractText, detectFormat, ACCEPTED_EXTENSIONS } from '../lib/pdfWorker';
+import { saveBook, loadLatestBook } from '../lib/cinematifierDb';
 import {
     segmentChapters,
     createBookFromSegments,
@@ -190,15 +191,13 @@ export const CinematifierApp: React.FC = () => {
     // Hydrate book from IndexedDB on mount
     useEffect(() => {
         if (!book) {
-            import('../lib/cinematifierDb').then(({ loadLatestBook }) =>
-                loadLatestBook()
-                    .then(stored => {
-                        if (stored) setBook(stored);
-                    })
-                    .catch(() => {
-                        /* IndexedDB unavailable */
-                    }),
-            );
+            loadLatestBook()
+                .then(stored => {
+                    if (stored) setBook(stored);
+                })
+                .catch(() => {
+                    /* IndexedDB unavailable */
+                });
         }
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -339,10 +338,8 @@ export const CinematifierApp: React.FC = () => {
 
                     const finalBook = useCinematifierStore.getState().book;
                     if (finalBook) {
-                        import('../lib/cinematifierDb').then(({ saveBook }) =>
-                            saveBook(finalBook).catch(err =>
-                                console.warn('[Cinematifier] Failed to persist book:', err),
-                            ),
+                        saveBook(finalBook).catch(err =>
+                            console.warn('[Cinematifier] Failed to persist book:', err),
                         );
                     }
 
@@ -479,10 +476,8 @@ export const CinematifierApp: React.FC = () => {
                 // Persist processed book to IndexedDB
                 const finalBook = useCinematifierStore.getState().book;
                 if (finalBook) {
-                    import('../lib/cinematifierDb').then(({ saveBook }) =>
-                        saveBook(finalBook).catch((err: unknown) =>
-                            console.warn('[Cinematifier] Failed to persist book:', err),
-                        ),
+                    saveBook(finalBook).catch((err: unknown) =>
+                        console.warn('[Cinematifier] Failed to persist book:', err),
                     );
                 }
 

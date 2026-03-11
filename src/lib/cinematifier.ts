@@ -21,6 +21,7 @@ import type {
 } from '../types/cinematifier';
 import { generateEmbedding, retrieveRelevantContext } from './embeddings';
 import type { ChunkEmbedding } from './embeddings';
+import { MAX_CHUNK_CHARS } from './constants';
 
 // ─── Session epoch for stable IDs ──────────────────────────
 const SESSION_EPOCH = Date.now();
@@ -31,7 +32,6 @@ function generateBlockId(): string {
 }
 
 // ─── Chunk text for LLM processing ─────────────────────────
-const MAX_CHUNK_CHARS = 3500; // Stay under token limits
 
 function chunkText(text: string): string[] {
     const chunks: string[] = [];

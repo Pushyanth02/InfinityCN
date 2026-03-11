@@ -4,6 +4,9 @@
  * Ported from src/lib/cinematifier.ts for Node.js worker usage.
  * Includes: chunkText, parseCinematifiedText, cinematifyOffline,
  * createFallbackBlocks, and validation helpers.
+ *
+ * Keep in sync with src/lib/cinematifier.ts (client-side counterpart).
+ * MAX_CHUNK_CHARS must match the client value (3500).
  */
 
 import type { CinematicBlock, ChapterResult } from '../types.js';
@@ -19,6 +22,7 @@ function generateBlockId(): string {
 }
 
 // ─── Chunk text for LLM processing ─────────────────────────
+// NOTE: Must stay in sync with MAX_CHUNK_CHARS in src/lib/constants.ts (client).
 const MAX_CHUNK_CHARS = 3500;
 
 export function chunkText(text: string): string[] {
@@ -42,32 +46,44 @@ export function chunkText(text: string): string[] {
 }
 
 // ─── Cinematification System Prompt ────────────────────────
+// Keep in sync with CINEMATIFICATION_SYSTEM_PROMPT in src/lib/cinematifier.ts.
 
 export const CINEMATIFICATION_SYSTEM_PROMPT = `You are a master cinematic storyteller. Transform this book chapter into a dramatically enhanced version.
 
 RULES:
 1. Keep ALL original content, characters, plot, dialogue (never remove)
-2. Add cinematic pacing:
+2. Segment the text into cinematic scenes using scene markers:
+   - [SCENE: location or transition description]
+   - Detect location changes, time shifts, emotional resets, character focus changes
+   - Use scene break markers between scenes: — ✦ —
+3. Add cinematic pacing:
    - Short, punchy sentences for action scenes
    - Longer, flowing prose for emotional moments
-3. Add SFX annotations: SFX: [sound description]
+4. Add SFX annotations: SFX: [sound description]
    Examples: SFX: CRASH!, SFX: distant thunder, SFX: silence...
-4. Add dramatic beats: BEAT, PAUSE
-5. Add scene transitions: CUT TO: [location], FADE IN, FADE TO BLACK
-6. Append inline narrative tags to lines:
+5. Add dramatic beats: BEAT, PAUSE
+6. Add scene transitions: CUT TO: [location], FADE IN, FADE TO BLACK
+7. Mark reflective/introspective passages with [REFLECTION] and [/REFLECTION]
+8. Mark high-tension sequences with [TENSION] and [/TENSION]
+9. Append inline narrative tags to lines:
    - [EMOTION: joy|fear|sadness|suspense|anger|surprise|neutral]
    - [TENSION: 0-100] (0 = calm, 100 = extreme stress/climax)
    Example: "I can't believe it." [EMOTION: surprise] [TENSION: 40]
-7. At the end of the text, optionally append overall tags:
+10. At the end of the text, optionally append overall tags:
    - [GENRE: fantasy|romance|thriller|sci_fi|mystery|historical|literary_fiction|horror|adventure|other] (Only if it's the first chapter)
    - [TONE: dark, romantic, suspenseful, humorous, etc] (Comma separated)
    - [SUMMARY: Brief 1-2 sentence summary of current characters, location, and action to maintain context]
 `;
 
 // ─── Parse Cinematified Text into Blocks ──────────────────
+// Keep in sync with parseCinematifiedText in src/lib/cinematifier.ts.
 
 export function parseCinematifiedText(text: string): CinematicBlock[] {
     const blocks: CinematicBlock[] = [];
+
+    // Track wrapper state for [TENSION] and [REFLECTION] blocks
+    let inTensionBlock = false;
+    let inReflectionBlock = false;
 
     const normalized = text
         .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
@@ -82,6 +98,54 @@ export function parseCinematifiedText(text: string): CinematicBlock[] {
             .filter(Boolean);
 
         for (const line of lines) {
+            // [SCENE: description] marker — scene title card
+            const sceneMatch = line.match(/^\[SCENE:\s*(.+?)\]\s*$/i);
+            if (sceneMatch) {
+                blocks.push({
+                    id: generateBlockId(),
+                    type: 'title_card',
+                    content: sceneMatch[1].trim(),
+                    intensity: 'normal',
+                });
+                continue;
+            }
+
+            // Scene break: — ✦ — or *** or ---
+            if (/^(—\s*✦\s*—|\*{3,}|-{3,})\s*$/.test(line)) {
+                blocks.push({
+                    id: generateBlockId(),
+                    type: 'beat',
+                    content: '— ✦ —',
+                    intensity: 'normal',
+                    beat: { type: 'PAUSE' },
+                });
+                continue;
+            }
+
+            // [TENSION] wrapper open
+            if (/^\[TENSION\]\s*$/i.test(line)) {
+                inTensionBlock = true;
+                continue;
+            }
+
+            // [/TENSION] wrapper close
+            if (/^\[\/TENSION\]\s*$/i.test(line)) {
+                inTensionBlock = false;
+                continue;
+            }
+
+            // [REFLECTION] wrapper open
+            if (/^\[REFLECTION\]\s*$/i.test(line)) {
+                inReflectionBlock = true;
+                continue;
+            }
+
+            // [/REFLECTION] wrapper close
+            if (/^\[\/REFLECTION\]\s*$/i.test(line)) {
+                inReflectionBlock = false;
+                continue;
+            }
+
             // BEAT / PAUSE / SILENCE (standalone marker)
             if (/^(BEAT|PAUSE|SILENCE|TENSION|RELEASE)\.?\s*$/i.test(line)) {
                 const beatType = line.replace(/[.\s]+$/, '').toUpperCase();
@@ -152,6 +216,39 @@ export function parseCinematifiedText(text: string): CinematicBlock[] {
                     intensity: 'normal',
                     cameraDirection: direction,
                 });
+                continue;
+            }
+
+            // Content inside [REFLECTION] wrapper → inner_thought
+            if (inReflectionBlock) {
+                const { cleaned, emotion, tensionScore } = extractBlockMetadata(line);
+                if (cleaned) {
+                    blocks.push({
+                        id: generateBlockId(),
+                        type: 'inner_thought',
+                        content: cleaned,
+                        intensity: 'whisper',
+                        emotion,
+                        tensionScore,
+                    });
+                }
+                continue;
+            }
+
+            // Content inside [TENSION] wrapper → action with heightened tension
+            if (inTensionBlock) {
+                const { cleaned, emotion } = extractBlockMetadata(line);
+                if (cleaned) {
+                    blocks.push({
+                        id: generateBlockId(),
+                        type: 'action',
+                        content: cleaned,
+                        intensity: 'emphasis',
+                        timing: cleaned.split(/\s+/).length <= 4 ? 'rapid' : 'quick',
+                        emotion: emotion || 'suspense',
+                        tensionScore: 80,
+                    });
+                }
                 continue;
             }
 
