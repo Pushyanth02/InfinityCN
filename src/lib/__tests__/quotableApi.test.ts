@@ -95,6 +95,21 @@ describe('getOfflineQuote', () => {
         }
         expect(quotes.size).toBeGreaterThan(1);
     });
+
+    it('returns deterministic quote when given a seed', () => {
+        const q1 = getOfflineQuote('processing text');
+        const q2 = getOfflineQuote('processing text');
+        expect(q1.content).toBe(q2.content);
+        expect(q1.author).toBe(q2.author);
+    });
+
+    it('returns different quotes for different seeds', () => {
+        // Different seeds should (usually) produce different quotes
+        // With 8 quotes, collision is possible but unlikely across many seeds
+        const seeds = ['a', 'bb', 'ccc', 'dddd', 'eeeee'];
+        const results = new Set(seeds.map(s => getOfflineQuote(s).content));
+        expect(results.size).toBeGreaterThan(1);
+    });
 });
 
 // ─── getQuote ──────────────────────────────────────────────

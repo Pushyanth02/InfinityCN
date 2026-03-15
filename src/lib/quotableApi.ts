@@ -123,7 +123,19 @@ export async function getQuote(tag?: string): Promise<Quote> {
 /**
  * Get a random quote from the curated offline collection.
  * Useful when network is unavailable (PWA/offline mode).
+ *
+ * @param seed - Optional string seed for deterministic selection.
+ *               When provided, the same seed always returns the same quote,
+ *               making this safe for React render (pure function).
  */
-export function getOfflineQuote(): Quote {
+export function getOfflineQuote(seed?: string): Quote {
+    if (seed !== undefined) {
+        // Simple hash: sum of char codes mod collection size
+        let hash = 0;
+        for (let i = 0; i < seed.length; i++) {
+            hash = (hash * 31 + seed.charCodeAt(i)) | 0;
+        }
+        return FALLBACK_QUOTES[Math.abs(hash) % FALLBACK_QUOTES.length];
+    }
     return FALLBACK_QUOTES[Math.floor(Math.random() * FALLBACK_QUOTES.length)];
 }

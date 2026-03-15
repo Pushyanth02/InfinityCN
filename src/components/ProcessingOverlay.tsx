@@ -5,7 +5,7 @@
  * progress bar, and an inspirational quote during document processing.
  */
 
-import React, { useMemo } from 'react';
+import React from 'react';
 import type { ProcessingProgress } from '../types/cinematifier';
 import { getOfflineQuote } from '../lib/quotableApi';
 
@@ -14,10 +14,10 @@ interface ProcessingOverlayProps {
 }
 
 export const ProcessingOverlay: React.FC<ProcessingOverlayProps> = ({ progress }) => {
-    const progressMessage = progress?.message;
-    const quote = useMemo(() => (progressMessage ? getOfflineQuote() : null), [progressMessage]);
-
     if (!progress) return null;
+
+    // Deterministic quote selection based on progress phase (stable across re-renders)
+    const quote = getOfflineQuote(progress.message);
 
     return (
         <div className="cine-processing-overlay cine-fade-in" role="status" aria-live="polite">
@@ -38,12 +38,10 @@ export const ProcessingOverlay: React.FC<ProcessingOverlayProps> = ({ progress }
                     />
                 </div>
                 <span className="cine-processing-percent">{progress.percentComplete}%</span>
-                {quote && (
-                    <blockquote className="cine-processing-quote">
-                        <p>"{quote.content}"</p>
-                        <footer>— {quote.author}</footer>
-                    </blockquote>
-                )}
+                <blockquote className="cine-processing-quote">
+                    <p>"{quote.content}"</p>
+                    <footer>— {quote.author}</footer>
+                </blockquote>
             </div>
         </div>
     );
