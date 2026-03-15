@@ -61,7 +61,7 @@ export default defineConfig({
     },
     build: {
         target: 'esnext',
-        minify: 'esbuild',
+        minify: 'oxc',
         sourcemap: 'hidden',
         chunkSizeWarningLimit: 800,
         rollupOptions: {
@@ -69,7 +69,7 @@ export default defineConfig({
                 // Suppress known eval warning from onnxruntime-web (transitive dep
                 // of @xenova/transformers). The eval is internal to their WASM loader
                 // and cannot be removed without forking the package.
-                if (log.code === 'EVAL' && log.id?.includes('onnxruntime-web')) {
+                if (log.code === 'EVAL' && log.message?.includes('onnxruntime-web')) {
                     return;
                 }
                 defaultHandler(level, log);
