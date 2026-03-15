@@ -22,8 +22,7 @@
 - **Pacing Analysis** — Tension arc computation, flat/rushed zone detection, Shannon entropy for variety scoring
 - **Text Statistics** — Word/character/sentence/paragraph counting, reading time estimation, top word frequency analysis
 - **Scene Detection** — Heuristic scene break detection via location/character/time changes
-- **Dictionary Lookup** — On-demand word definitions via the free Dictionary API (dictionaryapi.dev, no key required)
-- **Inspirational Quotes** — Curated literary quotes with Quotable API integration and offline fallback
+- **Inspirational Quotes** — Curated literary quotes for display during processing (offline, no API required)
 
 ### Reader Experience
 - **Dual-Mode** — Toggle between Original and Cinematified text
@@ -78,8 +77,7 @@ The app integrates the following free APIs and algorithms that require **no API 
 | Pacing Analysis | Tension arc + Shannon entropy | Built-in algorithm |
 | Text Statistics | Word/sentence/paragraph metrics | Built-in algorithm |
 | Scene Detection | Location/time/structure heuristics | Built-in algorithm |
-| Word Definitions | Free Dictionary API | [dictionaryapi.dev](https://dictionaryapi.dev/) |
-| Inspirational Quotes | Quotable API + offline fallback | [quotable](https://github.com/lukePeavey/quotable) |
+| Inspirational Quotes | Curated offline literary quotes | Built-in collection |
 
 ## Getting Started
 
@@ -217,11 +215,10 @@ src/
     cinematifier.ts          # Text-to-cinematic transformation engine
     cinematifierDb.ts        # IndexedDB persistence (Dexie)
     crypto.ts                # AES-GCM key encryption (SubtleCrypto)
-    dictionaryApi.ts         # Free Dictionary API client (word lookups)
     embeddings.ts            # Semantic embeddings (all-MiniLM-L6-v2)
     audioSynth.ts            # Procedural ambient audio (Web Audio API)
     pdfWorker.ts             # Multi-format document extraction + OCR
-    quotableApi.ts           # Quotable API client with offline fallback
+    quotableApi.ts           # Curated offline literary quotes
     serverJobs.ts            # Frontend client for the server job API
     textStatistics.ts        # Text statistics & metrics API
     cinematifier/
