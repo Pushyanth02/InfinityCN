@@ -18,7 +18,7 @@ export {
 export { segmentChapters } from './chapterSegmentation';
 
 // ─── Scene Detection ───────────────────────────────────────
-export { detectSceneBreaks } from './sceneDetection';
+export { detectSceneBreaks, detectPOVShift, detectNarrativeMode } from './sceneDetection';
 
 // ─── Block Parser ──────────────────────────────────────────
 export { parseCinematifiedText } from './parser';
