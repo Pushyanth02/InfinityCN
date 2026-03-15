@@ -329,7 +329,6 @@
 .cine-chapter-header {
     text-align: center;
     padding: var(--cine-space-xl) var(--cine-space-xl) var(--cine-space-lg);
-    z-index: 5;
 }
 
 .cine-chapter-number {
@@ -344,7 +343,7 @@
 .cine-chapter-title {
     font-size: 1.75rem;
     font-weight: 700;
-    color: var(--cine-gold);
+    color: var(--cine-text-primary);
     margin: 0 0 var(--cine-space-md);
     text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
 }
@@ -1248,7 +1247,7 @@
 
 .cine-reader--light .cine-chapter-title {
     text-shadow: none;
-    color: var(--cine-gold-dim);
+    color: var(--cine-bg-primary);
 }
 
 .cine-reader--light .cine-title-card {

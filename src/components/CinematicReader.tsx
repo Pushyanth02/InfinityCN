@@ -401,28 +401,27 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                 )}
             </AnimatePresence>
 
-            {/* Chapter Title */}
-            <div className="cine-chapter-header">
-                <span className="cine-chapter-number">Chapter {currentChapter.number}</span>
-                <h2 className="cine-chapter-title">{currentChapter.title}</h2>
-                <div className="cine-chapter-meta">
-                    <span>{currentChapter.wordCount.toLocaleString()} words</span>
-                    <span>•</span>
-                    <span>{currentChapter.estimatedReadTime} min read</span>
-                </div>
-            </div>
-
-            {/* Emotion Heatmap */}
-            {currentChapter.cinematifiedBlocks.length > 0 && (
-                <EmotionHeatmap blocks={currentChapter.cinematifiedBlocks} />
-            )}
-
             {/* Content Area */}
             <main
                 className="cine-content"
                 ref={contentRef}
                 style={{ fontSize: `${fontSize}px`, lineHeight: lineSpacing }}
             >
+                {/* Chapter Title — inside scrollable area so it doesn't cover content */}
+                <div className="cine-chapter-header">
+                    <span className="cine-chapter-number">Chapter {currentChapter.number}</span>
+                    <h2 className="cine-chapter-title">{currentChapter.title}</h2>
+                    <div className="cine-chapter-meta">
+                        <span>{currentChapter.wordCount.toLocaleString()} words</span>
+                        <span>•</span>
+                        <span>{currentChapter.estimatedReadTime} min read</span>
+                    </div>
+                </div>
+
+                {/* Emotion Heatmap */}
+                {currentChapter.cinematifiedBlocks.length > 0 && (
+                    <EmotionHeatmap blocks={currentChapter.cinematifiedBlocks} />
+                )}
                 {isProcessingChapter &&
                     readerMode === 'cinematified' &&
                     currentChapter.cinematifiedBlocks.length === 0 && (
