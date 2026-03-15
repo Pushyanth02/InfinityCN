@@ -185,7 +185,7 @@ export interface ReadingProgress {
 
 // ─── Reader State ──────────────────────────────────────────────────────────────
 
-export type ReaderMode = 'original' | 'cinematified' | 'side-by-side';
+export type ReaderMode = 'original' | 'cinematified';
 
 export type ImmersionLevel = 'minimal' | 'balanced' | 'cinematic';
 
