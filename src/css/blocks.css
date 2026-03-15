@@ -1,0 +1,272 @@
+/**
+ * blocks.css — Cinematic block type styles
+ *
+ * Action/narration, camera direction, dialogue, inner thought,
+ * SFX annotations, dramatic beats, transitions, title cards,
+ * and timing variations.
+ */
+
+/* ═══════════════════════════════════════════════════════════
+   CINEMATIC BLOCKS
+   ═══════════════════════════════════════════════════════════ */
+
+.cine-blocks {
+    display: flex;
+    flex-direction: column;
+    gap: var(--cine-space-lg);
+}
+
+.cine-block {
+    position: relative;
+}
+
+/* Action/Narration */
+.cine-block--action {
+    padding: var(--cine-space-md) 0;
+}
+
+.cine-action {
+    margin: 0;
+    color: #e8e6e1;
+    text-align: justify;
+}
+
+.cine-block--action.cine-block--emphasis .cine-action {
+    color: var(--cine-text-primary);
+    font-weight: 500;
+}
+
+/* Camera Direction */
+.cine-camera {
+    font-family: var(--cine-font-mono);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--cine-action);
+    margin-bottom: var(--cine-space-sm);
+}
+
+/* Dialogue */
+.cine-block--dialogue {
+    padding: var(--cine-space-md) var(--cine-space-lg);
+    margin: var(--cine-space-md) 0;
+    background: linear-gradient(135deg, var(--cine-bg-tertiary) 0%, transparent 100%);
+    border-left: 3px solid var(--cine-dialogue);
+    border-radius: 0 8px 8px 0;
+}
+
+.cine-speaker {
+    font-family: var(--cine-font-display);
+    font-weight: 700;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--cine-dialogue);
+    margin-bottom: var(--cine-space-sm);
+}
+
+.cine-dialogue {
+    font-size: 1.125em;
+    color: var(--cine-text-primary);
+}
+
+.cine-quote {
+    color: var(--cine-text-muted);
+    font-size: 1.25em;
+}
+
+.cine-block--dialogue.cine-block--whisper .cine-dialogue {
+    font-style: italic;
+    color: var(--cine-text-secondary);
+    font-size: 0.95em;
+}
+
+.cine-block--dialogue.cine-block--shout .cine-dialogue {
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+/* Inner Thought */
+.cine-block--inner_thought {
+    padding: var(--cine-space-md);
+    margin: var(--cine-space-md) var(--cine-space-xl);
+    border: 1px solid var(--cine-thought);
+    border-radius: 8px;
+    background: rgba(167, 139, 250, 0.05);
+}
+
+.cine-thought {
+    color: var(--cine-thought);
+    font-style: italic;
+}
+
+/* SFX Annotations */
+.cine-block--sfx {
+    display: flex;
+    justify-content: center;
+    padding: var(--cine-space-lg) 0;
+}
+
+.cine-sfx {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--cine-space-sm);
+    padding: var(--cine-space-sm) var(--cine-space-lg);
+    background: linear-gradient(135deg, var(--cine-sfx) 0%, #d4b85a 100%);
+    border-radius: 4px;
+    animation: sfxPulse 0.5s ease-out;
+}
+
+.cine-sfx-icon {
+    color: var(--cine-bg-primary);
+    opacity: 0.8;
+}
+
+.cine-sfx-text {
+    font-family: var(--cine-font-display);
+    font-weight: 700;
+    font-size: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--cine-bg-primary);
+}
+
+.cine-block--sfx.cine-block--explosive .cine-sfx {
+    animation: sfxExplode 0.6s ease-out;
+    font-size: 1.25rem;
+}
+
+@keyframes sfxPulse {
+    0% {
+        transform: scale(0.8);
+        opacity: 0;
+    }
+
+    50% {
+        transform: scale(1.05);
+    }
+
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+@keyframes sfxExplode {
+    0% {
+        transform: scale(0.5);
+        opacity: 0;
+    }
+
+    30% {
+        transform: scale(1.2);
+    }
+
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+/* Dramatic Beats */
+.cine-block--beat {
+    display: flex;
+    justify-content: center;
+    padding: var(--cine-space-xl) 0;
+}
+
+.cine-beat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--cine-space-xs);
+}
+
+.cine-beat-dots {
+    font-size: 1.5rem;
+    letter-spacing: 0.5em;
+    color: var(--cine-beat);
+    animation: beatPulse 2s ease-in-out infinite;
+}
+
+.cine-beat-label {
+    font-family: var(--cine-font-body);
+    font-size: 1rem;
+    font-style: italic;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: var(--cine-beat);
+}
+
+@keyframes beatPulse {
+    0%,
+    100% {
+        opacity: 0.5;
+    }
+
+    50% {
+        opacity: 1;
+    }
+}
+
+/* Transitions */
+.cine-block--transition {
+    padding: var(--cine-space-2xl) 0;
+}
+
+.cine-transition {
+    display: flex;
+    align-items: center;
+    gap: var(--cine-space-lg);
+}
+
+.cine-transition-line {
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        var(--cine-transition) 50%,
+        transparent 100%
+    );
+}
+
+.cine-transition-text {
+    font-family: var(--cine-font-display);
+    font-size: 0.875rem;
+    font-variant: small-caps;
+    letter-spacing: 0.15em;
+    color: var(--cine-transition);
+    white-space: nowrap;
+}
+
+/* Title Cards */
+.cine-block--title_card {
+    padding: var(--cine-space-2xl);
+    text-align: center;
+}
+
+.cine-title-card {
+    font-family: var(--cine-font-display);
+    font-size: 2.5rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--cine-text-primary);
+    text-shadow: 0 4px 24px rgba(0, 0, 0, 0.8);
+    margin: 0;
+}
+
+/* Timing Variations */
+.cine-block--timing-slow {
+    animation-duration: 1.5s !important;
+}
+
+.cine-block--timing-quick {
+    animation-duration: 0.3s !important;
+}
+
+.cine-block--timing-rapid {
+    animation-duration: 0.15s !important;
+}

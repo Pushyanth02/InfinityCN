@@ -220,6 +220,12 @@ export interface CinematificationResult {
     pacing?: import('../lib/cinematifier/pacingAnalyzer').PacingMetrics;
     /** Text statistics (populated when analytics stages are used) */
     textStats?: import('../lib/textStatistics').TextStatistics;
+    /** Detected narrative mode (populated by NarrativeAnalysisStage) */
+    narrativeMode?: 'normal' | 'flashback' | 'dream' | 'memory';
+    /** Detected POV character name (populated by NarrativeAnalysisStage) */
+    povCharacter?: string;
+    /** Scene groups from heuristic segmentation (populated by SceneSegmentationStage) */
+    scenes?: { title: string; paragraphs: string[] }[];
 }
 
 export interface ChapterSegment {

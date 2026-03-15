@@ -18,7 +18,7 @@ import {
     Search,
 } from 'lucide-react';
 import { useCinematifierStore, getCinematifierAIConfig } from '../store/cinematifierStore';
-import { testConnection } from '../lib/ai';
+import { testConnection } from '../lib/ai/index';
 import { isServerProcessingAvailable } from '../lib/serverJobs';
 import type { AIConnectionStatus } from '../types/cinematifier';
 

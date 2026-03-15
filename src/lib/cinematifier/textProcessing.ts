@@ -53,6 +53,33 @@ const ABBREVIATIONS = new Set([
 const CLOSING_QUOTE_RE = /["'"')\]]/;
 const AFTER_SPACE_RE = /^\s*(\S)/;
 
+// Lines consisting solely of a repeated character (e.g. "======", "______")
+const REPEATED_CHAR_LINE_RE = /^(.)\1{2,}$/;
+
+// All-caps heading: at least 2 characters, entirely uppercase letters/spaces/digits/punctuation
+const ALL_CAPS_HEADING_RE = /^[A-Z][A-Z\d\s:.,!?'-]+$/;
+
+// Unicode ligature map
+const LIGATURE_MAP: ReadonlyMap<string, string> = new Map([
+    ['\uFB00', 'ff'],
+    ['\uFB01', 'fi'],
+    ['\uFB02', 'fl'],
+    ['\uFB03', 'ffi'],
+    ['\uFB04', 'ffl'],
+    ['\uFB05', 'st'],
+    ['\uFB06', 'st'],
+]);
+
+// Zero-width characters to strip (each replaced individually to avoid joined-char-class lint)
+const ZERO_WIDTH_CHARS = [
+    '\u200B', // zero-width space
+    '\u200C', // zero-width non-joiner
+    '\u200D', // zero-width joiner
+    '\u200E', // left-to-right mark
+    '\u200F', // right-to-left mark
+    '\uFEFF', // byte order mark / zero-width no-break space
+];
+
 /**
  * Split text into sentences using heuristics that handle abbreviations,
  * decimals, ellipses, and quoted speech.
@@ -133,33 +160,119 @@ function splitSentences(text: string): string[] {
     return sentences;
 }
 
+/**
+ * Detects whether a block of text looks like poetry/verse:
+ * multiple short lines (≤60 chars) with no sentence-ending punctuation on most lines.
+ */
+function looksLikeVerse(block: string): boolean {
+    const lines = block.split('\n').filter(l => l.trim().length > 0);
+    if (lines.length < 2) return false;
+
+    const shortLines = lines.filter(l => l.trim().length <= 60);
+    const noTerminalPunct = lines.filter(l => !/[.!?]$/.test(l.trim()));
+
+    // At least 75% of lines are short AND at least 50% lack terminal punctuation
+    return shortLines.length / lines.length >= 0.75 && noTerminalPunct.length / lines.length >= 0.5;
+}
+
+/**
+ * Checks whether a line is an all-caps heading.
+ */
+function isAllCapsHeading(line: string): boolean {
+    const trimmed = line.trim();
+    if (trimmed.length < 2 || trimmed.length > 120) return false;
+    // Must contain at least 2 letter characters
+    const letterCount = (trimmed.match(/[A-Z]/g) || []).length;
+    if (letterCount < 2) return false;
+    return ALL_CAPS_HEADING_RE.test(trimmed);
+}
+
 // ─── Public API ──────────────────────────────────────────────
 
 /**
- * Clean extracted PDF text by removing common artifacts:
- * page numbers, headers/footers, excessive whitespace, and hyphenation.
+ * Converts curly/smart quotes to straight quotes,
+ * normalizes dash types to em-dashes,
+ * and normalizes ellipsis characters and multi-dot sequences.
  */
-export function cleanExtractedText(text: string): string {
+export function normalizeQuotes(text: string): string {
     return (
         text
-            // Remove standalone page numbers (lines that are just a number)
-            .replace(/^\s*\d{1,4}\s*$/gm, '')
-            // Remove common header/footer patterns: "Page X of Y", "- X -"
-            .replace(/^\s*page\s+\d+\s*(of\s+\d+)?\s*$/gim, '')
-            .replace(/^\s*-\s*\d+\s*-\s*$/gm, '')
-            // Fix hyphenated line breaks (word- \n continuation)
-            .replace(/(\w)-\s*\n\s*(\w)/g, '$1$2')
-            // Collapse 3+ consecutive blank lines into 2
-            .replace(/\n{4,}/g, '\n\n\n')
-            // Trim leading/trailing whitespace per line
-            .replace(/^[ \t]+|[ \t]+$/gm, '')
-            .trim()
+            // Curly double quotes → straight double quotes
+            .replace(/[\u201C\u201D\u201E\u201F\u2033\u2036]/g, '"')
+            // Curly single quotes → straight single quotes
+            .replace(/[\u2018\u2019\u201A\u201B\u2032\u2035]/g, "'")
+            // En-dash, em-dash, and horizontal bar → consistent em-dash
+            .replace(/[\u2013\u2014\u2015]/g, '\u2014')
+            // Ellipsis character → three dots
+            .replace(/\u2026/g, '...')
+            // Four or more dots → three dots
+            .replace(/\.{4,}/g, '...')
     );
+}
+
+/**
+ * Applies NFC Unicode normalization, strips zero-width characters,
+ * and converts common Unicode ligatures to ASCII equivalents.
+ */
+export function normalizeUnicode(text: string): string {
+    // NFC normalization
+    let result = text.normalize('NFC');
+
+    // Strip zero-width characters
+    for (const ch of ZERO_WIDTH_CHARS) {
+        result = result.replaceAll(ch, '');
+    }
+
+    // Replace ligatures
+    for (const [ligature, replacement] of LIGATURE_MAP) {
+        result = result.replaceAll(ligature, replacement);
+    }
+
+    return result;
+}
+
+/**
+ * Clean extracted PDF text by removing common artifacts:
+ * page numbers, headers/footers, excessive whitespace, hyphenation,
+ * OCR noise, repeated-character lines, and normalizes quotes/unicode.
+ */
+export function cleanExtractedText(text: string): string {
+    let cleaned = text
+        // Remove standalone page numbers (lines that are just a number)
+        .replace(/^\s*\d{1,4}\s*$/gm, '')
+        // Remove common header/footer patterns: "Page X of Y", "- X -"
+        .replace(/^\s*page\s+\d+\s*(of\s+\d+)?\s*$/gim, '')
+        .replace(/^\s*-\s*\d+\s*-\s*$/gm, '')
+        // Fix hyphenated line breaks (word- \n continuation)
+        .replace(/(\w)-\s*\n\s*(\w)/g, '$1$2')
+        // Remove standalone OCR noise characters
+        .replace(/^\s*[|§¶©®]\s*$/gm, '');
+
+    // Remove lines that are just repeated characters (e.g. "======", "______", "######")
+    cleaned = cleaned
+        .split('\n')
+        .filter(line => !REPEATED_CHAR_LINE_RE.test(line.trim()))
+        .join('\n');
+
+    // Normalize quotes and unicode
+    cleaned = normalizeQuotes(cleaned);
+    cleaned = normalizeUnicode(cleaned);
+
+    // Collapse 3+ consecutive blank lines into 2, trim whitespace per line
+    cleaned = cleaned
+        .replace(/\n{4,}/g, '\n\n\n')
+        .replace(/^[ \t]+|[ \t]+$/gm, '')
+        .trim();
+
+    return cleaned;
 }
 
 /**
  * Detects if text lacks paragraph breaks and uses sentence-boundary heuristics
  * to insert \n\n breaks. This is critical for LLM chunking.
+ *
+ * Enhanced to detect poetry/verse (short lines preserved) and all-caps headings
+ * that should remain as separate paragraphs.
  */
 export function reconstructParagraphs(text: string): string {
     const existingParas = text.split(/\n\s*\n/).filter(p => p.trim().length > 0);
@@ -170,8 +283,30 @@ export function reconstructParagraphs(text: string): string {
         return text;
     }
 
-    // Collapse single newlines that aren't already part of a double newline
-    const continuousText = text.replace(/([^\n])\n([^\n])/g, '$1 $2');
+    // Pre-process each paragraph block: preserve verse and headings
+    const processedParas: string[] = [];
+
+    for (const para of existingParas) {
+        const trimmed = para.trim();
+
+        // Preserve all-caps headings as separate paragraphs
+        if (isAllCapsHeading(trimmed)) {
+            processedParas.push(trimmed);
+            continue;
+        }
+
+        // Preserve poetry/verse blocks without merging lines
+        if (looksLikeVerse(trimmed)) {
+            processedParas.push(trimmed);
+            continue;
+        }
+
+        // Merge single-newline-separated lines into continuous text
+        const merged = trimmed.replace(/([^\n])\n([^\n])/g, '$1 $2');
+        processedParas.push(merged);
+    }
+
+    const continuousText = processedParas.join('\n\n');
 
     const sentences = splitSentences(continuousText);
     if (sentences.length <= 1) return text;
@@ -186,18 +321,24 @@ export function reconstructParagraphs(text: string): string {
         const isDialogueStart = /^["'"']/.test(s);
         const nextS = i + 1 < sentences.length ? sentences[i + 1] : '';
         const nextIsDialogueStart = /^["'"']/.test(nextS);
+        const isHeading = isAllCapsHeading(s);
 
         if (sentencesInPara === 0) {
             result += s;
             sentencesInPara++;
         } else {
-            if (isDialogueStart || sentencesInPara >= 4) {
+            if (isDialogueStart || isHeading || sentencesInPara >= 4) {
                 result += '\n\n' + s;
                 sentencesInPara = 1;
             } else {
                 result += ' ' + s;
                 sentencesInPara++;
             }
+        }
+
+        // Force paragraph break after a heading
+        if (isHeading) {
+            sentencesInPara = 4;
         }
 
         if (nextIsDialogueStart && sentencesInPara > 0) {

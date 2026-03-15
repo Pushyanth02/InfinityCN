@@ -7,13 +7,23 @@
  */
 
 // ─── Text Processing ───────────────────────────────────────
-export { cleanExtractedText, reconstructParagraphs } from './textProcessing';
+export {
+    cleanExtractedText,
+    reconstructParagraphs,
+    normalizeQuotes,
+    normalizeUnicode,
+} from './textProcessing';
 
 // ─── Chapter Segmentation ──────────────────────────────────
 export { segmentChapters } from './chapterSegmentation';
 
 // ─── Scene Detection ───────────────────────────────────────
-export { detectSceneBreaks } from './sceneDetection';
+export {
+    detectSceneBreaks,
+    detectPOVShift,
+    detectNarrativeMode,
+    deriveSceneTitle,
+} from './sceneDetection';
 
 // ─── Block Parser ──────────────────────────────────────────
 export { parseCinematifiedText } from './parser';
@@ -54,5 +64,7 @@ export {
     SentimentEnrichmentStage,
     PacingAnalysisStage,
     TextStatisticsStage,
+    NarrativeAnalysisStage,
+    SceneSegmentationStage,
 } from './pipeline';
 export type { PipelineStage, PipelineContext } from './pipeline';

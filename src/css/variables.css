@@ -1,0 +1,61 @@
+/**
+ * variables.css — CSS custom properties / design tokens
+ *
+ * Netflix-inspired color palette, typography, spacing, and transition tokens.
+ */
+
+/* ═══════════════════════════════════════════════════════════
+   CSS CUSTOM PROPERTIES
+   ═══════════════════════════════════════════════════════════ */
+
+:root {
+    /* Core Colors — Netflix-inspired */
+    --cine-bg-primary: #0a0a0a;
+    --cine-bg-secondary: #141414;
+    --cine-bg-tertiary: #1a1a1a;
+    --cine-bg-elevated: #222222;
+
+    /* Accent Colors */
+    --cine-red: #e50914;
+    --cine-red-hover: #ff1f2d;
+    --cine-gold: #d4af37;
+    --cine-gold-dim: #a68c2a;
+
+    /* Text Colors */
+    --cine-text-primary: #f5f5f5;
+    --cine-text-secondary: #b3b3b3;
+    --cine-text-muted: #6b6b6b;
+    --cine-text-accent: #ffffff;
+
+    /* Functional Colors */
+    --cine-sfx: #c9a84c;
+    --cine-beat: #94a3b8;
+    --cine-transition: #94a3b8;
+    --cine-dialogue: #fbbf24;
+    --cine-action: #94a3b8;
+    --cine-thought: #a78bfa;
+
+    /* Effects */
+    --cine-glow-primary: rgba(229, 9, 20, 0.3);
+    --cine-glow-secondary: rgba(212, 175, 55, 0.2);
+    --cine-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
+    --cine-shadow-lg: 0 8px 48px rgba(0, 0, 0, 0.8);
+
+    /* Typography */
+    --cine-font-display: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --cine-font-body: 'Crimson Text', Georgia, 'Times New Roman', serif;
+    --cine-font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+    /* Spacing */
+    --cine-space-xs: 4px;
+    --cine-space-sm: 8px;
+    --cine-space-md: 16px;
+    --cine-space-lg: 24px;
+    --cine-space-xl: 32px;
+    --cine-space-2xl: 48px;
+
+    /* Transitions */
+    --cine-transition-fast: 150ms ease;
+    --cine-transition-normal: 300ms ease;
+    --cine-transition-slow: 500ms ease;
+}

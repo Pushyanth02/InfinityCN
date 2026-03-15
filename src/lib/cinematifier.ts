@@ -23,10 +23,15 @@ export {
     // Text Processing
     cleanExtractedText,
     reconstructParagraphs,
+    normalizeQuotes,
+    normalizeUnicode,
     // Chapter Segmentation
     segmentChapters,
     // Scene Detection
     detectSceneBreaks,
+    detectPOVShift,
+    detectNarrativeMode,
+    deriveSceneTitle,
     // Block Parser
     parseCinematifiedText,
     // AI Engine
@@ -45,6 +50,8 @@ export {
     AICinematificationStage,
     OfflineCinematificationStage,
     TextStatisticsStage,
+    NarrativeAnalysisStage,
+    SceneSegmentationStage,
 } from './cinematifier/index';
 
 export type { NarrativeMetadata, PipelineStage, PipelineContext } from './cinematifier/index';

@@ -15,7 +15,7 @@ import type {
     Book,
     ReadingProgress,
 } from '../types/cinematifier';
-import type { AIConfig } from '../lib/ai';
+import type { AIConfig } from '../lib/ai/index';
 import { encrypt, decrypt, deobfuscateLegacy, isLegacyEncryption } from '../lib/crypto';
 
 // ─── API Key Encryption ──────────────────────────────────────────────────────
