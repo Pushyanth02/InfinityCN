@@ -39,6 +39,14 @@ export interface TextStatistics {
     uniqueWordPercentage: number;
     /** Top N most frequent words (excluding stop words) */
     topWords: WordFrequency[];
+    /** Percentage of words inside double-quoted dialogue (0–100) */
+    dialoguePercentage: number;
+    /** Percentage of words inside *asterisks* or _underscores_ inner thoughts (0–100) */
+    innerThoughtRatio: number;
+    /** Percentage of words that are NOT dialogue or inner thoughts (0–100) */
+    actionDensity: number;
+    /** Type-token ratio: unique words / total words (0–1, rounded to 3 decimals) */
+    vocabularyRichness: number;
 }
 
 export interface WordFrequency {
@@ -172,6 +180,17 @@ export function getTopWords(words: string[], n: number = 10): WordFrequency[] {
         .map(([word, count]) => ({ word, count }));
 }
 
+/** Count words inside all regex matches (using capture group 1) */
+function countWordsInPattern(text: string, pattern: RegExp): number {
+    let count = 0;
+    pattern.lastIndex = 0;
+    let match;
+    while ((match = pattern.exec(text)) !== null) {
+        count += tokenizeWords(match[1]).length;
+    }
+    return count;
+}
+
 // ─── Main API ──────────────────────────────────────────────
 
 /**
@@ -213,6 +232,34 @@ export function computeTextStatistics(text: string, topWordCount: number = 10): 
     // Top words
     const topWords = getTopWords(words, topWordCount);
 
+    // Dialogue percentage — words inside double quotes
+    const dialogueWordCount = countWordsInPattern(text, /"([^"]*)"/g);
+    const dialoguePercentage =
+        wordCount > 0 ? Math.round((dialogueWordCount / wordCount) * 1000) / 10 : 0;
+
+    // Inner thought ratio — words inside *asterisks* or _underscores_ (complete phrases only)
+    const thoughtAsterisks = countWordsInPattern(text, /(?<!\w)\*([^*]+)\*(?!\w)/g);
+    const thoughtUnderscores = countWordsInPattern(text, /(?<!\w)_([^_]+)_(?!\w)/g);
+    const innerThoughtWordCount = thoughtAsterisks + thoughtUnderscores;
+    const innerThoughtRatio =
+        wordCount > 0 ? Math.round((innerThoughtWordCount / wordCount) * 1000) / 10 : 0;
+
+    // Action density — everything not in dialogue or inner thoughts
+    const actionDensity =
+        wordCount > 0
+            ? Math.max(
+                  0,
+                  Math.min(
+                      100,
+                      Math.round((100 - dialoguePercentage - innerThoughtRatio) * 10) / 10,
+                  ),
+              )
+            : 0;
+
+    // Vocabulary richness — type-token ratio
+    const vocabularyRichness =
+        wordCount > 0 ? Math.round((uniqueWords.size / wordCount) * 1000) / 1000 : 0;
+
     return {
         characterCount,
         characterCountNoSpaces,
@@ -226,5 +273,9 @@ export function computeTextStatistics(text: string, topWordCount: number = 10): 
         longestWord,
         uniqueWordPercentage,
         topWords,
+        dialoguePercentage,
+        innerThoughtRatio,
+        actionDensity,
+        vocabularyRichness,
     };
 }
