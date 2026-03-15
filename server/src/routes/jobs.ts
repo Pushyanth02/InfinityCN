@@ -36,15 +36,15 @@ async function requireJobAccess(
     res: Response,
     next: NextFunction,
 ) {
-    if (!config.requireJobToken) {
-        next();
-        return;
-    }
-
     const { bookId } = req.params;
 
     if (!isValidBookId(bookId)) {
         res.status(400).json({ error: 'Invalid bookId.' });
+        return;
+    }
+
+    if (!config.requireJobToken) {
+        next();
         return;
     }
 
@@ -177,10 +177,6 @@ router.get(
     requireJobAccess,
     async (req: Request<{ bookId: string }>, res: Response) => {
         const { bookId } = req.params;
-        if (!isValidBookId(bookId)) {
-            res.status(400).json({ error: 'Invalid bookId.' });
-            return;
-        }
         const job = await getJob(bookId);
 
         if (!job) {
@@ -199,10 +195,6 @@ router.get(
     requireJobAccess,
     async (req: Request<{ bookId: string; index: string }>, res: Response) => {
         const { bookId, index } = req.params;
-        if (!isValidBookId(bookId)) {
-            res.status(400).json({ error: 'Invalid bookId.' });
-            return;
-        }
         const chapterIndex = parseInt(index, 10);
 
         if (isNaN(chapterIndex) || chapterIndex < 0) {
@@ -240,10 +232,6 @@ router.delete(
     requireJobAccess,
     async (req: Request<{ bookId: string }>, res: Response) => {
         const { bookId } = req.params;
-        if (!isValidBookId(bookId)) {
-            res.status(400).json({ error: 'Invalid bookId.' });
-            return;
-        }
         const cancelled = await cancelJob(bookId);
 
         if (!cancelled) {
@@ -262,10 +250,6 @@ router.get(
     requireJobAccess,
     async (req: Request<{ bookId: string }>, res: Response) => {
         const { bookId } = req.params;
-        if (!isValidBookId(bookId)) {
-            res.status(400).json({ error: 'Invalid bookId.' });
-            return;
-        }
 
         // Verify job exists
         const job = await getJob(bookId);
