@@ -23,5 +23,6 @@ export function useBookHydration() {
                     /* IndexedDB unavailable */
                 });
         }
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: loads once, setBook is stable (Zustand selector)
+    }, []);
 }

@@ -66,7 +66,8 @@ export function useReadingProgress() {
                     console.warn('[CinematicReader] Failed to persist reading progress:', e);
                 });
         };
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: addReadingTime is stable (Zustand selector)
+    }, []);
 
     // Track chapter changes in reading progress
     useEffect(() => {
@@ -78,7 +79,8 @@ export function useReadingProgress() {
         }, 5_000);
 
         return () => clearTimeout(timer);
-    }, [currentChapterIndex]); // eslint-disable-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- tracks chapter index only; Zustand actions are stable
+    }, [currentChapterIndex]);
 
     return {
         readingProgress,
