@@ -95,6 +95,11 @@ export const OPENAI_COMPATIBLE_PROVIDERS: Record<string, OpenAICompatibleProvide
     },
 };
 
+/** Capitalise a provider name for use in user-facing error messages. */
+export function capitalizeProvider(provider: string): string {
+    return provider.charAt(0).toUpperCase() + provider.slice(1);
+}
+
 /** Shared fetch logic for OpenAI-compatible providers (OpenAI, Groq, DeepSeek). */
 async function callOpenAICompatible(
     prompt: string,
@@ -109,9 +114,7 @@ async function callOpenAICompatible(
     const providerCfg = OPENAI_COMPATIBLE_PROVIDERS[provider];
     const apiKey = config[providerCfg.keyField] as string;
     if (!API_PROXY_URL && !apiKey) {
-        throw new Error(
-            `${provider.charAt(0).toUpperCase() + provider.slice(1)} API key is not set.`,
-        );
+        throw new Error(`${capitalizeProvider(provider)} API key is not set.`);
     }
 
     const body = {

@@ -15,6 +15,7 @@ import {
     handleHttpError,
     proxyFetch,
     OPENAI_COMPATIBLE_PROVIDERS,
+    capitalizeProvider,
 } from './providers';
 
 // ─── RATE LIMITER (shared with callAI via getRateLimiter) ──
@@ -173,9 +174,7 @@ export async function* streamAI(prompt: string, config: AIConfig): AsyncGenerato
         const providerCfg = OPENAI_COMPATIBLE_PROVIDERS[config.provider];
         const apiKey = config[providerCfg.keyField] as string;
         if (!API_PROXY_URL && !apiKey)
-            throw new Error(
-                `${config.provider.charAt(0).toUpperCase() + config.provider.slice(1)} key missing`,
-            );
+            throw new Error(`${capitalizeProvider(config.provider)} API key is not set.`);
 
         const url = API_PROXY_URL ? `${API_PROXY_URL}/api/ai/${config.provider}` : providerCfg.url;
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
