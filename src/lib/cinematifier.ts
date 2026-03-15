@@ -23,10 +23,14 @@ export {
     // Text Processing
     cleanExtractedText,
     reconstructParagraphs,
+    normalizeQuotes,
+    normalizeUnicode,
     // Chapter Segmentation
     segmentChapters,
     // Scene Detection
     detectSceneBreaks,
+    detectPOVShift,
+    detectNarrativeMode,
     // Block Parser
     parseCinematifiedText,
     // AI Engine
