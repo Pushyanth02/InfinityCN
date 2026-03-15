@@ -4,7 +4,13 @@
  * Displays novel content with toggle between Original and Cinematified modes.
  * Features Netflix-inspired dark cinematic UI with ambient effects.
  *
- * Sub-components extracted to reader/:
+ * Custom hooks (extracted to src/hooks/):
+ *   - useReadingProgress   — Progress init, time tracking, chapter marking
+ *   - useAmbientAudio      — Web Audio synthesis + emotion sync
+ *   - useAutoScroll         — Tension-based auto-scroll pacing
+ *   - useChapterProcessing  — On-demand chapter cinematification
+ *
+ * Sub-components (extracted to reader/):
  *   - CinematicBlockView — Animated block renderer
  *   - OriginalTextView   — Plain text view
  *   - EmotionHeatmap     — Tension heatmap
@@ -14,15 +20,13 @@
  *   - ReaderFooter       — Chapter navigation footer
  */
 
-import React, { useCallback, useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { Film, Sparkles } from 'lucide-react';
-import { useCinematifierStore, getCinematifierAIConfig } from '../store/cinematifierStore';
-import { cinematifyText, cinematifyOffline, CinematificationPipeline } from '../lib/cinematifier';
-import { AmbientAudioSynth } from '../lib/audioSynth';
-import { saveBook, saveReadingProgress, loadReadingProgress } from '../lib/cinematifierDb';
-import { createReadingProgress } from '../lib/cinematifier';
-import type { CinematicBlock } from '../types/cinematifier';
+import { useCinematifierStore } from '../store/cinematifierStore';
+
+// Extracted custom hooks
+import { useReadingProgress, useAmbientAudio, useAutoScroll, useChapterProcessing } from '../hooks';
 
 // Extracted sub-components
 import {
@@ -61,173 +65,34 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
     const setImmersionLevel = useCinematifierStore(s => s.setImmersionLevel);
     const toggleDyslexiaFont = useCinematifierStore(s => s.toggleDyslexiaFont);
     const toggleDarkMode = useCinematifierStore(s => s.toggleDarkMode);
-    const toggleBookmark = useCinematifierStore(s => s.toggleBookmark);
-    const updateChapter = useCinematifierStore(s => s.updateChapter);
-    const readingProgress = useCinematifierStore(s => s.readingProgress);
-    const setReadingProgress = useCinematifierStore(s => s.setReadingProgress);
-    const markChapterRead = useCinematifierStore(s => s.markChapterRead);
-    const updateReadingProgress = useCinematifierStore(s => s.updateReadingProgress);
-    const addReadingTime = useCinematifierStore(s => s.addReadingTime);
 
-    const bookmarks = readingProgress?.bookmarks ?? [];
-    const isBookmarked = bookmarks.includes(currentChapterIndex);
-
-    const [isProcessingChapter, setIsProcessingChapter] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [showChapterNav, setShowChapterNav] = useState(false);
 
     // Cross-chunk tracking states
     const [activeEmotion, setActiveEmotion] = useState<string>('');
     const [activeTension, setActiveTension] = useState<number>(0);
-    const [isAutoScrolling, setIsAutoScrolling] = useState<boolean>(false);
-    const [isAmbientSoundEnabled, setIsAmbientSoundEnabled] = useState<boolean>(false);
 
     const contentRef = useRef<HTMLDivElement>(null);
-    const readingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-    const autoScrollRef = useRef<number | null>(null);
-    const ambientSynthRef = useRef<AmbientAudioSynth | null>(null);
-
-    // Initialize audio synth
-    useEffect(() => {
-        ambientSynthRef.current = new AmbientAudioSynth();
-        return () => ambientSynthRef.current?.destroy();
-    }, []);
-
-    // Sync audio theme with scrolling/reading position
-    useEffect(() => {
-        if (!isAmbientSoundEnabled || readerMode !== 'cinematified') {
-            ambientSynthRef.current?.stop();
-            return;
-        }
-
-        if (activeEmotion) {
-            ambientSynthRef.current?.setEmotion(activeEmotion);
-        } else {
-            ambientSynthRef.current?.setEmotion('neutral');
-        }
-    }, [activeEmotion, readerMode, isAmbientSoundEnabled]);
 
     const currentChapter = book?.chapters[currentChapterIndex];
 
-    // Initialize reading progress on mount
-    useEffect(() => {
-        if (!book) return;
-        if (readingProgress && readingProgress.bookId === book.id) return;
-
-        loadReadingProgress(book.id)
-            .then(stored => {
-                if (stored) {
-                    setReadingProgress(stored);
-                    if (stored.currentChapter > 1) {
-                        const idx = stored.currentChapter - 1;
-                        if (idx < book.chapters.length) {
-                            useCinematifierStore.getState().setCurrentChapter(idx);
-                        }
-                    }
-                    if (stored.readingMode) {
-                        useCinematifierStore.getState().setReaderMode(stored.readingMode);
-                    }
-                } else {
-                    setReadingProgress(createReadingProgress(book.id));
-                }
-            })
-            .catch(() => {
-                setReadingProgress(createReadingProgress(book.id));
-            });
-    }, [book, readingProgress, setReadingProgress]);
-
-    // Track reading time (increment every 30 seconds while reader is open)
-    useEffect(() => {
-        readingTimerRef.current = setInterval(() => {
-            addReadingTime(30);
-        }, 30_000);
-
-        return () => {
-            if (readingTimerRef.current) clearInterval(readingTimerRef.current);
-            const progress = useCinematifierStore.getState().readingProgress;
-            if (progress)
-                saveReadingProgress(progress).catch(e => {
-                    console.warn('[CinematicReader] Failed to persist reading progress:', e);
-                });
-        };
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-    // Track chapter changes in reading progress
-    useEffect(() => {
-        if (!readingProgress || !book) return;
-
-        updateReadingProgress({ currentChapter: currentChapterIndex + 1 });
-        const timer = setTimeout(() => {
-            markChapterRead(currentChapterIndex + 1);
-        }, 5_000);
-
-        return () => clearTimeout(timer);
-    }, [currentChapterIndex]); // eslint-disable-line react-hooks/exhaustive-deps
-
-    // Process current chapter if not yet cinematified
-    const processCurrentChapter = useCallback(async () => {
-        if (!currentChapter || currentChapter.isProcessed) return;
-        if (isProcessingChapter) return;
-
-        setIsProcessingChapter(true);
-
-        try {
-            const config = getCinematifierAIConfig();
-            let result;
-
-            if (config.provider === 'none') {
-                const pipeline = CinematificationPipeline.createEnrichedOfflinePipeline();
-                result = await pipeline.execute(currentChapter.originalText);
-            } else {
-                const accumulatedBlocks: CinematicBlock[] = [];
-                result = await cinematifyText(
-                    currentChapter.originalText,
-                    config,
-                    undefined,
-                    (blocks, isDone) => {
-                        accumulatedBlocks.push(...blocks);
-                        updateChapter(currentChapterIndex, {
-                            cinematifiedBlocks: [...accumulatedBlocks],
-                            isProcessed: isDone,
-                        });
-                    },
-                );
-            }
-
-            updateChapter(currentChapterIndex, {
-                cinematifiedBlocks: result.blocks,
-                cinematifiedText: result.rawText,
-                isProcessed: true,
-            });
-            const updatedBook = useCinematifierStore.getState().book;
-            if (updatedBook)
-                saveBook(updatedBook).catch(e => {
-                    console.warn('[CinematicReader] Failed to persist book:', e);
-                });
-        } catch (err) {
-            console.error('[CinematicReader] Process error:', err);
-            const result = cinematifyOffline(currentChapter.originalText);
-            updateChapter(currentChapterIndex, {
-                cinematifiedBlocks: result.blocks,
-                cinematifiedText: result.rawText,
-                isProcessed: true,
-            });
-            const updatedBook = useCinematifierStore.getState().book;
-            if (updatedBook)
-                saveBook(updatedBook).catch(e => {
-                    console.warn('[CinematicReader] Failed to persist book:', e);
-                });
-        } finally {
-            setIsProcessingChapter(false);
-        }
-    }, [currentChapter, currentChapterIndex, isProcessingChapter, updateChapter]);
-
-    // Auto-process chapter when it changes
-    useEffect(() => {
-        if (currentChapter && !currentChapter.isProcessed && readerMode === 'cinematified') {
-            processCurrentChapter();
-        }
-    }, [currentChapter, readerMode, processCurrentChapter]);
+    // ─── Custom Hooks ──────────────────────────────────────────
+    const { readingProgress, bookmarks, isBookmarked, toggleBookmark } = useReadingProgress();
+    const { isAmbientSoundEnabled, toggleAmbientSound } = useAmbientAudio(
+        activeEmotion,
+        readerMode,
+    );
+    const { isAutoScrolling, toggleAutoScroll } = useAutoScroll(
+        contentRef,
+        activeTension,
+        readerMode,
+    );
+    const { isProcessingChapter, processCurrentChapter } = useChapterProcessing(
+        currentChapter,
+        currentChapterIndex,
+        readerMode,
+    );
 
     // Active block tracking for dynamic themes and tension
     useEffect(() => {
@@ -268,43 +133,6 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
             observer.disconnect();
         };
     }, [currentChapter, readerMode]);
-
-    // Tension-based Auto-Scroll Pacing
-    useEffect(() => {
-        if (!isAutoScrolling || !contentRef.current || readerMode !== 'cinematified') {
-            if (autoScrollRef.current) cancelAnimationFrame(autoScrollRef.current);
-            return;
-        }
-
-        let lastTime = performance.now();
-        const scrollStep = (time: number) => {
-            const dt = time - lastTime;
-            lastTime = time;
-
-            if (contentRef.current) {
-                const speedMultiplier = 1 - ((activeTension || 0) / 100) * 0.7;
-                const pixelsToScroll = (40 * speedMultiplier * dt) / 1000;
-
-                contentRef.current.scrollTop += pixelsToScroll;
-
-                if (
-                    contentRef.current.scrollTop + contentRef.current.clientHeight >=
-                    contentRef.current.scrollHeight - 2
-                ) {
-                    setIsAutoScrolling(false);
-                    return;
-                }
-            }
-
-            autoScrollRef.current = requestAnimationFrame(scrollStep);
-        };
-
-        autoScrollRef.current = requestAnimationFrame(scrollStep);
-
-        return () => {
-            if (autoScrollRef.current) cancelAnimationFrame(autoScrollRef.current);
-        };
-    }, [isAutoScrolling, activeTension, readerMode]);
 
     // Scroll to top on chapter change
     useEffect(() => {
@@ -367,16 +195,9 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                 currentChapterIndex={currentChapterIndex}
                 toggleBookmark={toggleBookmark}
                 isAmbientSoundEnabled={isAmbientSoundEnabled}
-                onToggleAmbientSound={() => {
-                    if (!isAmbientSoundEnabled && ambientSynthRef.current) {
-                        ambientSynthRef.current.play();
-                    } else if (ambientSynthRef.current) {
-                        ambientSynthRef.current.stop();
-                    }
-                    setIsAmbientSoundEnabled(!isAmbientSoundEnabled);
-                }}
+                onToggleAmbientSound={toggleAmbientSound}
                 isAutoScrolling={isAutoScrolling}
-                onToggleAutoScroll={() => setIsAutoScrolling(!isAutoScrolling)}
+                onToggleAutoScroll={toggleAutoScroll}
                 onToggleSettings={() => setShowSettings(!showSettings)}
                 onShowChapterNav={() => setShowChapterNav(true)}
                 onClose={onClose}
