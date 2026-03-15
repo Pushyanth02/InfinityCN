@@ -7,7 +7,12 @@
  */
 
 // ─── Text Processing ───────────────────────────────────────
-export { cleanExtractedText, reconstructParagraphs } from './textProcessing';
+export {
+    cleanExtractedText,
+    reconstructParagraphs,
+    normalizeQuotes,
+    normalizeUnicode,
+} from './textProcessing';
 
 // ─── Chapter Segmentation ──────────────────────────────────
 export { segmentChapters } from './chapterSegmentation';
