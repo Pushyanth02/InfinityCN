@@ -12,8 +12,18 @@
 
 ### Document Support
 - **Multi-Format** — PDF, EPUB, DOCX, PPTX, TXT (up to 50MB)
+- **OCR Support** — Tesseract.js-powered character recognition for scanned PDFs (up to 5 pages)
 - **Smart Parsing** — Automatic chapter segmentation with paragraph reconstruction
-- **Lazy Loading** — Heavy dependencies (pdfjs, fflate) load only when needed
+- **Lazy Loading** — Heavy dependencies (pdfjs, fflate, tesseract) load only when needed
+
+### Text Processing & Analysis (Free, No API Keys Required)
+- **Readability Analysis** — Flesch-Kincaid Reading Ease/Grade Level, sentence complexity, vocabulary diversity
+- **Sentiment Tracking** — AFINN-inspired lexicon (~200+ words) with negation/intensifier handling and emotion flow
+- **Pacing Analysis** — Tension arc computation, flat/rushed zone detection, Shannon entropy for variety scoring
+- **Text Statistics** — Word/character/sentence/paragraph counting, reading time estimation, top word frequency analysis
+- **Scene Detection** — Heuristic scene break detection via location/character/time changes
+- **Dictionary Lookup** — On-demand word definitions via the free Dictionary API (dictionaryapi.dev, no key required)
+- **Inspirational Quotes** — Curated literary quotes with Quotable API integration and offline fallback
 
 ### Reader Experience
 - **Dual-Mode** — Toggle between Original and Cinematified text
@@ -30,6 +40,7 @@
 
 ### Technical
 - **Offline-First** — IndexedDB via Dexie + PWA service worker
+- **Composable Pipeline** — Modular stage-based processing (cleaning → reconstruction → analysis → cinematification → enrichment)
 - **Responsive** — 480px mobile to 1200px+ desktop
 - **Backend Server** — Optional Express server with Redis caching, RabbitMQ job queue, and per-IP rate limiting
 
@@ -44,11 +55,31 @@
 | Animation | Framer Motion |
 | Icons | Lucide React |
 | PDF | pdfjs-dist |
+| OCR | Tesseract.js |
+| Embeddings | @xenova/transformers (all-MiniLM-L6-v2) |
 | Testing | Vitest + Testing Library |
 | Linting | ESLint + Prettier |
 | Hooks | Husky + lint-staged |
 | CI/CD | GitHub Actions |
 | Server | Express 5 + Redis + RabbitMQ |
+
+## Free APIs & Algorithms
+
+The app integrates the following free APIs and algorithms that require **no API keys**:
+
+| Feature | Implementation | Source |
+|---------|---------------|--------|
+| PDF Text Extraction | pdfjs-dist (Mozilla PDF.js) | Bundled (lazy-loaded) |
+| EPUB/DOCX/PPTX Extraction | fflate + XML parsing | Bundled (lazy-loaded) |
+| Character Recognition (OCR) | Tesseract.js (WASM) | Bundled (lazy-loaded) |
+| Semantic Embeddings | all-MiniLM-L6-v2 via ONNX.js | Bundled (lazy-loaded) |
+| Readability Scoring | Flesch-Kincaid formulas | Built-in algorithm |
+| Sentiment Analysis | AFINN-inspired lexicon | Built-in algorithm |
+| Pacing Analysis | Tension arc + Shannon entropy | Built-in algorithm |
+| Text Statistics | Word/sentence/paragraph metrics | Built-in algorithm |
+| Scene Detection | Location/time/structure heuristics | Built-in algorithm |
+| Word Definitions | Free Dictionary API | [dictionaryapi.dev](https://dictionaryapi.dev/) |
+| Inspirational Quotes | Quotable API + offline fallback | [quotable](https://github.com/lukePeavey/quotable) |
 
 ## Getting Started
 
@@ -176,6 +207,7 @@ src/
     CinematifierApp.tsx      # Main app: upload → process → read flow
     CinematicReader.tsx      # Dual-mode reader with ambient audio
     CinematifierSettings.tsx # AI provider configuration
+    ProcessingOverlay.tsx    # Processing status with inspirational quotes
     ui/
       ErrorBoundary.tsx      # React error boundary
     __tests__/
@@ -185,10 +217,26 @@ src/
     cinematifier.ts          # Text-to-cinematic transformation engine
     cinematifierDb.ts        # IndexedDB persistence (Dexie)
     crypto.ts                # AES-GCM key encryption (SubtleCrypto)
+    dictionaryApi.ts         # Free Dictionary API client (word lookups)
     embeddings.ts            # Semantic embeddings (all-MiniLM-L6-v2)
     audioSynth.ts            # Procedural ambient audio (Web Audio API)
-    pdfWorker.ts             # Multi-format document extraction
+    pdfWorker.ts             # Multi-format document extraction + OCR
+    quotableApi.ts           # Quotable API client with offline fallback
     serverJobs.ts            # Frontend client for the server job API
+    textStatistics.ts        # Text statistics & metrics API
+    cinematifier/
+      textProcessing.ts      # Text cleaning & paragraph reconstruction
+      chapterSegmentation.ts # Chapter boundary detection
+      sceneDetection.ts      # Heuristic scene break detection
+      parser.ts              # AI output → CinematicBlock[] parsing
+      aiEngine.ts            # AI-powered cinematification orchestration
+      offlineEngine.ts       # Offline/fallback cinematification
+      entities.ts            # Book & ReadingProgress entity factories
+      metadata.ts            # Narrative metadata extraction
+      readability.ts         # Flesch-Kincaid readability analysis
+      sentimentTracker.ts    # Lexicon-based sentiment/emotion tracking
+      pacingAnalyzer.ts      # Pacing analysis & tension arcs
+      pipeline.ts            # Composable pipeline engine
   store/
     cinematifierStore.ts     # Zustand state with encrypted persistence
   types/

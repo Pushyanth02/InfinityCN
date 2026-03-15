@@ -1095,6 +1095,23 @@
     color: var(--cine-text-muted);
 }
 
+.cine-processing-quote {
+    margin-top: var(--cine-space-md);
+    max-width: 380px;
+    text-align: center;
+    font-style: italic;
+    color: var(--cine-text-secondary);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+}
+
+.cine-processing-quote footer {
+    margin-top: var(--cine-space-xs);
+    font-style: normal;
+    font-size: 0.75rem;
+    color: var(--cine-text-muted);
+}
+
 /* Error State */
 .cine-error {
     display: flex;

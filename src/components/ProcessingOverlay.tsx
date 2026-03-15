@@ -2,17 +2,21 @@
  * ProcessingOverlay.tsx — Processing Status Overlay
  *
  * Displays a full-screen overlay with spinner, phase message,
- * and progress bar during document processing.
+ * progress bar, and an inspirational quote during document processing.
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import type { ProcessingProgress } from '../types/cinematifier';
+import { getOfflineQuote } from '../lib/quotableApi';
 
 interface ProcessingOverlayProps {
     progress: ProcessingProgress | null;
 }
 
 export const ProcessingOverlay: React.FC<ProcessingOverlayProps> = ({ progress }) => {
+    const progressMessage = progress?.message;
+    const quote = useMemo(() => (progressMessage ? getOfflineQuote() : null), [progressMessage]);
+
     if (!progress) return null;
 
     return (
@@ -34,6 +38,12 @@ export const ProcessingOverlay: React.FC<ProcessingOverlayProps> = ({ progress }
                     />
                 </div>
                 <span className="cine-processing-percent">{progress.percentComplete}%</span>
+                {quote && (
+                    <blockquote className="cine-processing-quote">
+                        <p>"{quote.content}"</p>
+                        <footer>— {quote.author}</footer>
+                    </blockquote>
+                )}
             </div>
         </div>
     );

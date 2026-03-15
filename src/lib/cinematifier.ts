@@ -44,6 +44,7 @@ export {
     ParagraphReconstructionStage,
     AICinematificationStage,
     OfflineCinematificationStage,
+    TextStatisticsStage,
 } from './cinematifier/index';
 
 export type { NarrativeMetadata, PipelineStage, PipelineContext } from './cinematifier/index';

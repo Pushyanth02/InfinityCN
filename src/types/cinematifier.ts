@@ -218,6 +218,8 @@ export interface CinematificationResult {
     sentiment?: import('../lib/cinematifier/sentimentTracker').SentimentFlowResult;
     /** Pacing analysis (populated when analytics stages are used) */
     pacing?: import('../lib/cinematifier/pacingAnalyzer').PacingMetrics;
+    /** Text statistics (populated when analytics stages are used) */
+    textStats?: import('../lib/textStatistics').TextStatistics;
 }
 
 export interface ChapterSegment {
