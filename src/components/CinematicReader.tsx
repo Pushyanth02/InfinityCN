@@ -18,7 +18,7 @@ import React, { useCallback, useRef, useEffect, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { Film, Sparkles } from 'lucide-react';
 import { useCinematifierStore, getCinematifierAIConfig } from '../store/cinematifierStore';
-import { cinematifyText, cinematifyOffline } from '../lib/cinematifier';
+import { cinematifyText, cinematifyOffline, CinematificationPipeline } from '../lib/cinematifier';
 import { AmbientAudioSynth } from '../lib/audioSynth';
 import { saveBook, saveReadingProgress, loadReadingProgress } from '../lib/cinematifierDb';
 import { createReadingProgress } from '../lib/cinematifier';
@@ -176,7 +176,8 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
             let result;
 
             if (config.provider === 'none') {
-                result = cinematifyOffline(currentChapter.originalText);
+                const pipeline = CinematificationPipeline.createEnrichedOfflinePipeline();
+                result = await pipeline.execute(currentChapter.originalText);
             } else {
                 const accumulatedBlocks: CinematicBlock[] = [];
                 result = await cinematifyText(

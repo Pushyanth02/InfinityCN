@@ -18,6 +18,7 @@ import {
     detectPOVShift,
     detectNarrativeMode,
     detectSceneBreaks,
+    deriveSceneTitle,
     segmentChapters,
 } from '../cinematifier';
 import { computeTextStatistics } from '../textStatistics';
@@ -370,5 +371,129 @@ describe('computeTextStatistics — new metrics', () => {
         expect(stats.innerThoughtRatio).toBe(0);
         expect(stats.actionDensity).toBe(0);
         expect(stats.vocabularyRichness).toBe(0);
+    });
+});
+
+// ─── Pipeline Stages ──────────────────────────────────────────────
+
+import type { PipelineContext } from '../cinematifier/pipeline';
+
+describe('NarrativeAnalysisStage', () => {
+    it('detects POV character in pipeline context', async () => {
+        const { NarrativeAnalysisStage } = await import('../cinematifier/pipeline');
+        const stage = new NarrativeAnalysisStage();
+        const context: PipelineContext = {
+            text: 'Sarah walked slowly through the mist.\n\nThe night was cold.',
+            blocks: [],
+            rawText: '',
+            metadata: { sfxCount: 0, transitionCount: 0, beatCount: 0, originalWordCount: 0 },
+            startTime: performance.now(),
+        };
+        stage.execute(context);
+        expect(context.povCharacter).toBe('Sarah');
+    });
+
+    it('detects flashback narrative mode', async () => {
+        const { NarrativeAnalysisStage } = await import('../cinematifier/pipeline');
+        const stage = new NarrativeAnalysisStage();
+        const context: PipelineContext = {
+            text: 'She remembered when life was simpler.\n\nThose days were gone.',
+            blocks: [],
+            rawText: '',
+            metadata: { sfxCount: 0, transitionCount: 0, beatCount: 0, originalWordCount: 0 },
+            startTime: performance.now(),
+        };
+        stage.execute(context);
+        expect(context.narrativeMode).toBe('flashback');
+    });
+
+    it('defaults to normal narrative mode', async () => {
+        const { NarrativeAnalysisStage } = await import('../cinematifier/pipeline');
+        const stage = new NarrativeAnalysisStage();
+        const context: PipelineContext = {
+            text: 'The sun was shining brightly.\n\nBirds chirped in the trees.',
+            blocks: [],
+            rawText: '',
+            metadata: { sfxCount: 0, transitionCount: 0, beatCount: 0, originalWordCount: 0 },
+            startTime: performance.now(),
+        };
+        stage.execute(context);
+        expect(context.narrativeMode).toBe('normal');
+    });
+});
+
+describe('SceneSegmentationStage', () => {
+    it('segments text into scenes with titles', async () => {
+        const { SceneSegmentationStage } = await import('../cinematifier/pipeline');
+        const stage = new SceneSegmentationStage();
+        const context: PipelineContext = {
+            text: 'The village was quiet.\n\nSuddenly the ground shook.',
+            blocks: [],
+            rawText: '',
+            metadata: { sfxCount: 0, transitionCount: 0, beatCount: 0, originalWordCount: 0 },
+            startTime: performance.now(),
+        };
+        stage.execute(context);
+        expect(context.scenes).toBeDefined();
+        expect(context.scenes!.length).toBeGreaterThanOrEqual(1);
+        expect(context.scenes![0].title).toBeDefined();
+        expect(context.scenes![0].paragraphs.length).toBeGreaterThan(0);
+    });
+
+    it('creates multiple scenes at break signals', async () => {
+        const { SceneSegmentationStage } = await import('../cinematifier/pipeline');
+        const stage = new SceneSegmentationStage();
+        const context: PipelineContext = {
+            text: 'He arrived at the gate.\n\nHours later he was inside.',
+            blocks: [],
+            rawText: '',
+            metadata: { sfxCount: 0, transitionCount: 0, beatCount: 0, originalWordCount: 0 },
+            startTime: performance.now(),
+        };
+        stage.execute(context);
+        expect(context.scenes!.length).toBe(2);
+    });
+});
+
+describe('Enriched offline pipeline', () => {
+    it('includes NarrativeAnalysis and SceneSegmentation stages', async () => {
+        const { CinematificationPipeline } = await import('../cinematifier/pipeline');
+        const pipeline = CinematificationPipeline.createEnrichedOfflinePipeline();
+        const names = pipeline.getStageNames();
+        expect(names).toContain('Narrative Analysis');
+        expect(names).toContain('Scene Segmentation');
+    });
+
+    it('produces narrativeMode and scenes in result', async () => {
+        const { CinematificationPipeline } = await import('../cinematifier/pipeline');
+        const pipeline = CinematificationPipeline.createEnrichedOfflinePipeline();
+        const result = await pipeline.execute(
+            'Sarah walked slowly through the dark forest.\n\nSuddenly the trees parted.',
+        );
+        expect(result.narrativeMode).toBeDefined();
+        expect(result.scenes).toBeDefined();
+        expect(result.scenes!.length).toBeGreaterThanOrEqual(1);
+    });
+});
+
+describe('deriveSceneTitle mood-based titles', () => {
+    it('generates mood-prefixed title for dark content', () => {
+        const title = deriveSceneTitle(['The shadow crept closer, filled with dread.'], 1);
+        expect(title).toBe('Dark Scene 1');
+    });
+
+    it('generates mood-prefixed title for joyful content', () => {
+        const title = deriveSceneTitle(['Everyone began to laugh and celebrate.'], 2);
+        expect(title).toBe('Joyful Scene 2');
+    });
+
+    it('falls back to generic title when no mood matches', () => {
+        const title = deriveSceneTitle(['She walked along the road.'], 3);
+        expect(title).toBe('Scene 3');
+    });
+
+    it('prefers location over mood when location is present', () => {
+        const title = deriveSceneTitle(['They arrived at Castle Rock with dread.'], 1);
+        expect(title).toBe('Castle Rock');
     });
 });

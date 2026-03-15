@@ -34,6 +34,15 @@ const DIALOGUE_OPENING_PATTERN = /^[""\u201C]/;
 const ACTION_PATTERN =
     /\b(explosion|attack|battle|fight|chase|escape|collision|confrontation|argument|scream|crash|gunshot|ambush|pursuit)\b/i;
 
+/** Mood keywords mapped to descriptive prefixes for scene title derivation */
+const MOOD_PATTERNS: { pattern: RegExp; prefix: string }[] = [
+    { pattern: /\b(terror|dread|horror|fear|scream|dark|shadow|death)\b/i, prefix: 'Dark' },
+    { pattern: /\b(joy|laugh|smile|happy|delight|celebrate|cheer)\b/i, prefix: 'Joyful' },
+    { pattern: /\b(sorrow|tears|grief|mourn|weep|loss|tragic)\b/i, prefix: 'Sorrowful' },
+    { pattern: /\b(tense|danger|threat|warn|urgent|desperate)\b/i, prefix: 'Tense' },
+    { pattern: /\b(calm|peace|quiet|gentle|serene|still|rest)\b/i, prefix: 'Quiet' },
+];
+
 /**
  * Detect scene breaks in paragraphs using heuristic patterns.
  * Used as fallback when AI scene segmentation is unavailable.
@@ -74,6 +83,14 @@ export function deriveSceneTitle(sceneParagraphs: string[], sceneNumber: number)
 
     const actionMatch = first.match(ACTION_PATTERN);
     if (actionMatch) return `The ${capitalize(actionMatch[1])}`;
+
+    // Mood-based title derivation: scan all paragraphs for emotional tone
+    const allText = sceneParagraphs.join(' ');
+    for (const { pattern, prefix } of MOOD_PATTERNS) {
+        if (pattern.test(allText)) {
+            return `${prefix} Scene ${sceneNumber}`;
+        }
+    }
 
     return `Scene ${sceneNumber}`;
 }

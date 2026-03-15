@@ -18,7 +18,12 @@ export {
 export { segmentChapters } from './chapterSegmentation';
 
 // ─── Scene Detection ───────────────────────────────────────
-export { detectSceneBreaks, detectPOVShift, detectNarrativeMode } from './sceneDetection';
+export {
+    detectSceneBreaks,
+    detectPOVShift,
+    detectNarrativeMode,
+    deriveSceneTitle,
+} from './sceneDetection';
 
 // ─── Block Parser ──────────────────────────────────────────
 export { parseCinematifiedText } from './parser';
@@ -59,5 +64,7 @@ export {
     SentimentEnrichmentStage,
     PacingAnalysisStage,
     TextStatisticsStage,
+    NarrativeAnalysisStage,
+    SceneSegmentationStage,
 } from './pipeline';
 export type { PipelineStage, PipelineContext } from './pipeline';

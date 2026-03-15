@@ -31,6 +31,7 @@ export {
     detectSceneBreaks,
     detectPOVShift,
     detectNarrativeMode,
+    deriveSceneTitle,
     // Block Parser
     parseCinematifiedText,
     // AI Engine
@@ -49,6 +50,8 @@ export {
     AICinematificationStage,
     OfflineCinematificationStage,
     TextStatisticsStage,
+    NarrativeAnalysisStage,
+    SceneSegmentationStage,
 } from './cinematifier/index';
 
 export type { NarrativeMetadata, PipelineStage, PipelineContext } from './cinematifier/index';

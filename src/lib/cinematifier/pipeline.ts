@@ -31,6 +31,12 @@ import { analyzeReadability, type ReadabilityMetrics } from './readability';
 import { analyzeSentimentFlow, type SentimentFlowResult } from './sentimentTracker';
 import { analyzePacing, type PacingMetrics } from './pacingAnalyzer';
 import { computeTextStatistics, type TextStatistics } from '../textStatistics';
+import {
+    detectPOVShift,
+    detectNarrativeMode,
+    detectSceneBreaks,
+    deriveSceneTitle,
+} from './sceneDetection';
 
 // ─── Pipeline Context ──────────────────────────────────────
 
@@ -65,6 +71,12 @@ export interface PipelineContext {
     pacing?: PacingMetrics;
     /** Text statistics (populated by TextStatisticsStage) */
     textStats?: TextStatistics;
+    /** Detected narrative mode for the text (populated by NarrativeAnalysisStage) */
+    narrativeMode?: 'normal' | 'flashback' | 'dream' | 'memory';
+    /** Detected POV character name (populated by NarrativeAnalysisStage) */
+    povCharacter?: string;
+    /** Scene groups from heuristic segmentation (populated by SceneSegmentationStage) */
+    scenes?: { title: string; paragraphs: string[] }[];
 }
 
 // ─── Pipeline Stage Interface ──────────────────────────────
@@ -189,6 +201,43 @@ export class TextStatisticsStage implements PipelineStage {
     }
 }
 
+/** Post-processing stage: Detect narrative mode and POV character */
+export class NarrativeAnalysisStage implements PipelineStage {
+    readonly name = 'Narrative Analysis';
+
+    execute(context: PipelineContext): void {
+        const paragraphs = context.text
+            .split(/\n\n+/)
+            .map(p => p.trim())
+            .filter(Boolean);
+
+        context.povCharacter = detectPOVShift(paragraphs);
+
+        // Determine dominant narrative mode from all paragraphs
+        const modes = paragraphs.map(p => detectNarrativeMode(p));
+        const nonNormal = modes.filter(m => m !== 'normal');
+        context.narrativeMode = nonNormal.length > 0 ? nonNormal[0] : 'normal';
+    }
+}
+
+/** Post-processing stage: Segment text into scenes with derived titles */
+export class SceneSegmentationStage implements PipelineStage {
+    readonly name = 'Scene Segmentation';
+
+    execute(context: PipelineContext): void {
+        const paragraphs = context.text
+            .split(/\n\n+/)
+            .map(p => p.trim())
+            .filter(Boolean);
+
+        const sceneGroups = detectSceneBreaks(paragraphs);
+        context.scenes = sceneGroups.map((group, i) => ({
+            title: deriveSceneTitle(group, i + 1),
+            paragraphs: group,
+        }));
+    }
+}
+
 // ─── Pipeline Engine ───────────────────────────────────────
 
 /**
@@ -270,6 +319,9 @@ export class CinematificationPipeline {
         if (context.sentiment) result.sentiment = context.sentiment;
         if (context.pacing) result.pacing = context.pacing;
         if (context.textStats) result.textStats = context.textStats;
+        if (context.narrativeMode) result.narrativeMode = context.narrativeMode;
+        if (context.povCharacter) result.povCharacter = context.povCharacter;
+        if (context.scenes) result.scenes = context.scenes;
 
         return result;
     }
@@ -304,8 +356,8 @@ export class CinematificationPipeline {
      * Create an enriched offline pipeline with analytics stages.
      *
      * Stages: TextCleaning → ParagraphReconstruction → ReadabilityAnalysis
-     *         → TextStatistics → OfflineCinematification → SentimentEnrichment
-     *         → PacingAnalysis
+     *         → TextStatistics → NarrativeAnalysis → SceneSegmentation
+     *         → OfflineCinematification → SentimentEnrichment → PacingAnalysis
      */
     static createEnrichedOfflinePipeline(): CinematificationPipeline {
         return new CinematificationPipeline()
@@ -313,6 +365,8 @@ export class CinematificationPipeline {
             .addStage(new ParagraphReconstructionStage())
             .addStage(new ReadabilityAnalysisStage())
             .addStage(new TextStatisticsStage())
+            .addStage(new NarrativeAnalysisStage())
+            .addStage(new SceneSegmentationStage())
             .addStage(new OfflineCinematificationStage())
             .addStage(new SentimentEnrichmentStage())
             .addStage(new PacingAnalysisStage());
@@ -322,8 +376,8 @@ export class CinematificationPipeline {
      * Create an enriched AI pipeline with analytics stages.
      *
      * Stages: TextCleaning → ParagraphReconstruction → ReadabilityAnalysis
-     *         → TextStatistics → AICinematification → SentimentEnrichment
-     *         → PacingAnalysis
+     *         → TextStatistics → NarrativeAnalysis → SceneSegmentation
+     *         → AICinematification → SentimentEnrichment → PacingAnalysis
      */
     static createEnrichedAIPipeline(): CinematificationPipeline {
         return new CinematificationPipeline()
@@ -331,6 +385,8 @@ export class CinematificationPipeline {
             .addStage(new ParagraphReconstructionStage())
             .addStage(new ReadabilityAnalysisStage())
             .addStage(new TextStatisticsStage())
+            .addStage(new NarrativeAnalysisStage())
+            .addStage(new SceneSegmentationStage())
             .addStage(new AICinematificationStage())
             .addStage(new SentimentEnrichmentStage())
             .addStage(new PacingAnalysisStage());
