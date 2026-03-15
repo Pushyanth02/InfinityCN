@@ -1,50 +1,60 @@
 /**
- * textStatistics.ts — Advanced Text Statistics Engine
+ * textStatistics.ts — Text Statistics & Metrics API
  *
- * Provides detailed text analysis metrics using built-in browser APIs
- * (Intl.Segmenter for proper word/sentence segmentation) for enhanced
- * readability insights and writing quality analysis.
+ * Provides comprehensive text statistics including:
+ *   • Character, word, sentence, paragraph counts
+ *   • Estimated reading & speaking time
+ *   • Average word/sentence length
+ *   • Unique word ratio
+ *   • Top word frequency analysis
  *
- * Features:
- *   - Accurate word, sentence, and paragraph counting
- *   - Vocabulary diversity (type-token ratio)
- *   - Average sentence/word length
- *   - Dialogue vs. narrative ratio
- *   - Estimated reading time at different speeds
- *   - Top frequent words (excluding stop words)
+ * All computation is pure — no AI or external dependencies.
+ * Designed to enrich the cinematification pipeline or standalone analysis.
  */
 
-// ─── Types ──────────────────────────────────────────────────
+// ─── Types ─────────────────────────────────────────────────
 
 export interface TextStatistics {
+    /** Total character count (including spaces) */
+    characterCount: number;
+    /** Character count without spaces */
+    characterCountNoSpaces: number;
     /** Total word count */
     wordCount: number;
     /** Total sentence count */
     sentenceCount: number;
     /** Total paragraph count */
     paragraphCount: number;
-    /** Total character count (excluding whitespace) */
-    characterCount: number;
-    /** Average words per sentence */
-    avgWordsPerSentence: number;
-    /** Average characters per word */
+    /** Estimated reading time in minutes (at 238 wpm average) */
+    readingTimeMinutes: number;
+    /** Estimated speaking time in minutes (at 150 wpm average) */
+    speakingTimeMinutes: number;
+    /** Average word length in characters */
     avgWordLength: number;
-    /** Unique words / total words (0–1) — higher means more diverse vocabulary */
-    vocabularyDiversity: number;
-    /** Percentage of text that is dialogue (0–100) */
-    dialoguePercent: number;
-    /** Estimated reading time in minutes at different speeds */
-    readingTime: {
-        slow: number; // 150 WPM
-        average: number; // 250 WPM
-        fast: number; // 400 WPM
-    };
-    /** Top 10 most frequent content words */
-    topWords: Array<{ word: string; count: number }>;
+    /** Average sentence length in words */
+    avgSentenceLength: number;
+    /** Longest word found in the text */
+    longestWord: string;
+    /** Percentage of unique words (0–100) */
+    uniqueWordPercentage: number;
+    /** Top N most frequent words (excluding stop words) */
+    topWords: WordFrequency[];
 }
 
-// ─── Stop Words ──────────────────────────────────────────────
+export interface WordFrequency {
+    word: string;
+    count: number;
+}
 
+// ─── Constants ─────────────────────────────────────────────
+
+/** Average silent reading speed (words per minute) */
+const READING_WPM = 238;
+
+/** Average speaking speed (words per minute) */
+const SPEAKING_WPM = 150;
+
+/** Common English stop words excluded from frequency analysis */
 const STOP_WORDS = new Set([
     'the',
     'a',
@@ -61,189 +71,160 @@ const STOP_WORDS = new Set([
     'with',
     'by',
     'is',
+    'it',
+    'as',
     'was',
     'are',
-    'were',
     'be',
-    'been',
-    'being',
-    'have',
     'has',
     'had',
+    'have',
     'do',
-    'does',
     'did',
+    'not',
+    'that',
+    'this',
+    'from',
+    'he',
+    'she',
+    'they',
+    'we',
+    'you',
+    'i',
+    'his',
+    'her',
+    'its',
+    'my',
+    'our',
+    'your',
+    'their',
     'will',
     'would',
     'could',
     'should',
-    'may',
-    'might',
-    'shall',
     'can',
-    'it',
-    'its',
-    'i',
-    'he',
-    'she',
-    'we',
-    'they',
-    'you',
-    'me',
-    'him',
-    'her',
-    'us',
-    'them',
-    'my',
-    'his',
-    'your',
-    'our',
-    'their',
-    'this',
-    'that',
-    'these',
-    'those',
-    'not',
-    'no',
-    'so',
+    'may',
     'if',
-    'as',
-    'from',
+    'so',
+    'no',
     'up',
     'out',
-    'about',
-    'into',
-    'than',
-    'then',
-    'just',
-    'also',
-    'very',
     'all',
-    'any',
-    'each',
+    'been',
+    'were',
+    'what',
+    'when',
+    'who',
+    'which',
+    'there',
+    'then',
+    'than',
+    'into',
+    'just',
+    'about',
     'more',
     'some',
-    'such',
-    'only',
-    'other',
-    'new',
-    'when',
-    'what',
-    'which',
-    'who',
-    'how',
-    'where',
-    'there',
-    'here',
+    'them',
+    'him',
 ]);
 
-// ─── Core Analysis ───────────────────────────────────────────
+// ─── Core Functions ────────────────────────────────────────
 
-/**
- * Tokenise text into words using Intl.Segmenter if available, fallback to regex.
- */
-function tokeniseWords(text: string): string[] {
-    if (typeof Intl !== 'undefined' && 'Segmenter' in Intl) {
-        const segmenter = new Intl.Segmenter('en', { granularity: 'word' });
-        return [...segmenter.segment(text)]
-            .filter(s => s.isWordLike)
-            .map(s => s.segment.toLowerCase());
-    }
-    // Fallback
+/** Split text into words (alphabetic tokens, preserving apostrophes/hyphens) */
+function tokenizeWords(text: string): string[] {
     return text
-        .toLowerCase()
         .split(/\s+/)
-        .filter(w => /[a-z]/.test(w))
-        .map(w => w.replace(/^[^a-z]+|[^a-z]+$/g, ''));
+        .map(w => w.replace(/[^a-zA-Z'-]/g, ''))
+        .filter(w => w.length > 0);
 }
 
-/**
- * Split text into sentences.
- */
-function splitSentences(text: string): string[] {
-    if (typeof Intl !== 'undefined' && 'Segmenter' in Intl) {
-        const segmenter = new Intl.Segmenter('en', { granularity: 'sentence' });
-        return [...segmenter.segment(text)].map(s => s.segment.trim()).filter(s => s.length > 0);
-    }
-    // Fallback: split on sentence-ending punctuation
+/** Split text into sentences (delimited by .!?) */
+function tokenizeSentences(text: string): string[] {
     return text
-        .split(/(?<=[.!?])\s+/)
+        .split(/[.!?]+(?:\s|$)/)
         .map(s => s.trim())
         .filter(s => s.length > 0);
 }
 
+/** Split text into paragraphs (delimited by blank lines) */
+function tokenizeParagraphs(text: string): string[] {
+    return text
+        .split(/\n\s*\n/)
+        .map(p => p.trim())
+        .filter(p => p.length > 0);
+}
+
 /**
- * Compute comprehensive text statistics.
+ * Compute the top N most frequent non-stop-words in the text.
+ */
+export function getTopWords(words: string[], n: number = 10): WordFrequency[] {
+    const freq = new Map<string, number>();
+
+    for (const word of words) {
+        const lower = word.toLowerCase();
+        if (lower.length <= 1 || STOP_WORDS.has(lower)) continue;
+        freq.set(lower, (freq.get(lower) ?? 0) + 1);
+    }
+
+    return Array.from(freq.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, n)
+        .map(([word, count]) => ({ word, count }));
+}
+
+// ─── Main API ──────────────────────────────────────────────
+
+/**
+ * Compute comprehensive text statistics for a given passage.
  *
- * @param text - Raw input text to analyse
+ * @param text - The text to analyze
+ * @param topWordCount - Number of top words to return (default 10)
  * @returns TextStatistics object with all computed metrics
  */
-export function computeTextStatistics(text: string): TextStatistics {
-    if (!text || !text.trim()) {
-        return {
-            wordCount: 0,
-            sentenceCount: 0,
-            paragraphCount: 0,
-            characterCount: 0,
-            avgWordsPerSentence: 0,
-            avgWordLength: 0,
-            vocabularyDiversity: 0,
-            dialoguePercent: 0,
-            readingTime: { slow: 0, average: 0, fast: 0 },
-            topWords: [],
-        };
-    }
-
-    const words = tokeniseWords(text);
-    const sentences = splitSentences(text);
-    const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim().length > 0);
+export function computeTextStatistics(text: string, topWordCount: number = 10): TextStatistics {
+    const words = tokenizeWords(text);
+    const sentences = tokenizeSentences(text);
+    const paragraphs = tokenizeParagraphs(text);
 
     const wordCount = words.length;
-    const sentenceCount = Math.max(sentences.length, 1);
-    const characterCount = text.replace(/\s/g, '').length;
+    const sentenceCount = Math.max(1, sentences.length);
 
-    // Vocabulary diversity (type-token ratio)
-    const uniqueWords = new Set(words);
-    const vocabularyDiversity = wordCount > 0 ? uniqueWords.size / wordCount : 0;
+    // Character counts
+    const characterCount = text.length;
+    const characterCountNoSpaces = text.replace(/\s/g, '').length;
 
-    // Average word length
-    const totalChars = words.reduce((acc, w) => acc + w.length, 0);
-    const avgWordLength = wordCount > 0 ? totalChars / wordCount : 0;
+    // Time estimates
+    const readingTimeMinutes = Math.round((wordCount / READING_WPM) * 10) / 10;
+    const speakingTimeMinutes = Math.round((wordCount / SPEAKING_WPM) * 10) / 10;
 
-    // Dialogue detection: count characters inside quotes
-    const dialogueMatches = text.match(/"[^"]*"|\u201C[^\u201D]*\u201D/g) || [];
-    const dialogueChars = dialogueMatches.reduce((acc, m) => acc + m.length, 0);
-    const dialoguePercent = characterCount > 0 ? (dialogueChars / characterCount) * 100 : 0;
+    // Averages
+    const totalWordLen = words.reduce((sum, w) => sum + w.length, 0);
+    const avgWordLength = wordCount > 0 ? Math.round((totalWordLen / wordCount) * 10) / 10 : 0;
+    const avgSentenceLength = Math.round((wordCount / sentenceCount) * 10) / 10;
 
-    // Reading time
-    const readingTime = {
-        slow: Math.ceil(wordCount / 150),
-        average: Math.ceil(wordCount / 250),
-        fast: Math.ceil(wordCount / 400),
-    };
+    // Longest word
+    const longestWord = words.reduce((longest, w) => (w.length > longest.length ? w : longest), '');
 
-    // Top words (excluding stop words)
-    const wordFreq = new Map<string, number>();
-    for (const w of words) {
-        if (w.length > 2 && !STOP_WORDS.has(w)) {
-            wordFreq.set(w, (wordFreq.get(w) || 0) + 1);
-        }
-    }
-    const topWords = [...wordFreq.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 10)
-        .map(([word, count]) => ({ word, count }));
+    // Unique word ratio
+    const uniqueWords = new Set(words.map(w => w.toLowerCase()));
+    const uniqueWordPercentage =
+        wordCount > 0 ? Math.round((uniqueWords.size / wordCount) * 1000) / 10 : 0;
+
+    // Top words
+    const topWords = getTopWords(words, topWordCount);
 
     return {
+        characterCount,
+        characterCountNoSpaces,
         wordCount,
         sentenceCount,
         paragraphCount: paragraphs.length,
-        characterCount,
-        avgWordsPerSentence: Math.round((wordCount / sentenceCount) * 10) / 10,
-        avgWordLength: Math.round(avgWordLength * 10) / 10,
-        vocabularyDiversity: Math.round(vocabularyDiversity * 1000) / 1000,
-        dialoguePercent: Math.round(dialoguePercent * 10) / 10,
-        readingTime,
+        readingTimeMinutes,
+        speakingTimeMinutes,
+        avgWordLength,
+        avgSentenceLength,
+        longestWord,
+        uniqueWordPercentage,
         topWords,
     };
 }

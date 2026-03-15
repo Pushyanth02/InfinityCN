@@ -30,6 +30,7 @@ import { cinematifyText } from './aiEngine';
 import { analyzeReadability, type ReadabilityMetrics } from './readability';
 import { analyzeSentimentFlow, type SentimentFlowResult } from './sentimentTracker';
 import { analyzePacing, type PacingMetrics } from './pacingAnalyzer';
+import { computeTextStatistics, type TextStatistics } from '../textStatistics';
 
 // ─── Pipeline Context ──────────────────────────────────────
 
@@ -62,6 +63,8 @@ export interface PipelineContext {
     sentiment?: SentimentFlowResult;
     /** Pacing analysis results (populated by PacingAnalysisStage) */
     pacing?: PacingMetrics;
+    /** Text statistics (populated by TextStatisticsStage) */
+    textStats?: TextStatistics;
 }
 
 // ─── Pipeline Stage Interface ──────────────────────────────
@@ -177,6 +180,15 @@ export class PacingAnalysisStage implements PipelineStage {
     }
 }
 
+/** Post-processing stage: Compute comprehensive text statistics */
+export class TextStatisticsStage implements PipelineStage {
+    readonly name = 'Text Statistics';
+
+    execute(context: PipelineContext): void {
+        context.textStats = computeTextStatistics(context.text);
+    }
+}
+
 // ─── Pipeline Engine ───────────────────────────────────────
 
 /**
@@ -257,6 +269,7 @@ export class CinematificationPipeline {
         if (context.readability) result.readability = context.readability;
         if (context.sentiment) result.sentiment = context.sentiment;
         if (context.pacing) result.pacing = context.pacing;
+        if (context.textStats) result.textStats = context.textStats;
 
         return result;
     }
@@ -291,13 +304,15 @@ export class CinematificationPipeline {
      * Create an enriched offline pipeline with analytics stages.
      *
      * Stages: TextCleaning → ParagraphReconstruction → ReadabilityAnalysis
-     *         → OfflineCinematification → SentimentEnrichment → PacingAnalysis
+     *         → TextStatistics → OfflineCinematification → SentimentEnrichment
+     *         → PacingAnalysis
      */
     static createEnrichedOfflinePipeline(): CinematificationPipeline {
         return new CinematificationPipeline()
             .addStage(new TextCleaningStage())
             .addStage(new ParagraphReconstructionStage())
             .addStage(new ReadabilityAnalysisStage())
+            .addStage(new TextStatisticsStage())
             .addStage(new OfflineCinematificationStage())
             .addStage(new SentimentEnrichmentStage())
             .addStage(new PacingAnalysisStage());
@@ -307,13 +322,15 @@ export class CinematificationPipeline {
      * Create an enriched AI pipeline with analytics stages.
      *
      * Stages: TextCleaning → ParagraphReconstruction → ReadabilityAnalysis
-     *         → AICinematification → SentimentEnrichment → PacingAnalysis
+     *         → TextStatistics → AICinematification → SentimentEnrichment
+     *         → PacingAnalysis
      */
     static createEnrichedAIPipeline(): CinematificationPipeline {
         return new CinematificationPipeline()
             .addStage(new TextCleaningStage())
             .addStage(new ParagraphReconstructionStage())
             .addStage(new ReadabilityAnalysisStage())
+            .addStage(new TextStatisticsStage())
             .addStage(new AICinematificationStage())
             .addStage(new SentimentEnrichmentStage())
             .addStage(new PacingAnalysisStage());

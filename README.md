@@ -12,8 +12,17 @@
 
 ### Document Support
 - **Multi-Format** — PDF, EPUB, DOCX, PPTX, TXT (up to 50MB)
+- **OCR Support** — Tesseract.js-powered character recognition for scanned PDFs (up to 5 pages)
 - **Smart Parsing** — Automatic chapter segmentation with paragraph reconstruction
-- **Lazy Loading** — Heavy dependencies (pdfjs, fflate) load only when needed
+- **Lazy Loading** — Heavy dependencies (pdfjs, fflate, tesseract) load only when needed
+
+### Text Processing & Analysis (Free, No API Keys Required)
+- **Readability Analysis** — Flesch-Kincaid Reading Ease/Grade Level, sentence complexity, vocabulary diversity
+- **Sentiment Tracking** — AFINN-inspired lexicon (~200+ words) with negation/intensifier handling and emotion flow
+- **Pacing Analysis** — Tension arc computation, flat/rushed zone detection, Shannon entropy for variety scoring
+- **Text Statistics** — Word/character/sentence/paragraph counting, reading time estimation, top word frequency analysis
+- **Scene Detection** — Heuristic scene break detection via location/character/time changes
+- **Inspirational Quotes** — Curated literary quotes for display during processing (offline, no API required)
 
 ### Reader Experience
 - **Dual-Mode** — Toggle between Original and Cinematified text
@@ -30,6 +39,7 @@
 
 ### Technical
 - **Offline-First** — IndexedDB via Dexie + PWA service worker
+- **Composable Pipeline** — Modular stage-based processing (cleaning → reconstruction → analysis → cinematification → enrichment)
 - **Responsive** — 480px mobile to 1200px+ desktop
 - **Backend Server** — Optional Express server with Redis caching, RabbitMQ job queue, and per-IP rate limiting
 
@@ -38,17 +48,36 @@
 | Layer | Stack |
 |-------|-------|
 | Framework | React 19 + TypeScript 5.9 |
-| Build | Vite 7 + vite-plugin-pwa |
+| Build | Vite 8 (Rolldown) + vite-plugin-pwa |
 | State | Zustand (persisted) |
 | Storage | Dexie (IndexedDB) |
 | Animation | Framer Motion |
 | Icons | Lucide React |
 | PDF | pdfjs-dist |
+| OCR | Tesseract.js |
+| Embeddings | @xenova/transformers (all-MiniLM-L6-v2) |
 | Testing | Vitest + Testing Library |
 | Linting | ESLint + Prettier |
 | Hooks | Husky + lint-staged |
 | CI/CD | GitHub Actions |
 | Server | Express 5 + Redis + RabbitMQ |
+
+## Free APIs & Algorithms
+
+The app integrates the following free APIs and algorithms that require **no API keys**:
+
+| Feature | Implementation | Source |
+|---------|---------------|--------|
+| PDF Text Extraction | pdfjs-dist (Mozilla PDF.js) | Bundled (lazy-loaded) |
+| EPUB/DOCX/PPTX Extraction | fflate + XML parsing | Bundled (lazy-loaded) |
+| Character Recognition (OCR) | Tesseract.js (WASM) | Bundled (lazy-loaded) |
+| Semantic Embeddings | all-MiniLM-L6-v2 via ONNX.js | Bundled (lazy-loaded) |
+| Readability Scoring | Flesch-Kincaid formulas | Built-in algorithm |
+| Sentiment Analysis | AFINN-inspired lexicon | Built-in algorithm |
+| Pacing Analysis | Tension arc + Shannon entropy | Built-in algorithm |
+| Text Statistics | Word/sentence/paragraph metrics | Built-in algorithm |
+| Scene Detection | Location/time/structure heuristics | Built-in algorithm |
+| Inspirational Quotes | Curated offline literary quotes | Built-in collection |
 
 ## Getting Started
 
@@ -176,19 +205,56 @@ src/
     CinematifierApp.tsx      # Main app: upload → process → read flow
     CinematicReader.tsx      # Dual-mode reader with ambient audio
     CinematifierSettings.tsx # AI provider configuration
+    ProcessingOverlay.tsx    # Processing status with inspirational quotes
+    UploadZone.tsx           # Drag-and-drop file upload component
+    reader/
+      ChapterNav.tsx         # Chapter navigation sidebar
+      CinematicBlockView.tsx # Cinematic block renderer
+      EmotionHeatmap.tsx     # Emotion intensity heatmap
+      OriginalTextView.tsx   # Original text display
+      ReaderFooter.tsx       # Reader footer with progress
+      ReaderHeader.tsx       # Reader header with mode toggle
+      ReaderSettingsPanel.tsx # Font, spacing, immersion settings
+      index.ts               # Reader barrel export
     ui/
       ErrorBoundary.tsx      # React error boundary
     __tests__/
       CinematifierApp.test.tsx  # Component tests
   lib/
-    ai.ts                    # Multi-provider AI engine with streaming
+    ai.ts                    # Multi-provider AI engine barrel
+    ai/
+      cache.ts               # AI response caching
+      errors.ts              # AI error types
+      index.ts               # AI module barrel export
+      presets.ts             # Model presets per provider
+      providers.ts           # AI provider implementations
+      streaming.ts           # Streaming response handling
+      types.ts               # AI type definitions
+    audioSynth.ts            # Procedural ambient audio (Web Audio API)
     cinematifier.ts          # Text-to-cinematic transformation engine
+    cinematifier/
+      aiEngine.ts            # AI-powered cinematification orchestration
+      chapterSegmentation.ts # Chapter boundary detection
+      entities.ts            # Book & ReadingProgress entity factories
+      index.ts               # Cinematifier barrel export
+      metadata.ts            # Narrative metadata extraction
+      offlineEngine.ts       # Offline/fallback cinematification
+      pacingAnalyzer.ts      # Pacing analysis & tension arcs
+      parser.ts              # AI output → CinematicBlock[] parsing
+      pipeline.ts            # Composable pipeline engine
+      readability.ts         # Flesch-Kincaid readability analysis
+      sceneDetection.ts      # Heuristic scene break detection
+      sentimentTracker.ts    # Lexicon-based sentiment/emotion tracking
+      textProcessing.ts      # Text cleaning & paragraph reconstruction
     cinematifierDb.ts        # IndexedDB persistence (Dexie)
+    constants.ts             # Shared constants
     crypto.ts                # AES-GCM key encryption (SubtleCrypto)
     embeddings.ts            # Semantic embeddings (all-MiniLM-L6-v2)
-    audioSynth.ts            # Procedural ambient audio (Web Audio API)
-    pdfWorker.ts             # Multi-format document extraction
+    pdfWorker.ts             # Multi-format document extraction + OCR
+    quotableApi.ts           # Curated offline literary quotes
+    rateLimiter.ts           # Client-side rate limiting
     serverJobs.ts            # Frontend client for the server job API
+    textStatistics.ts        # Text statistics & metrics API
   store/
     cinematifierStore.ts     # Zustand state with encrypted persistence
   types/
@@ -196,7 +262,8 @@ src/
   test/
     setup.ts                 # Vitest setup
   main.tsx                   # Entry point
-  styles.css                 # CSS entry point
+  index.css                  # Global CSS reset & variables
+  styles.css                 # App-level styles
   cinematifier.css           # Reader-specific styles
 server/
   src/
@@ -209,12 +276,13 @@ server/
       hash.ts                # SHA-256 content hashing
     middleware/
       cors.ts                # CORS origin validation
-      rateLimit.ts           # Redis sliding-window rate limiter
       errorHandler.ts        # Centralized Express error handler
+      rateLimit.ts           # Redis sliding-window rate limiter
+      securityHeaders.ts     # Security headers (CSP, X-Content-Type-Options)
     routes/
       ai.ts                  # AI proxy routes with Redis caching
-      jobs.ts                # Job submission, status, SSE events
       health.ts              # Health check with service status
+      jobs.ts                # Job submission, status, SSE events
     services/
       aiProvider.ts          # Server-side AI provider calls
       cache.ts               # Redis AI response cache

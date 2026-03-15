@@ -1,5 +1,5 @@
 /**
- * CinematicReader.tsx — Dual-mode reader for Cinematifier
+ * CinematicReader.tsx — Reader for Cinematifier
  *
  * Displays novel content with toggle between Original and Cinematified modes.
  * Features Netflix-inspired dark cinematic UI with ambient effects.
@@ -401,28 +401,27 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                 )}
             </AnimatePresence>
 
-            {/* Chapter Title */}
-            <div className="cine-chapter-header">
-                <span className="cine-chapter-number">Chapter {currentChapter.number}</span>
-                <h2 className="cine-chapter-title">{currentChapter.title}</h2>
-                <div className="cine-chapter-meta">
-                    <span>{currentChapter.wordCount.toLocaleString()} words</span>
-                    <span>•</span>
-                    <span>{currentChapter.estimatedReadTime} min read</span>
-                </div>
-            </div>
-
-            {/* Emotion Heatmap */}
-            {currentChapter.cinematifiedBlocks.length > 0 && (
-                <EmotionHeatmap blocks={currentChapter.cinematifiedBlocks} />
-            )}
-
             {/* Content Area */}
             <main
-                className={`cine-content ${readerMode === 'side-by-side' ? 'cine-content--dual' : ''}`}
+                className="cine-content"
                 ref={contentRef}
                 style={{ fontSize: `${fontSize}px`, lineHeight: lineSpacing }}
             >
+                {/* Chapter Title — inside scrollable area so it doesn't cover content */}
+                <div className="cine-chapter-header">
+                    <span className="cine-chapter-number">Chapter {currentChapter.number}</span>
+                    <h2 className="cine-chapter-title">{currentChapter.title}</h2>
+                    <div className="cine-chapter-meta">
+                        <span>{currentChapter.wordCount.toLocaleString()} words</span>
+                        <span>•</span>
+                        <span>{currentChapter.estimatedReadTime} min read</span>
+                    </div>
+                </div>
+
+                {/* Emotion Heatmap */}
+                {currentChapter.cinematifiedBlocks.length > 0 && (
+                    <EmotionHeatmap blocks={currentChapter.cinematifiedBlocks} />
+                )}
                 {isProcessingChapter &&
                     readerMode === 'cinematified' &&
                     currentChapter.cinematifiedBlocks.length === 0 && (
@@ -436,44 +435,6 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                     <div className="cine-blocks-wrapper">
                         <OriginalTextView text={currentChapter.originalText} />
                     </div>
-                ) : readerMode === 'side-by-side' ? (
-                    <>
-                        <div className="cine-dual-pane cine-dual-pane--left">
-                            <OriginalTextView text={currentChapter.originalText} />
-                        </div>
-                        <div className="cine-dual-pane cine-dual-pane--right">
-                            {currentChapter.cinematifiedBlocks.length > 0 ? (
-                                <div className="cine-blocks">
-                                    {currentChapter.cinematifiedBlocks.map((block, i) => (
-                                        <CinematicBlockView
-                                            key={block.id}
-                                            block={block}
-                                            index={i}
-                                            immersionLevel={immersionLevel}
-                                        />
-                                    ))}
-                                    {isProcessingChapter && (
-                                        <div className="cine-processing cine-processing-inline">
-                                            <Sparkles size={16} className="cine-processing-icon" />
-                                            <p>Generating...</p>
-                                        </div>
-                                    )}
-                                </div>
-                            ) : !isProcessingChapter ? (
-                                <div className="cine-empty-state">
-                                    <Film size={48} />
-                                    <p>Chapter not yet cinematified</p>
-                                    <button
-                                        className="cine-btn cine-btn--primary"
-                                        onClick={processCurrentChapter}
-                                    >
-                                        <Sparkles size={16} />
-                                        Process Now
-                                    </button>
-                                </div>
-                            ) : null}
-                        </div>
-                    </>
                 ) : currentChapter.cinematifiedBlocks.length > 0 ? (
                     <div className="cine-blocks-wrapper">
                         <div className="cine-blocks">

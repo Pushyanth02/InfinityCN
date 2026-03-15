@@ -53,5 +53,6 @@ export {
     ReadabilityAnalysisStage,
     SentimentEnrichmentStage,
     PacingAnalysisStage,
+    TextStatisticsStage,
 } from './pipeline';
 export type { PipelineStage, PipelineContext } from './pipeline';

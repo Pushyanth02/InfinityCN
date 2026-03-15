@@ -14,6 +14,8 @@ import {
     getTimeoutMs,
     handleHttpError,
     proxyFetch,
+    OPENAI_COMPATIBLE_PROVIDERS,
+    capitalizeProvider,
 } from './providers';
 
 // ─── RATE LIMITER (shared with callAI via getRateLimiter) ──
@@ -168,29 +170,15 @@ export async function* streamAI(prompt: string, config: AIConfig): AsyncGenerato
     }
 
     // ── OPENAI COMPATIBLE STREAMING (OpenAI, Groq, DeepSeek) ─
-    if (['openai', 'groq', 'deepseek'].includes(config.provider)) {
-        let url = '';
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (config.provider in OPENAI_COMPATIBLE_PROVIDERS) {
+        const providerCfg = OPENAI_COMPATIBLE_PROVIDERS[config.provider];
+        const apiKey = config[providerCfg.keyField] as string;
+        if (!API_PROXY_URL && !apiKey)
+            throw new Error(`${capitalizeProvider(config.provider)} API key is not set.`);
 
-        if (config.provider === 'openai') {
-            if (!API_PROXY_URL && !config.openAiKey) throw new Error('OpenAI key missing');
-            url = API_PROXY_URL
-                ? `${API_PROXY_URL}/api/ai/openai`
-                : 'https://api.openai.com/v1/chat/completions';
-            if (!API_PROXY_URL) headers['Authorization'] = `Bearer ${config.openAiKey}`;
-        } else if (config.provider === 'groq') {
-            if (!API_PROXY_URL && !config.groqKey) throw new Error('Groq key missing');
-            url = API_PROXY_URL
-                ? `${API_PROXY_URL}/api/ai/groq`
-                : 'https://api.groq.com/openai/v1/chat/completions';
-            if (!API_PROXY_URL) headers['Authorization'] = `Bearer ${config.groqKey}`;
-        } else if (config.provider === 'deepseek') {
-            if (!API_PROXY_URL && !config.deepseekKey) throw new Error('Deepseek key missing');
-            url = API_PROXY_URL
-                ? `${API_PROXY_URL}/api/ai/deepseek`
-                : 'https://api.deepseek.com/chat/completions';
-            if (!API_PROXY_URL) headers['Authorization'] = `Bearer ${config.deepseekKey}`;
-        }
+        const url = API_PROXY_URL ? `${API_PROXY_URL}/api/ai/${config.provider}` : providerCfg.url;
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (!API_PROXY_URL) headers['Authorization'] = `Bearer ${apiKey}`;
 
         const body = {
             model: preset.model,

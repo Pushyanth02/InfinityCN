@@ -1,7 +1,7 @@
 /**
  * ReaderHeader.tsx — Reader Header Bar Component
  *
- * Contains the mode toggle (Original/Dual/Cinematic), ambient sound controls,
+ * Contains the mode toggle (Original/Cinematic), ambient sound controls,
  * auto-scroll, bookmark, download, settings, and close buttons.
  */
 
@@ -17,7 +17,6 @@ import {
     BookmarkCheck,
     Play,
     Square,
-    Columns,
     Download,
 } from 'lucide-react';
 import type { ReaderMode, Book } from '../../types/cinematifier';
@@ -91,13 +90,6 @@ export const ReaderHeader: React.FC<ReaderHeaderProps> = ({
                     >
                         <BookOpen size={16} />
                         <span>Original</span>
-                    </button>
-                    <button
-                        className={`cine-mode-btn ${readerMode === 'side-by-side' ? 'active' : ''}`}
-                        onClick={() => setReaderMode('side-by-side')}
-                    >
-                        <Columns size={16} />
-                        <span>Dual</span>
                     </button>
                     <button
                         className={`cine-mode-btn ${readerMode === 'cinematified' ? 'active' : ''}`}

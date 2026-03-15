@@ -329,7 +329,6 @@
 .cine-chapter-header {
     text-align: center;
     padding: var(--cine-space-xl) var(--cine-space-xl) var(--cine-space-lg);
-    z-index: 5;
 }
 
 .cine-chapter-number {
@@ -344,7 +343,7 @@
 .cine-chapter-title {
     font-size: 1.75rem;
     font-weight: 700;
-    color: var(--cine-gold);
+    color: var(--cine-text-primary);
     margin: 0 0 var(--cine-space-md);
     text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
 }
@@ -1096,6 +1095,23 @@
     color: var(--cine-text-muted);
 }
 
+.cine-processing-quote {
+    margin-top: var(--cine-space-md);
+    max-width: 380px;
+    text-align: center;
+    font-style: italic;
+    color: var(--cine-text-secondary);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+}
+
+.cine-processing-quote footer {
+    margin-top: var(--cine-space-xs);
+    font-style: normal;
+    font-size: 0.75rem;
+    color: var(--cine-text-muted);
+}
+
 /* Error State */
 .cine-error {
     display: flex;
@@ -1248,7 +1264,6 @@
 
 .cine-reader--light .cine-chapter-title {
     text-shadow: none;
-    color: var(--cine-gold-dim);
 }
 
 .cine-reader--light .cine-title-card {
@@ -1430,57 +1445,10 @@
     box-shadow: inset 0 0 300px rgba(236, 72, 153, 0.1);
 }
 
-/* ═══════════════════════════════════════════════════════════
-   DUAL READING MODE (SIDE-BY-SIDE)
-   ═══════════════════════════════════════════════════════════ */
-
-.cine-content--dual {
-    max-width: 1600px;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--cine-space-2xl);
-    padding: 0 var(--cine-space-2xl);
-}
-
-.cine-dual-pane {
-    display: flex;
-    flex-direction: column;
-}
-
-.cine-dual-pane--left {
-    border-right: 1px solid var(--cine-bg-tertiary);
-    padding-right: var(--cine-space-2xl);
-}
-
 .cine-blocks-wrapper {
     max-width: 800px;
     margin: 0 auto;
     width: 100%;
-}
-
-@media (max-width: 1024px) {
-    .cine-content--dual {
-        gap: var(--cine-space-lg);
-        padding: 0 var(--cine-space-lg);
-    }
-
-    .cine-dual-pane--left {
-        padding-right: var(--cine-space-lg);
-    }
-}
-
-@media (max-width: 768px) {
-    .cine-content--dual {
-        grid-template-columns: 1fr;
-    }
-
-    .cine-dual-pane--left {
-        border-right: none;
-        border-bottom: 1px solid var(--cine-bg-tertiary);
-        padding-right: 0;
-        padding-bottom: var(--cine-space-lg);
-        margin-bottom: var(--cine-space-lg);
-    }
 }
 
 /* ═══════════════════════════════════════════════════════════

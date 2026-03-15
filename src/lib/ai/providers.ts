@@ -68,6 +68,83 @@ export async function handleHttpError(res: Response, provider: string): Promise<
     );
 }
 
+// ─── OPENAI-COMPATIBLE PROVIDER CONFIG ────────────────────────────────────────
+
+interface OpenAICompatibleProviderConfig {
+    url: string;
+    keyField: keyof AIConfig;
+    maxTokensField: string;
+}
+
+/** Providers that follow the OpenAI chat-completions API shape. */
+export const OPENAI_COMPATIBLE_PROVIDERS: Record<string, OpenAICompatibleProviderConfig> = {
+    openai: {
+        url: 'https://api.openai.com/v1/chat/completions',
+        keyField: 'openAiKey',
+        maxTokensField: 'max_tokens',
+    },
+    groq: {
+        url: 'https://api.groq.com/openai/v1/chat/completions',
+        keyField: 'groqKey',
+        maxTokensField: 'max_completion_tokens',
+    },
+    deepseek: {
+        url: 'https://api.deepseek.com/chat/completions',
+        keyField: 'deepseekKey',
+        maxTokensField: 'max_tokens',
+    },
+};
+
+/** Capitalise a provider name for use in user-facing error messages. */
+export function capitalizeProvider(provider: string): string {
+    return provider.charAt(0).toUpperCase() + provider.slice(1);
+}
+
+/** Shared fetch logic for OpenAI-compatible providers (OpenAI, Groq, DeepSeek). */
+async function callOpenAICompatible(
+    prompt: string,
+    config: AIConfig,
+    sysPrompt: string,
+    maxTokens: number,
+    useJSON: boolean,
+    timeoutMs: number,
+    preset: { model: string; temperature: number },
+): Promise<string> {
+    const provider = config.provider;
+    const providerCfg = OPENAI_COMPATIBLE_PROVIDERS[provider];
+    const apiKey = config[providerCfg.keyField] as string;
+    if (!API_PROXY_URL && !apiKey) {
+        throw new Error(`${capitalizeProvider(provider)} API key is not set.`);
+    }
+
+    const body = {
+        model: preset.model,
+        messages: [
+            { role: 'system', content: sysPrompt },
+            { role: 'user', content: prompt },
+        ],
+        ...(useJSON ? { response_format: { type: 'json_object' } } : {}),
+        [providerCfg.maxTokensField]: maxTokens,
+        temperature: preset.temperature,
+    };
+
+    const res = API_PROXY_URL
+        ? await proxyFetch(provider, body, timeoutMs)
+        : await fetch(providerCfg.url, {
+              method: 'POST',
+              headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${apiKey}`,
+              },
+              signal: AbortSignal.timeout(timeoutMs),
+              body: JSON.stringify(body),
+          });
+
+    if (!res.ok) await handleHttpError(res, provider);
+    const data = await res.json();
+    return data.choices?.[0]?.message?.content ?? '';
+}
+
 // ─── BASE ROUTER (single source of truth for all providers) ───────────────────
 
 export async function callAI(prompt: string, config: AIConfig): Promise<string> {
@@ -140,33 +217,17 @@ export async function callAI(prompt: string, config: AIConfig): Promise<string> 
         result = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
     }
 
-    // ── OPENAI ────────────────────────────────────────────────
-    else if (config.provider === 'openai') {
-        if (!API_PROXY_URL && !config.openAiKey) throw new Error('OpenAI API key is not set.');
-        const openaiBody = {
-            model: preset.model,
-            messages: [
-                { role: 'system', content: sysPrompt },
-                { role: 'user', content: prompt },
-            ],
-            ...(useJSON ? { response_format: { type: 'json_object' } } : {}),
-            max_tokens: maxTokens,
-            temperature: preset.temperature,
-        };
-        const res = API_PROXY_URL
-            ? await proxyFetch('openai', openaiBody, timeoutMs)
-            : await fetch('https://api.openai.com/v1/chat/completions', {
-                  method: 'POST',
-                  headers: {
-                      'Content-Type': 'application/json',
-                      Authorization: `Bearer ${config.openAiKey}`,
-                  },
-                  signal: AbortSignal.timeout(timeoutMs),
-                  body: JSON.stringify(openaiBody),
-              });
-        if (!res.ok) await handleHttpError(res, 'openai');
-        const data = await res.json();
-        result = data.choices?.[0]?.message?.content ?? '';
+    // ── OPENAI / GROQ / DEEPSEEK (OpenAI-compatible) ────────
+    else if (config.provider in OPENAI_COMPATIBLE_PROVIDERS) {
+        result = await callOpenAICompatible(
+            prompt,
+            config,
+            sysPrompt,
+            maxTokens,
+            useJSON,
+            timeoutMs,
+            preset,
+        );
     }
 
     // ── ANTHROPIC ─────────────────────────────────────────────
@@ -199,64 +260,6 @@ export async function callAI(prompt: string, config: AIConfig): Promise<string> 
         if (!res.ok) await handleHttpError(res, 'anthropic');
         const data = await res.json();
         result = data.content?.[0]?.text ?? '';
-    }
-
-    // ── GROQ ──────────────────────────────────────────────────
-    else if (config.provider === 'groq') {
-        if (!API_PROXY_URL && !config.groqKey) throw new Error('Groq API key is not set.');
-        const groqBody = {
-            model: preset.model,
-            messages: [
-                { role: 'system', content: sysPrompt },
-                { role: 'user', content: prompt },
-            ],
-            ...(useJSON ? { response_format: { type: 'json_object' } } : {}),
-            max_completion_tokens: maxTokens,
-            temperature: preset.temperature,
-        };
-        const res = API_PROXY_URL
-            ? await proxyFetch('groq', groqBody, timeoutMs)
-            : await fetch('https://api.groq.com/openai/v1/chat/completions', {
-                  method: 'POST',
-                  headers: {
-                      'Content-Type': 'application/json',
-                      Authorization: `Bearer ${config.groqKey}`,
-                  },
-                  signal: AbortSignal.timeout(timeoutMs),
-                  body: JSON.stringify(groqBody),
-              });
-        if (!res.ok) await handleHttpError(res, 'groq');
-        const data = await res.json();
-        result = data.choices?.[0]?.message?.content ?? '';
-    }
-
-    // ── DEEPSEEK ──────────────────────────────────────────────
-    else if (config.provider === 'deepseek') {
-        if (!API_PROXY_URL && !config.deepseekKey) throw new Error('DeepSeek API key is not set.');
-        const deepseekBody = {
-            model: preset.model,
-            messages: [
-                { role: 'system', content: sysPrompt },
-                { role: 'user', content: prompt },
-            ],
-            ...(useJSON ? { response_format: { type: 'json_object' } } : {}),
-            max_tokens: maxTokens,
-            temperature: preset.temperature,
-        };
-        const res = API_PROXY_URL
-            ? await proxyFetch('deepseek', deepseekBody, timeoutMs)
-            : await fetch('https://api.deepseek.com/chat/completions', {
-                  method: 'POST',
-                  headers: {
-                      'Content-Type': 'application/json',
-                      Authorization: `Bearer ${config.deepseekKey}`,
-                  },
-                  signal: AbortSignal.timeout(timeoutMs),
-                  body: JSON.stringify(deepseekBody),
-              });
-        if (!res.ok) await handleHttpError(res, 'deepseek');
-        const data = await res.json();
-        result = data.choices?.[0]?.message?.content ?? '';
     }
 
     // ── OLLAMA ────────────────────────────────────────────────

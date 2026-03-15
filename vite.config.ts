@@ -61,10 +61,19 @@ export default defineConfig({
     },
     build: {
         target: 'esnext',
-        minify: 'esbuild',
+        minify: 'oxc',
         sourcemap: 'hidden',
         chunkSizeWarningLimit: 800,
         rollupOptions: {
+            onLog(level, log, defaultHandler) {
+                // Suppress known eval warning from onnxruntime-web (transitive dep
+                // of @xenova/transformers). The eval is internal to their WASM loader
+                // and cannot be removed without forking the package.
+                if (log.code === 'EVAL' && log.message?.includes('onnxruntime-web')) {
+                    return;
+                }
+                defaultHandler(level, log);
+            },
             output: {
                 manualChunks: id => {
                     // PDF processing — only load when user drops a file
