@@ -1,79 +1,9 @@
 /**
- * quotableApi.test.ts — Tests for Quotable API Client
+ * quotableApi.test.ts — Tests for Offline Literary Quotes
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fetchRandomQuote, getQuote, getOfflineQuote } from '../quotableApi';
-
-// ─── Mock fetch ────────────────────────────────────────────
-
-const mockFetch = vi.fn();
-
-beforeEach(() => {
-    vi.stubGlobal('fetch', mockFetch);
-    mockFetch.mockReset();
-});
-
-// ─── fetchRandomQuote ──────────────────────────────────────
-
-describe('fetchRandomQuote', () => {
-    it('returns a quote on success', async () => {
-        mockFetch.mockResolvedValue({
-            ok: true,
-            json: () =>
-                Promise.resolve([
-                    {
-                        content: 'Be yourself; everyone else is already taken.',
-                        author: 'Oscar Wilde',
-                        tags: ['wisdom'],
-                    },
-                ]),
-        });
-
-        const quote = await fetchRandomQuote();
-        expect(quote).not.toBeNull();
-        expect(quote!.content).toBe('Be yourself; everyone else is already taken.');
-        expect(quote!.author).toBe('Oscar Wilde');
-        expect(quote!.tags).toContain('wisdom');
-    });
-
-    it('returns null on fetch failure', async () => {
-        mockFetch.mockResolvedValue({ ok: false, status: 500 });
-        expect(await fetchRandomQuote()).toBeNull();
-    });
-
-    it('returns null on network error', async () => {
-        mockFetch.mockRejectedValue(new Error('Network error'));
-        expect(await fetchRandomQuote()).toBeNull();
-    });
-
-    it('passes tag filter to the URL', async () => {
-        mockFetch.mockResolvedValue({
-            ok: true,
-            json: () =>
-                Promise.resolve([{ content: 'Test quote', author: 'Author', tags: ['wisdom'] }]),
-        });
-
-        await fetchRandomQuote('wisdom');
-        expect(mockFetch).toHaveBeenCalledWith(expect.stringContaining('tags=wisdom'));
-    });
-
-    it('handles non-array API response', async () => {
-        mockFetch.mockResolvedValue({
-            ok: true,
-            json: () =>
-                Promise.resolve({
-                    content: 'Direct object response',
-                    author: 'Author',
-                    tags: [],
-                }),
-        });
-
-        const quote = await fetchRandomQuote();
-        expect(quote).not.toBeNull();
-        expect(quote!.content).toBe('Direct object response');
-    });
-});
+import { describe, it, expect } from 'vitest';
+import { getOfflineQuote } from '../quotableApi';
 
 // ─── getOfflineQuote ───────────────────────────────────────
 
@@ -109,28 +39,5 @@ describe('getOfflineQuote', () => {
         const seeds = ['a', 'bb', 'ccc', 'dddd', 'eeeee'];
         const results = new Set(seeds.map(s => getOfflineQuote(s).content));
         expect(results.size).toBeGreaterThan(1);
-    });
-});
-
-// ─── getQuote ──────────────────────────────────────────────
-
-describe('getQuote', () => {
-    it('returns API quote when available', async () => {
-        mockFetch.mockResolvedValue({
-            ok: true,
-            json: () => Promise.resolve([{ content: 'API quote', author: 'API Author', tags: [] }]),
-        });
-
-        const quote = await getQuote();
-        expect(quote.content).toBe('API quote');
-    });
-
-    it('falls back to offline quote on API failure', async () => {
-        mockFetch.mockRejectedValue(new Error('Network error'));
-
-        const quote = await getQuote();
-        expect(quote).not.toBeNull();
-        expect(quote.content.length).toBeGreaterThan(0);
-        expect(quote.author.length).toBeGreaterThan(0);
     });
 });

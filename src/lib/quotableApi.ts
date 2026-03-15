@@ -1,11 +1,8 @@
 /**
- * quotableApi.ts — Quotable API Client
+ * quotableApi.ts — Offline Literary Quotes
  *
- * Provides inspirational quotes via the free Quotable API
- * (https://github.com/lukePeavey/quotable) — no API key required.
- *
- * Used to display curated quotes as placeholder content or inspirational
- * headers during processing and idle states.
+ * Curated collection of literary quotes displayed during processing
+ * and idle states. Fully offline — no external API dependency.
  */
 
 // ─── Types ─────────────────────────────────────────────────
@@ -16,53 +13,8 @@ export interface Quote {
     tags: string[];
 }
 
-// ─── API Client ────────────────────────────────────────────
+// ─── Curated Quotes ────────────────────────────────────────
 
-const API_BASE = 'https://api.quotable.kurozeroPB.xyz';
-
-/**
- * Fetch a single random quote from the Quotable API.
- *
- * @param tag - Optional tag to filter quotes (e.g., 'wisdom', 'inspirational')
- * @returns A Quote object, or null on failure
- */
-export async function fetchRandomQuote(tag?: string): Promise<Quote | null> {
-    try {
-        const url = new URL(`${API_BASE}/quotes/random`);
-        if (tag) {
-            url.searchParams.set('tags', tag);
-        }
-
-        const response = await fetch(url.toString());
-
-        if (!response.ok) {
-            return null;
-        }
-
-        const data = await response.json();
-
-        // API returns an array with one element for random quotes
-        const entry = Array.isArray(data) ? data[0] : data;
-
-        if (!entry || !entry.content) {
-            return null;
-        }
-
-        return {
-            content: entry.content,
-            author: entry.author ?? 'Unknown',
-            tags: entry.tags ?? [],
-        };
-    } catch {
-        return null;
-    }
-}
-
-/**
- * Curated collection of literary quotes for offline/fallback use.
- * Ensures the app always has inspirational content to display
- * without requiring a network connection.
- */
 const FALLBACK_QUOTES: Quote[] = [
     {
         content:
@@ -107,18 +59,6 @@ const FALLBACK_QUOTES: Quote[] = [
         tags: ['reading'],
     },
 ];
-
-/**
- * Get a random quote, trying the API first and falling back to curated quotes.
- * Always returns a quote — never null.
- *
- * @param tag - Optional tag filter for the API call
- */
-export async function getQuote(tag?: string): Promise<Quote> {
-    const apiQuote = await fetchRandomQuote(tag);
-    if (apiQuote) return apiQuote;
-    return getOfflineQuote();
-}
 
 /**
  * Get a random quote from the curated offline collection.
