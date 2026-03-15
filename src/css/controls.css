@@ -1,0 +1,525 @@
+/**
+ * controls.css — Buttons, forms, settings, upload zone
+ *
+ * Buttons, settings panel, home/upload screen, upload zone,
+ * processing overlay, error state, and AI provider configuration.
+ */
+
+/* ═══════════════════════════════════════════════════════════
+   BUTTONS
+   ═══════════════════════════════════════════════════════════ */
+
+.cine-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--cine-space-sm);
+    padding: var(--cine-space-sm) var(--cine-space-md);
+    background: var(--cine-bg-tertiary);
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: var(--cine-text-secondary);
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--cine-transition-fast);
+}
+
+.cine-btn:hover:not(:disabled) {
+    background: var(--cine-bg-elevated);
+    color: var(--cine-text-primary);
+}
+
+.cine-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.cine-btn--icon {
+    padding: var(--cine-space-sm);
+    width: 36px;
+    height: 36px;
+}
+
+.cine-btn--sm {
+    padding: var(--cine-space-xs) var(--cine-space-sm);
+    font-size: 0.75rem;
+}
+
+.cine-btn--primary {
+    background: var(--cine-red);
+    color: white;
+}
+
+.cine-btn--primary:hover:not(:disabled) {
+    background: var(--cine-red-hover);
+}
+
+.cine-btn--toggle {
+    background: var(--cine-bg-tertiary);
+}
+
+.cine-btn--toggle.active {
+    background: var(--cine-gold);
+    color: var(--cine-bg-primary);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SETTINGS PANEL
+   ═══════════════════════════════════════════════════════════ */
+
+.cine-settings {
+    display: flex;
+    gap: var(--cine-space-xl);
+    padding: var(--cine-space-md) var(--cine-space-xl);
+    background: var(--cine-bg-secondary);
+    border-bottom: 1px solid var(--cine-bg-tertiary);
+}
+
+.cine-settings-group {
+    display: flex;
+    align-items: center;
+    gap: var(--cine-space-md);
+}
+
+.cine-settings-group label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--cine-text-muted);
+}
+
+.cine-settings-row {
+    display: flex;
+    align-items: center;
+    gap: var(--cine-space-sm);
+}
+
+.cine-settings-value {
+    font-size: 0.875rem;
+    color: var(--cine-text-primary);
+    min-width: 50px;
+    text-align: center;
+}
+
+.cine-settings-value--muted {
+    color: var(--cine-text-muted);
+    text-transform: capitalize;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   HOME / UPLOAD SCREEN
+   ═══════════════════════════════════════════════════════════ */
+
+.cine-home {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: var(--cine-bg-primary);
+}
+
+.cine-home-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--cine-space-lg) var(--cine-space-xl);
+}
+
+.cine-logo {
+    display: flex;
+    align-items: center;
+    gap: var(--cine-space-md);
+}
+
+.cine-logo svg {
+    color: var(--cine-red);
+}
+
+.cine-logo-text {
+    font-size: 1.5rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--cine-red) 0%, var(--cine-gold) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.cine-home-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--cine-space-2xl);
+    text-align: center;
+}
+
+.cine-home-hero {
+    max-width: 600px;
+    margin-bottom: var(--cine-space-2xl);
+}
+
+.cine-home-hero h1 {
+    font-size: clamp(2rem, 5vw, 3.5rem);
+    font-weight: 800;
+    line-height: 1.1;
+    margin: 0 0 var(--cine-space-lg);
+    color: var(--cine-text-primary);
+}
+
+.cine-home-hero p {
+    font-size: 1.125rem;
+    color: var(--cine-text-secondary);
+    line-height: 1.6;
+    margin: 0;
+}
+
+/* Upload Zone */
+.cine-upload-zone {
+    width: 100%;
+    max-width: 500px;
+    padding: var(--cine-space-2xl);
+    border: 2px dashed var(--cine-bg-tertiary);
+    border-radius: 16px;
+    background: var(--cine-bg-secondary);
+    transition: all var(--cine-transition-normal);
+    cursor: pointer;
+}
+
+.cine-upload-zone:hover,
+.cine-upload-zone.dragging {
+    border-color: var(--cine-red);
+    background: var(--cine-bg-tertiary);
+}
+
+.cine-upload-zone.dragging {
+    transform: scale(1.02);
+}
+
+.cine-upload-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--cine-space-md);
+}
+
+.cine-upload-icon {
+    color: var(--cine-red);
+    opacity: 0.8;
+}
+
+.cine-upload-text {
+    font-size: 1rem;
+    color: var(--cine-text-primary);
+    margin: 0;
+}
+
+.cine-upload-hint {
+    font-size: 0.875rem;
+    color: var(--cine-text-muted);
+    margin: 0;
+}
+
+.cine-upload-error {
+    font-size: 0.875rem;
+    color: #ef4444;
+    margin: 0.5rem 0 0;
+}
+
+/* Processing Overlay */
+.cine-processing-overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.9);
+    z-index: 1000;
+}
+
+.cine-processing-content {
+    text-align: center;
+}
+
+.cine-processing-spinner {
+    width: 64px;
+    height: 64px;
+    border: 3px solid var(--cine-bg-tertiary);
+    border-top-color: var(--cine-red);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto var(--cine-space-lg);
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes cineFadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+.cine-fade-in {
+    animation: cineFadeIn 0.2s ease-out;
+}
+
+.cine-processing-phase {
+    font-size: 1.125rem;
+    color: var(--cine-text-primary);
+    margin: 0 0 var(--cine-space-md);
+}
+
+.cine-processing-bar {
+    width: 300px;
+    height: 4px;
+    background: var(--cine-bg-tertiary);
+    border-radius: 2px;
+    overflow: hidden;
+    margin: 0 auto var(--cine-space-sm);
+}
+
+.cine-processing-bar-fill {
+    height: 100%;
+    background: var(--cine-red);
+    transition: width var(--cine-transition-normal);
+}
+
+.cine-processing-percent {
+    font-size: 0.875rem;
+    color: var(--cine-text-muted);
+}
+
+.cine-processing-quote {
+    margin-top: var(--cine-space-md);
+    max-width: 380px;
+    text-align: center;
+    font-style: italic;
+    color: var(--cine-text-secondary);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+}
+
+.cine-processing-quote footer {
+    margin-top: var(--cine-space-xs);
+    font-style: normal;
+    font-size: 0.75rem;
+    color: var(--cine-text-muted);
+}
+
+/* Error State */
+.cine-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--cine-space-md);
+    padding: var(--cine-space-lg);
+    background: rgba(229, 9, 20, 0.1);
+    border: 1px solid var(--cine-red);
+    border-radius: 8px;
+    max-width: 400px;
+    margin: var(--cine-space-lg) auto;
+}
+
+.cine-error-text {
+    color: var(--cine-red);
+    font-size: 0.875rem;
+    text-align: center;
+    margin: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SETTINGS PANEL — AI Provider Configuration
+   ═══════════════════════════════════════════════════════════ */
+
+.cine-settings-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.cine-provider-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 0.75rem;
+}
+
+.cine-provider-card {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    background: var(--cine-bg-tertiary);
+    border: 2px solid transparent;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 150ms ease;
+    text-align: left;
+}
+
+.cine-provider-card:hover {
+    background: var(--cine-bg-elevated);
+}
+
+.cine-provider-card.active {
+    border-color: var(--provider-color);
+    background: color-mix(in srgb, var(--provider-color) 10%, var(--cine-bg-tertiary));
+}
+
+.cine-provider-icon {
+    flex-shrink: 0;
+}
+
+.cine-provider-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    min-width: 0;
+}
+
+.cine-provider-label {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--cine-text-primary);
+}
+
+.cine-provider-desc {
+    font-size: 0.75rem;
+    color: var(--cine-text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cine-key-section {
+    padding: 1rem;
+    background: var(--cine-bg-tertiary);
+    border-radius: 8px;
+}
+
+.cine-input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.cine-input-group label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--cine-text-muted);
+}
+
+.cine-input-group input[type='text'],
+.cine-input-group input[type='password'] {
+    padding: 0.75rem;
+    background: var(--cine-bg-secondary);
+    border: 1px solid var(--cine-bg-elevated);
+    border-radius: 6px;
+    color: var(--cine-text-primary);
+    font-size: 0.875rem;
+}
+
+.cine-input-group input:focus {
+    outline: none;
+    border-color: var(--cine-red);
+}
+
+.cine-checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+}
+
+.cine-checkbox-row label {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.875rem;
+    color: var(--cine-text-secondary);
+    text-transform: none;
+    letter-spacing: normal;
+}
+
+.cine-checkbox-row input[type='checkbox'] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--cine-red);
+}
+
+.cine-test-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    align-items: flex-start;
+}
+
+.cine-test-result {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.875rem;
+}
+
+.cine-test-result.success {
+    background: rgba(34, 197, 94, 0.1);
+    color: #22c55e;
+}
+
+.cine-test-result.error {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+}
+
+.cine-test-result .latency {
+    margin-left: auto;
+    opacity: 0.7;
+}
+
+.cine-settings-footer {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 1rem;
+    border-top: 1px solid var(--cine-bg-tertiary);
+}
+
+.spinning {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.cine-server-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: rgba(34, 197, 94, 0.1);
+    border-radius: 6px;
+    font-size: 0.75rem;
+    color: #22c55e;
+    font-weight: 500;
+}
+
+.cine-server-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #22c55e;
+    flex-shrink: 0;
+}

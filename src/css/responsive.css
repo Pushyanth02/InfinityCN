@@ -1,0 +1,166 @@
+/**
+ * responsive.css — Responsive design + light mode overrides
+ *
+ * Mobile breakpoints and light mode variable overrides.
+ */
+
+/* ═══════════════════════════════════════════════════════════
+   RESPONSIVE DESIGN
+   ═══════════════════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+    .cine-header {
+        padding: var(--cine-space-sm) var(--cine-space-md);
+    }
+
+    .cine-title {
+        display: none;
+    }
+
+    .cine-mode-btn span {
+        display: none;
+    }
+
+    .cine-chapter-title {
+        font-size: 1.375rem;
+    }
+
+    .cine-content {
+        padding: 0 var(--cine-space-md) var(--cine-space-xl);
+    }
+
+    .cine-footer {
+        padding: var(--cine-space-sm) var(--cine-space-md);
+    }
+
+    .cine-nav-btn span {
+        display: none;
+    }
+
+    .cine-progress-bar {
+        width: 100px;
+    }
+
+    .cine-settings {
+        flex-wrap: wrap;
+        gap: var(--cine-space-md);
+        padding: var(--cine-space-md);
+    }
+
+    .cine-block--dialogue {
+        padding: var(--cine-space-md);
+        margin: var(--cine-space-sm) 0;
+    }
+}
+
+@media (max-width: 480px) {
+    .cine-mode-toggle {
+        font-size: 0.75rem;
+    }
+
+    .cine-chapter-header {
+        padding: var(--cine-space-lg) var(--cine-space-md) var(--cine-space-md);
+    }
+
+    .cine-chapter-title {
+        font-size: 1.125rem;
+    }
+
+    .cine-title-card {
+        font-size: 1.75rem;
+    }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   LIGHT MODE
+   ═══════════════════════════════════════════════════════════ */
+
+.cinematifier-app--light {
+    --cine-bg-primary: #f8f8f8;
+    --cine-bg-secondary: #ffffff;
+    --cine-bg-tertiary: #f0f0f0;
+    --cine-bg-elevated: #e8e8e8;
+    --cine-text-primary: #1a1a1a;
+    --cine-text-secondary: #4a4a4a;
+    --cine-text-muted: #8a8a8a;
+    --cine-text-accent: #000000;
+    --cine-shadow: 0 4px 24px rgba(0, 0, 0, 0.1);
+    --cine-shadow-lg: 0 8px 48px rgba(0, 0, 0, 0.15);
+    --cine-glow-primary: rgba(229, 9, 20, 0.15);
+    --cine-glow-secondary: rgba(212, 175, 55, 0.1);
+}
+
+.cine-reader--light {
+    --cine-bg-primary: #f8f8f8;
+    --cine-bg-secondary: #ffffff;
+    --cine-bg-tertiary: #f0f0f0;
+    --cine-bg-elevated: #e8e8e8;
+    --cine-text-primary: #1a1a1a;
+    --cine-text-secondary: #4a4a4a;
+    --cine-text-muted: #8a8a8a;
+    --cine-text-accent: #000000;
+    --cine-shadow: 0 4px 24px rgba(0, 0, 0, 0.1);
+    --cine-shadow-lg: 0 8px 48px rgba(0, 0, 0, 0.15);
+}
+
+.cine-reader--light .cine-header {
+    background: linear-gradient(to bottom, var(--cine-bg-secondary), transparent);
+}
+
+.cine-reader--light .cine-footer {
+    background: linear-gradient(to top, var(--cine-bg-secondary), transparent);
+}
+
+.cine-reader--light .cine-block--dialogue {
+    background: linear-gradient(135deg, var(--cine-bg-tertiary) 0%, transparent 100%);
+}
+
+.cine-reader--light .cine-action,
+.cine-reader--light .original-paragraph {
+    color: #2a2a2a;
+}
+
+.cine-reader--light .cine-block--inner_thought {
+    background: rgba(167, 139, 250, 0.08);
+}
+
+.cine-reader--light .chapter-nav {
+    background: var(--cine-bg-secondary);
+    box-shadow: var(--cine-shadow-lg);
+}
+
+.cine-reader--light .chapter-nav-backdrop {
+    background: rgba(0, 0, 0, 0.3);
+}
+
+.cine-reader--light .cine-chapter-title {
+    text-shadow: none;
+}
+
+.cine-reader--light .cine-title-card {
+    text-shadow: none;
+}
+
+.cine-reader--light .cine-sfx-icon,
+.cine-reader--light .cine-sfx-text {
+    color: #3a2f10;
+}
+
+.cinematifier-app--light .cine-upload-zone {
+    border-color: var(--cine-bg-elevated);
+    background: var(--cine-bg-secondary);
+}
+
+.cinematifier-app--light .cine-upload-zone:hover,
+.cinematifier-app--light .cine-upload-zone.dragging {
+    border-color: var(--cine-red);
+    background: var(--cine-bg-tertiary);
+}
+
+.cinematifier-app--light .cine-error {
+    background: rgba(229, 9, 20, 0.05);
+}
+
+.cinematifier-app--light .cine-processing-overlay {
+    background: rgba(255, 255, 255, 0.95);
+}

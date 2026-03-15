@@ -1,0 +1,244 @@
+/**
+ * effects.css — Ambient effects, emotion metadata, heatmap
+ *
+ * Emotion & tension metadata, atmospheric screen tints,
+ * dyslexia friendly mode, emotion heatmap, tension-driven spacing,
+ * and scene break markers.
+ */
+
+/* ═══════════════════════════════════════════════════════════
+   EMOTION & TENSION METADATA
+   ═══════════════════════════════════════════════════════════ */
+
+.cine-action-metadata {
+    display: flex;
+    align-items: center;
+    gap: var(--cine-space-md);
+    margin-top: var(--cine-space-sm);
+}
+
+.cine-emotion-tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-family: var(--cine-font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+    opacity: 0.8;
+}
+
+.cine-emotion--joy {
+    background-color: rgba(250, 204, 21, 0.15);
+    color: #fde047;
+    border: 1px solid rgba(250, 204, 21, 0.3);
+}
+
+.cine-emotion--sadness {
+    background-color: rgba(56, 189, 248, 0.15);
+    color: #7dd3fc;
+    border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.cine-emotion--anger {
+    background-color: rgba(239, 68, 68, 0.15);
+    color: #fca5a5;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.cine-emotion--fear {
+    background-color: rgba(168, 85, 247, 0.15);
+    color: #d8b4fe;
+    border: 1px solid rgba(168, 85, 247, 0.3);
+}
+
+.cine-emotion--suspense {
+    background-color: rgba(249, 115, 22, 0.15);
+    color: #fdba74;
+    border: 1px solid rgba(249, 115, 22, 0.3);
+}
+
+.cine-emotion--surprise {
+    background-color: rgba(236, 72, 153, 0.15);
+    color: #f9a8d4;
+    border: 1px solid rgba(236, 72, 153, 0.3);
+}
+
+.cine-emotion--neutral {
+    background-color: rgba(156, 163, 175, 0.15);
+    color: #d1d5db;
+    border: 1px solid rgba(156, 163, 175, 0.3);
+}
+
+.cine-tension-meter {
+    flex: 1;
+    max-width: 150px;
+    height: 4px;
+    background: var(--cine-bg-tertiary);
+    border-radius: 2px;
+    overflow: hidden;
+    display: flex;
+}
+
+.cine-tension-bar {
+    height: 100%;
+    transition:
+        width var(--cine-transition-normal),
+        background-color var(--cine-transition-normal);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   ATMOSPHERIC SCREEN TINTS (BASED ON ACTIVE EMOTION)
+   ═══════════════════════════════════════════════════════════ */
+
+.cine-reader {
+    transition:
+        background-color 1s ease,
+        box-shadow 1s ease;
+}
+
+/* Subtle background washing based on active emotion */
+.cine-reader[data-active-emotion='joy'] {
+    box-shadow: inset 0 0 150px rgba(250, 204, 21, 0.05);
+}
+
+.cine-reader[data-active-emotion='sadness'] {
+    box-shadow: inset 0 0 150px rgba(56, 189, 248, 0.05);
+}
+
+.cine-reader[data-active-emotion='anger'] {
+    box-shadow: inset 0 0 150px rgba(239, 68, 68, 0.08);
+}
+
+.cine-reader[data-active-emotion='fear'] {
+    box-shadow: inset 0 0 150px rgba(168, 85, 247, 0.05);
+}
+
+.cine-reader[data-active-emotion='suspense'] {
+    box-shadow: inset 0 0 150px rgba(249, 115, 22, 0.05);
+}
+
+.cine-reader[data-active-emotion='surprise'] {
+    box-shadow: inset 0 0 150px rgba(236, 72, 153, 0.05);
+}
+
+/* In dark mode cinematic immersion, make it slightly stronger */
+.cine-reader.cine-reader--immersion-cinematic:not(.cine-reader--light)[data-active-emotion='joy'] {
+    box-shadow: inset 0 0 300px rgba(250, 204, 21, 0.1);
+}
+
+.cine-reader.cine-reader--immersion-cinematic:not(
+        .cine-reader--light
+    )[data-active-emotion='sadness'] {
+    box-shadow: inset 0 0 300px rgba(56, 189, 248, 0.1);
+}
+
+.cine-reader.cine-reader--immersion-cinematic:not(
+        .cine-reader--light
+    )[data-active-emotion='anger'] {
+    box-shadow: inset 0 0 300px rgba(239, 68, 68, 0.15);
+}
+
+.cine-reader.cine-reader--immersion-cinematic:not(.cine-reader--light)[data-active-emotion='fear'] {
+    box-shadow: inset 0 0 300px rgba(168, 85, 247, 0.1);
+}
+
+.cine-reader.cine-reader--immersion-cinematic:not(
+        .cine-reader--light
+    )[data-active-emotion='suspense'] {
+    box-shadow: inset 0 0 300px rgba(249, 115, 22, 0.1);
+}
+
+.cine-reader.cine-reader--immersion-cinematic:not(
+        .cine-reader--light
+    )[data-active-emotion='surprise'] {
+    box-shadow: inset 0 0 300px rgba(236, 72, 153, 0.1);
+}
+
+.cine-blocks-wrapper {
+    max-width: 800px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   DYSLEXIA FRIENDLY MODE
+   ═══════════════════════════════════════════════════════════ */
+
+.cine-reader--dyslexia {
+    --cine-font-body: 'Lexend', sans-serif;
+    --cine-font-display: 'Lexend', sans-serif;
+    letter-spacing: 0.02em;
+}
+/* ─── Emotion Heatmap ──────────────────────────────────── */
+
+.cine-emotion-heatmap {
+    display: flex;
+    gap: 3px;
+    margin: 0 auto 2rem;
+    max-width: 760px;
+    padding: 0 2rem;
+    flex-wrap: wrap;
+}
+
+.cine-heatmap-block {
+    width: 18px;
+    height: 6px;
+    background: var(--cine-text-primary, #eae7e1);
+    border-radius: 1px;
+    transition: opacity 0.3s ease;
+}
+
+.cine-heatmap-block--fear,
+.cine-heatmap-block--suspense {
+    background: #ef4444;
+}
+
+.cine-heatmap-block--joy,
+.cine-heatmap-block--surprise {
+    background: #f59e0b;
+}
+
+.cine-heatmap-block--sadness {
+    background: #6366f1;
+}
+
+.cine-heatmap-block--anger {
+    background: #dc2626;
+}
+
+.cine-heatmap-block--neutral {
+    background: var(--cine-text-primary, #eae7e1);
+}
+
+/* ─── Tension-Driven Spacing ────────────────────────────── */
+
+.cine-block--tension-medium {
+    margin-top: 2rem;
+    margin-bottom: 2rem;
+}
+
+.cine-block--tension-high {
+    margin-top: 2.4rem;
+    margin-bottom: 2.4rem;
+    letter-spacing: 0.3px;
+}
+
+.cine-block--tension-extreme {
+    margin-top: 3rem;
+    margin-bottom: 3rem;
+    letter-spacing: 0.5px;
+}
+
+/* ─── Scene Break Marker ───────────────────────────────── */
+
+.cine-block--beat .cine-beat-label {
+    font-size: 0.875rem;
+}
+
+/* Scene break with star marker (— ✦ —) gets special styling */
+.cine-block--beat:has(.cine-beat-label:empty) + .cine-block--title_card {
+    margin-top: 2rem;
+}
