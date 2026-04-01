@@ -39,7 +39,8 @@ function chunkText(text: string): string[] {
 
 // ─── System Prompt ─────────────────────────────────────────
 
-const CINEMATIFICATION_SYSTEM_PROMPT = `You are a master cinematic storyteller. Transform this book chapter into a dramatically enhanced version.
+function buildCinematifierPrompt(isFirstChunk: boolean): string {
+    let prompt = `You are a master cinematic storyteller. Transform this book chapter into a dramatically enhanced version.
 
 RULES:
 1. Keep ALL original content, characters, plot, dialogue (never remove)
@@ -59,12 +60,45 @@ RULES:
 9. Append inline narrative tags to lines:
    - [EMOTION: joy|fear|sadness|suspense|anger|surprise|neutral]
    - [TENSION: 0-100] (0 = calm, 100 = extreme stress/climax)
-   Example: "I can't believe it." [EMOTION: surprise] [TENSION: 40]
-10. At the end of the text, optionally append overall tags:
-   - [GENRE: fantasy|romance|thriller|sci_fi|mystery|historical|literary_fiction|horror|adventure|other] (Only if it's the first chapter)
+   Example: "I can't believe it." [EMOTION: surprise] [TENSION: 40]`;
+
+    if (isFirstChunk) {
+        prompt += `\n10. At the end of the text, optionally append overall tags:
+   - [GENRE: fantasy|romance|thriller|sci_fi|mystery|historical|literary_fiction|horror|adventure|other]
    - [TONE: dark, romantic, suspenseful, humorous, etc] (Comma separated)
-   - [SUMMARY: Brief 1-2 sentence summary of current characters, location, and action to maintain context]
-`;
+   - [SUMMARY: Brief 1-2 sentence summary of current characters, location, and action to maintain context]`;
+    } else {
+        prompt += `\n10. At the end of the text, optionally append overall tags:
+   - [SUMMARY: Brief 1-2 sentence summary of current characters, location, and action to maintain context]`;
+    }
+
+    return prompt + '\n';
+}
+
+export function validateAICinematification(
+    blocks: CinematicBlock[],
+    originalWordCount: number,
+): void {
+    if (blocks.length === 0 && originalWordCount > 0) {
+        throw new Error('AI hallucination: Zero blocks produced from valid input.');
+    }
+
+    const cinematifiedWordCount = blocks.reduce(
+        (acc, b) => acc + (b.content?.split(/\s+/).filter(Boolean).length || 0),
+        0,
+    );
+
+    // If word count dropped significantly, it might be heavily summarising
+    if (cinematifiedWordCount < originalWordCount * 0.6) {
+        const hasDialogue = blocks.some(b => b.type === 'dialogue');
+        // Tolerance for short, mostly-action scenes, but rigid for substantial blocks
+        if (!hasDialogue && originalWordCount > 50) {
+            throw new Error(
+                `AI hallucination: Significant word loss detected (${originalWordCount} -> ${cinematifiedWordCount}). Flow compromised.`,
+            );
+        }
+    }
+}
 
 // ─── Block Metadata Counter ────────────────────────────────
 
@@ -89,6 +123,7 @@ export async function cinematifyText(
     config: AIConfig,
     onProgress?: (percent: number, message: string) => void,
     onChunk?: (blocks: CinematicBlock[], isDone: boolean) => void,
+    abortSignal?: AbortSignal,
 ): Promise<CinematificationResult> {
     const startTime = performance.now();
     const chunks = chunkText(text);
@@ -101,19 +136,22 @@ export async function cinematifyText(
     const chunkEmbeddings: ChunkEmbedding[] = [];
 
     for (let i = 0; i < chunks.length; i++) {
+        if (abortSignal?.aborted) throw new Error('Processing aborted');
         const chunkProgress = (i + 1) / chunks.length;
         if (onProgress) {
             onProgress(chunkProgress, `Cinematifying section ${i + 1} of ${chunks.length}...`);
         }
 
-        let prompt = CINEMATIFICATION_SYSTEM_PROMPT;
+        let prompt = buildCinematifierPrompt(i === 0);
         if (previousSummary) {
             prompt += `\n\nPREVIOUS CHUNK CONTEXT:\n"""\n${previousSummary}\n"""\n`;
         }
 
         if (chunkEmbeddings.length > 0) {
             // Find most similar past chunk summary to provide long-term continuity
+            if (abortSignal?.aborted) throw new Error('Processing aborted');
             const currentEmbedding = await generateEmbedding(chunks[i]).catch(() => null);
+            if (abortSignal?.aborted) throw new Error('Processing aborted');
             if (currentEmbedding) {
                 const relevantPastSummaries = retrieveRelevantContext(
                     currentEmbedding,
@@ -132,14 +170,18 @@ export async function cinematifyText(
 
         let rawBuffer = '';
         let lastProcessedIndex = 0;
+        const chunkStartIndex = allBlocks.length;
+        const chunkBlocks: CinematicBlock[] = [];
 
         try {
+            if (abortSignal?.aborted) throw new Error('Processing aborted');
             // Check if provider supports streaming (offline algorithms, deepseek in some configs, might not)
             const preset = config.provider !== 'none' ? MODEL_PRESETS[config.provider] : null;
             const canStream = preset?.supportsStreaming;
 
             if (canStream) {
                 for await (const delta of streamAI(prompt, cinematifyConfig)) {
+                    if (abortSignal?.aborted) throw new Error('Processing aborted');
                     rawBuffer += delta;
 
                     // Look for completed paragraphs to parse and flush block-by-block
@@ -150,9 +192,11 @@ export async function cinematifyText(
                             .substring(lastProcessedIndex, doubleNewlineIdx)
                             .trim();
                         if (completableText) {
+                            if (abortSignal?.aborted) throw new Error('Processing aborted');
                             const parsedBlocks = parseCinematifiedText(completableText);
                             if (parsedBlocks.length > 0) {
                                 allBlocks.push(...parsedBlocks);
+                                chunkBlocks.push(...parsedBlocks);
                                 if (onChunk) onChunk(parsedBlocks, false);
 
                                 const counts = countBlockMetadata(parsedBlocks);
@@ -167,11 +211,14 @@ export async function cinematifyText(
                 }
 
                 // Flush remaining text
+                if (abortSignal?.aborted) throw new Error('Processing aborted');
                 const remainingText = rawBuffer.substring(lastProcessedIndex).trim();
                 if (remainingText) {
+                    if (abortSignal?.aborted) throw new Error('Processing aborted');
                     const parsedBlocks = parseCinematifiedText(remainingText);
                     if (parsedBlocks.length > 0) {
                         allBlocks.push(...parsedBlocks);
+                        chunkBlocks.push(...parsedBlocks);
                         if (onChunk) onChunk(parsedBlocks, false);
 
                         const counts = countBlockMetadata(parsedBlocks);
@@ -183,12 +230,15 @@ export async function cinematifyText(
                 allRawText.push(rawBuffer);
             } else {
                 // Fallback to bulk for non-streaming providers
+                if (abortSignal?.aborted) throw new Error('Processing aborted');
                 const raw = await callAIWithDedup(prompt, cinematifyConfig);
+                if (abortSignal?.aborted) throw new Error('Processing aborted');
                 rawBuffer = raw;
                 allRawText.push(raw);
                 const blocks = parseCinematifiedText(raw);
                 if (blocks.length > 0) {
                     allBlocks.push(...blocks);
+                    chunkBlocks.push(...blocks);
                     if (onChunk) onChunk(blocks, false);
 
                     const counts = countBlockMetadata(blocks);
@@ -198,11 +248,19 @@ export async function cinematifyText(
                 }
             }
 
+            // Validate the chunk before proceeding
+            if (abortSignal?.aborted) throw new Error('Processing aborted');
+            const chunkOriginalWordCount = chunks[i].split(/\s+/).filter(Boolean).length;
+            validateAICinematification(chunkBlocks, chunkOriginalWordCount);
+
             // Extract the summary for the NEXT chunk and save embedding
+            if (abortSignal?.aborted) throw new Error('Processing aborted');
             const summaryMatch = rawBuffer.match(/\[SUMMARY:\s*([^\]]+)\]/i);
             if (summaryMatch) {
                 previousSummary = summaryMatch[1].trim();
+                if (abortSignal?.aborted) throw new Error('Processing aborted');
                 const summaryEmbedding = await generateEmbedding(previousSummary).catch(() => null);
+                if (abortSignal?.aborted) throw new Error('Processing aborted');
                 if (summaryEmbedding) {
                     chunkEmbeddings.push({
                         id: `chunk-${i}`,
@@ -213,9 +271,21 @@ export async function cinematifyText(
             }
         } catch (err) {
             console.warn(`[Cinematifier] Chunk ${i + 1} fallback:`, err);
+            
+            // Revert any blocks uniquely pushed during this broken chunk to prevent dupe fragments.
+            // (Note: onChunk UI signal cannot be easily fully reverted without buffering, 
+            // but the final returned blocks array will remain correct.)
+            allBlocks.splice(chunkStartIndex);
+            
             const fallbackResult = cinematifyOffline(chunks[i]);
             allBlocks.push(...fallbackResult.blocks);
             if (onChunk) onChunk(fallbackResult.blocks, false);
+            
+            // Re-calc counts since we reverted the AI ones and appended offline ones
+            const offlineCounts = countBlockMetadata(fallbackResult.blocks);
+            sfxCount += offlineCounts.sfxCount;
+            transitionCount += offlineCounts.transitionCount;
+            beatCount += offlineCounts.beatCount;
         }
     }
 

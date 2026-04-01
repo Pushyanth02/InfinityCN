@@ -63,10 +63,10 @@ export const EmotionHeatmap = React.memo(function EmotionHeatmap({
             {segments.map((seg, i) => (
                 <div
                     key={`hm-${i}-${seg.emotion}`}
-                    className={`cine-heatmap-block cine-heatmap-block--${seg.emotion}`}
+                    className={`cine-heatmap-block cine-heatmap-block--${seg.emotion} cine-heatmap-block-dynamic`}
                     style={{
-                        opacity: Math.max(HEATMAP_MIN_OPACITY, seg.tension / HEATMAP_MAX_TENSION),
-                    }}
+                        '--cine-heatmap-opacity': Math.max(HEATMAP_MIN_OPACITY, seg.tension / HEATMAP_MAX_TENSION)
+                    } as React.CSSProperties}
                     title={`Tension: ${Math.round(seg.tension)}`}
                 />
             ))}

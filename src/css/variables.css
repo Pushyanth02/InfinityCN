@@ -1,61 +1,239 @@
 /**
- * variables.css — CSS custom properties / design tokens
+ * variables.css — Velvet Noir Design System Tokens
  *
- * Netflix-inspired color palette, typography, spacing, and transition tokens.
+ * "The Cinematic Editorial" — A design system built to bridge
+ * high-end editorial publishing with the atmospheric depth of cinema.
+ *
+ * Dark Mode ("The Theater"): deep blacks + embered glows
+ * Light Mode ("The Library"): premium ivory + archival ink
  */
 
 /* ═══════════════════════════════════════════════════════════
-   CSS CUSTOM PROPERTIES
+   ROOT — DARK MODE (DEFAULT — "The Theater")
    ═══════════════════════════════════════════════════════════ */
 
 :root {
-    /* Core Colors — Netflix-inspired */
-    --cine-bg-primary: #0a0a0a;
-    --cine-bg-secondary: #141414;
-    --cine-bg-tertiary: #1a1a1a;
-    --cine-bg-elevated: #222222;
+    /* ── Surface Hierarchy (background shifts replace borders) ── */
+    --surface:                      #131313;
+    --surface-dim:                  #131313;
+    --surface-container-lowest:     #0e0e0e;
+    --surface-container-low:        #1c1b1b;
+    --surface-container:            #201f1f;
+    --surface-container-high:       #2a2a2a;
+    --surface-container-highest:    #353534;
+    --surface-bright:               #393939;
 
-    /* Accent Colors */
-    --cine-red: #e50914;
-    --cine-red-hover: #ff1f2d;
-    --cine-gold: #d4af37;
-    --cine-gold-dim: #a68c2a;
+    /* ── Primary Accent (cinematic ember) ── */
+    --primary:                      #ffb3b1;
+    --primary-container:            #ff535b;
+    --on-primary:                   #680011;
+    --on-primary-container:         #5b000e;
+    --primary-fixed:                #ffdad8;
+    --primary-fixed-dim:            #ffb3b1;
+    --inverse-primary:              #bb152c;
 
-    /* Text Colors */
-    --cine-text-primary: #f5f5f5;
-    --cine-text-secondary: #b3b3b3;
-    --cine-text-muted: #6b6b6b;
-    --cine-text-accent: #ffffff;
+    /* ── Secondary Accent (sunset orange) ── */
+    --secondary:                    #ffb780;
+    --secondary-container:          #763c00;
+    --on-secondary:                 #4e2600;
+    --on-secondary-container:       #fca967;
+    --secondary-fixed:              #ffdcc4;
+    --secondary-fixed-dim:          #ffb780;
 
-    /* Functional Colors */
-    --cine-sfx: #c9a84c;
-    --cine-beat: #94a3b8;
-    --cine-transition: #94a3b8;
-    --cine-dialogue: #fbbf24;
-    --cine-action: #94a3b8;
-    --cine-thought: #a78bfa;
+    /* ── Tertiary (steel blue) ── */
+    --tertiary:                     #98cdf2;
+    --tertiary-container:           #6297ba;
+    --on-tertiary:                  #00344c;
+    --on-tertiary-container:        #002d42;
+    --tertiary-fixed:               #c7e7ff;
+    --tertiary-fixed-dim:           #98cdf2;
 
-    /* Effects */
-    --cine-glow-primary: rgba(229, 9, 20, 0.3);
-    --cine-glow-secondary: rgba(212, 175, 55, 0.2);
-    --cine-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
-    --cine-shadow-lg: 0 8px 48px rgba(0, 0, 0, 0.8);
+    /* ── Text / On-Surface ── */
+    --on-surface:                   #e5e2e1;
+    --on-surface-variant:           #e4bebc;
+    --on-background:                #e5e2e1;
+    --background:                   #131313;
 
-    /* Typography */
-    --cine-font-display: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    --cine-font-body: 'Crimson Text', Georgia, 'Times New Roman', serif;
-    --cine-font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+    /* ── Structural ── */
+    --outline:                      #ab8987;
+    --outline-variant:              #5b403f;
+    --inverse-surface:              #e5e2e1;
+    --inverse-on-surface:           #313030;
+    --surface-tint:                 #ffb3b1;
+    --surface-variant:              #353534;
 
-    /* Spacing */
-    --cine-space-xs: 4px;
-    --cine-space-sm: 8px;
-    --cine-space-md: 16px;
-    --cine-space-lg: 24px;
-    --cine-space-xl: 32px;
-    --cine-space-2xl: 48px;
+    /* ── Error ── */
+    --error:                        #ffb4ab;
+    --error-container:              #93000a;
+    --on-error:                     #690005;
+    --on-error-container:           #ffdad6;
 
-    /* Transitions */
-    --cine-transition-fast: 150ms ease;
-    --cine-transition-normal: 300ms ease;
-    --cine-transition-slow: 500ms ease;
+    /* ── Legacy mapping (for existing code) ── */
+    --cine-bg-primary:              var(--surface);
+    --cine-bg-secondary:            var(--surface-container-low);
+    --cine-bg-tertiary:             var(--surface-container);
+    --cine-bg-elevated:             var(--surface-container-high);
+    --cine-bg-highest:              var(--surface-container-highest);
+    --cine-primary:                 var(--primary);
+    --cine-primary-container:       var(--primary-container);
+    --cine-on-primary:              var(--on-primary);
+    --cine-secondary:               var(--secondary);
+    --cine-secondary-container:     var(--secondary-container);
+    --cine-red:                     var(--primary);
+    --cine-red-hover:               var(--primary-container);
+    --cine-gold:                    var(--secondary);
+    --cine-gold-dim:                #fca534;
+    --cine-text-primary:            var(--on-surface);
+    --cine-text-secondary:          var(--on-surface-variant);
+    --cine-text-muted:              var(--outline);
+    --cine-text-accent:             var(--primary);
+    --cine-sfx:                     var(--secondary);
+    --cine-beat:                    var(--tertiary-fixed);
+    --cine-transition:              var(--tertiary);
+    --cine-dialogue:                var(--secondary);
+    --cine-action:                  var(--primary);
+    --cine-thought:                 var(--tertiary-container);
+
+    /* ── Glass & Gradient Effects ── */
+    --glass-bg:                     rgba(32, 31, 31, 0.7);
+    --glass-blur:                   blur(20px);
+    --primary-gradient:             linear-gradient(45deg, #ffb3b1, #ff535b);
+    --primary-gradient-135:         linear-gradient(135deg, #ffb3b1, #ff535b);
+    --ghost-border:                 rgba(91, 64, 63, 0.15);
+    --ambient-shadow:               0 12px 40px rgba(0, 0, 0, 0.08);
+    --shadow-md:                    0 20px 50px rgba(0, 0, 0, 0.3);
+    --shadow-lg:                    0 40px 80px rgba(0, 0, 0, 0.5);
+    --shadow-cinema:                0 32px 80px rgba(0, 0, 0, 0.6);
+    --glow-primary:                 rgba(255, 179, 177, 0.25);
+    --glow-primary-lg:              rgba(255, 179, 177, 0.40);
+
+    /* Legacy */
+    --cine-glow-primary:            var(--glow-primary);
+    --cine-glow-secondary:          rgba(255, 183, 128, 0.18);
+    --cine-shadow:                  var(--shadow-md);
+    --cine-shadow-lg:               var(--shadow-lg);
+    --cine-ghost-border:            var(--ghost-border);
+    --cine-glass-bg:                var(--glass-bg);
+
+    /* ── Typography ── */
+    --font-headline:                'Manrope', sans-serif;
+    --font-body:                    'Newsreader', serif;
+    --font-label:                   'Inter', sans-serif;
+    --font-serif-reader:            'Newsreader', serif;
+
+    /* Legacy */
+    --cine-font-display:            var(--font-body);
+    --cine-font-body:               var(--font-body);
+    --cine-font-mono:               var(--font-label);
+    --cine-font-label:              var(--font-label);
+
+    /* ── Border Radius ── */
+    --radius-xs:    0.25rem;   /* 4px */
+    --radius-sm:    0.5rem;    /* 8px */
+    --radius-md:    0.75rem;   /* 12px */
+    --radius-lg:    1rem;      /* 16px */
+    --radius-xl:    1.5rem;    /* 24px */
+    --radius-full:  9999px;
+
+    /* ── Spacing (8pt system) ── */
+    --spacing-1:   4px;
+    --spacing-2:   8px;
+    --spacing-3:   12px;
+    --spacing-4:   16px;
+    --spacing-5:   20px;
+    --spacing-6:   24px;
+    --spacing-8:   32px;
+    --spacing-10:  40px;
+    --spacing-12:  48px;
+    --spacing-16:  64px;
+    --spacing-20:  80px;
+    --spacing-24:  96px;
+    --spacing-34:  136px;
+
+    /* Legacy spacing */
+    --cine-space-xs:   var(--spacing-1);
+    --cine-space-sm:   var(--spacing-2);
+    --cine-space-md:   var(--spacing-4);
+    --cine-space-lg:   var(--spacing-6);
+    --cine-space-xl:   var(--spacing-12);
+    --cine-space-2xl:  var(--spacing-20);
+
+    /* ── Transitions ── */
+    --transition-fast:   120ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-normal: 240ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-slow:   400ms cubic-bezier(0.4, 0, 0.2, 1);
+
+    /* Legacy */
+    --cine-transition-fast:   var(--transition-fast);
+    --cine-transition-normal: var(--transition-normal);
+    --cine-transition-slow:   var(--transition-slow);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   LIGHT MODE OVERRIDES — "The Library"
+   Ivory paper + archival ink — tactile clarity.
+   ═══════════════════════════════════════════════════════════ */
+
+[data-theme="light"],
+.theme-light {
+    --surface:                      #fffbff;
+    --surface-dim:                  #ded9d8;
+    --surface-container-lowest:     #faf8f7;
+    --surface-container-low:        #faf8f7;
+    --surface-container:            #f4f0ef;
+    --surface-container-high:       #eeeae9;
+    --surface-container-highest:    #e5e2e1;
+    --surface-bright:               #fffbff;
+
+    --primary:                      #bb152c;
+    --primary-container:            #ffdad8;
+    --on-primary:                   #ffffff;
+    --on-primary-container:         #410007;
+    --primary-fixed:                #ffdad8;
+    --primary-fixed-dim:            #ffb3b1;
+    --inverse-primary:              #ffb3b1;
+
+    --secondary:                    #8b5000;
+    --secondary-container:          #ffdbc1;
+    --on-secondary:                 #ffffff;
+    --on-secondary-container:       #2f1400;
+    --secondary-fixed-dim:          #ffb780;
+
+    --tertiary:                     #00668b;
+    --tertiary-container:           #c7e7ff;
+    --on-tertiary:                  #ffffff;
+    --on-tertiary-container:        #001e2e;
+
+    --on-surface:                   #201f1f;
+    --on-surface-variant:           #534342;
+    --on-background:                #201f1f;
+    --background:                   #fffbff;
+
+    --outline:                      #857372;
+    --outline-variant:              #d8c2c0;
+
+    --surface-variant:              #f4dddb;
+    --inverse-surface:              #362f2f;
+
+    --glass-bg:                     rgba(244, 240, 239, 0.85);
+    --ghost-border:                 rgba(216, 194, 192, 0.4);
+    --primary-gradient:             linear-gradient(45deg, #bb152c, #920028);
+    --glow-primary:                 rgba(187, 21, 44, 0.1);
+
+    --cine-bg-primary:              var(--surface);
+    --cine-bg-secondary:            var(--surface-container-low);
+    --cine-bg-tertiary:             var(--surface-container);
+    --cine-bg-elevated:             var(--surface-container-high);
+    --cine-bg-highest:              var(--surface-container-highest);
+    --cine-primary:                 var(--primary);
+    --cine-primary-container:       var(--primary-container);
+    --cine-red:                     var(--primary);
+    --cine-red-hover:               #920028;
+    --cine-text-primary:            var(--on-surface);
+    --cine-text-secondary:          var(--on-surface-variant);
+    --cine-text-muted:              var(--outline);
+    --cine-text-accent:             var(--primary);
+    --cine-glass-bg:                var(--glass-bg);
+    --cine-ghost-border:            var(--ghost-border);
+    --cine-glow-primary:            var(--glow-primary);
 }

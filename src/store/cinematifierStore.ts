@@ -215,10 +215,7 @@ export const useCinematifierStore = create<CinematifierState>()(
             lineSpacing: 1.8,
             immersionLevel: 'balanced' as ImmersionLevel,
             dyslexiaFont: false,
-            darkMode:
-                typeof window !== 'undefined'
-                    ? window.matchMedia('(prefers-color-scheme: dark)').matches
-                    : true,
+            darkMode: true, // Default to 'Screening Room' standard
 
             // Processing
             isProcessing: false,

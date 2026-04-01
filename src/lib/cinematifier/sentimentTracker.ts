@@ -13,10 +13,36 @@
 import type { EmotionCategory } from '../../types/cinematifier';
 
 // ─── Compact Sentiment Lexicon ──────────────────────────────
-// A curated subset of AFINN-111 focused on narrative-relevant words.
-// Scores range from -5 to +5.
+// A curated and expanded subset of AFINN-111 and narrative/emotion words.
+// Scores range from -5 to +5. Add more emotion-rich and literary terms.
 
 const SENTIMENT_LEXICON: Record<string, number> = {
+    // Additional literary/emotion words
+    anxious: -2,
+    anticipation: 1,
+    awe: 2,
+    betrayal: -3,
+    bliss: 3,
+    comforted: 2,
+    despairing: -4,
+    devastated: -4,
+    elated: 3,
+    furious: -3,
+    grateful: 2,
+    heartbroken: -4,
+    hopeful: 2,
+    melancholy: -2,
+    nostalgic: 1,
+    overwhelmed: -2,
+    peaceful: 2,
+    relieved: 2,
+    resentful: -2,
+    shocked: -2,
+    tense: -2,
+    thrilled: 3,
+    uneasy: -1,
+    vulnerable: -1,
+    // ...existing code...
     // Very negative (-5 to -4)
     abandon: -2,
     abuse: -3,
@@ -127,7 +153,6 @@ const SENTIMENT_LEXICON: Record<string, number> = {
 
     // Negative (-1 to -2)
     afraid: -2,
-    anxious: -2,
     argue: -1,
     bad: -2,
     bore: -1,
@@ -159,7 +184,6 @@ const SENTIMENT_LEXICON: Record<string, number> = {
     uncertain: -1,
     unfortunate: -2,
     unhappy: -2,
-    uneasy: -1,
     upset: -2,
     wait: -1,
     wary: -1,
@@ -207,7 +231,6 @@ const SENTIMENT_LEXICON: Record<string, number> = {
     gold: 1,
     good: 2,
     grace: 2,
-    grateful: 2,
     great: 2,
     green: 1,
     grow: 1,
@@ -398,11 +421,14 @@ export function analyzeSentiment(text: string): SentimentResult {
     let sentimentWordCount = 0;
     let negated = false;
     let intensifier = 1;
+    let lastNegationIdx = -2;
 
-    for (const word of words) {
-        // Check negation
+    for (let i = 0; i < words.length; i++) {
+        const word = words[i];
+        // Check negation (negation affects next 2 words)
         if (NEGATION_WORDS.has(word)) {
             negated = true;
+            lastNegationIdx = i;
             continue;
         }
 
@@ -428,14 +454,16 @@ export function analyzeSentiment(text: string): SentimentResult {
 
         if (wordScore !== undefined) {
             let adjusted = wordScore * intensifier;
-            if (negated) adjusted *= -0.75; // Negation dampens rather than fully inverting
+            // Negation affects up to 2 words after negation word
+            if (negated && i - lastNegationIdx <= 2) adjusted *= -0.75;
             rawScore += adjusted;
             sentimentWordCount++;
         }
 
-        // Reset modifiers after each content word
-        negated = false;
+        // Reset intensifier after each content word
         intensifier = 1;
+        // Reset negation if more than 2 words after negation
+        if (negated && i - lastNegationIdx >= 2) negated = false;
     }
 
     const totalWords = Math.max(1, words.length);
@@ -444,6 +472,8 @@ export function analyzeSentiment(text: string): SentimentResult {
         Math.min(1, rawScore / Math.max(1, sentimentWordCount * 2)),
     );
     const confidence = sentimentWordCount / totalWords;
+
+    // TODO: In future, call AI/ML model for sentiment if enabled
 
     return {
         score: Math.round(normalizedScore * 1000) / 1000,

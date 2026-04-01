@@ -21,24 +21,30 @@ const SEP = '[\\-:.–—]';
 
 const CHAPTER_PATTERNS: RegExp[] = [
     // Chapter / Part / Book headings
-    new RegExp(`^(chapter\\s+)(\\d+|${ROMAN}|\\w+)(?:\\s*${SEP}\\s*(.*))?$`, 'im'),
-    new RegExp(`^(part\\s+)(\\d+|${ROMAN}|\\w+)(?:\\s*${SEP}\\s*(.*))?$`, 'im'),
-    new RegExp(`^(book\\s+)(\\d+|${ROMAN}|\\w+)(?:\\s*${SEP}\\s*(.*))?$`, 'im'),
-    // Act / Scene headings
-    new RegExp(`^(act\\s+)(\\d+|${ROMAN}|\\w+)(?:\\s*${SEP}\\s*(.*))?$`, 'im'),
-    new RegExp(`^(scene\\s+)(\\d+|${ROMAN}|\\w+)(?:\\s*${SEP}\\s*(.*))?$`, 'im'),
-    // Section headings (e.g. "Section 1", "Section III")
-    new RegExp(`^(section\\s+)(\\d+|${ROMAN}|\\w+)(?:\\s*${SEP}\\s*(.*))?$`, 'im'),
-    // Prologue / Epilogue with optional subtitle
-    /^(prologue|epilogue)(?:\s*[:.\-–—]\s*(.*))?$/im,
-    // Dividers
-    /^\*{3,}\s*$/m,
-    /^-{3,}\s*$/m,
-    // ALL-CAPS standalone named titles (≥ 4 uppercase letters/spaces, e.g. "THE AWAKENING")
-    /^([A-Z][A-Z ]{2,}[A-Z])\s*$/m,
+        new RegExp(`^(chapter\\s+)(\\d+|${ROMAN}|\\w+)(?:\\s*${SEP}\\s*(.*))?$`, 'im'),
+        new RegExp(`^(part\\s+)(\\d+|${ROMAN}|\\w+)(?:\\s*${SEP}\\s*(.*))?$`, 'im'),
+        new RegExp(`^(book\\s+)(\\d+|${ROMAN}|\\w+)(?:\\s*${SEP}\\s*(.*))?$`, 'im'),
+        // Act / Scene headings
+        new RegExp(`^(act\\s+)(\\d+|${ROMAN}|\\w+)(?:\\s*${SEP}\\s*(.*))?$`, 'im'),
+        new RegExp(`^(scene\\s+)(\\d+|${ROMAN}|\\w+)(?:\\s*${SEP}\\s*(.*))?$`, 'im'),
+        // Section headings (e.g. "Section 1", "Section III")
+        new RegExp(`^(section\\s+)(\\d+|${ROMAN}|\\w+)(?:\\s*${SEP}\\s*(.*))?$`, 'im'),
+        // Prologue / Epilogue / other book parts with optional subtitle
+        /^(prologue|epilogue|introduction|foreword|afterword|preface|appendix|postscript)(?:\s*[:.\-–—]\s*(.*))?$/im,
+        // Book/Part/Section/Volume/Act/Scene with Roman numerals or words (e.g., "Book One", "Part I")
+        /^\s*(book|part|section|volume|act|scene)[ .:,-]*([\divxlc]+)?[ .:,-]*([\w\s'"-]*)$/i,
+        // Standalone PROLOGUE/EPILOGUE
+        /^\s*(prologue|epilogue)\s*$/i,
+        // Dividers (***, ---, ###, ..., etc.)
+        /^\*{3,}\s*$/m,
+        /^-{3,}\s*$/m,
+        /^#{3,}\s*$/m,
+        /^\.{3,}\s*$/m,
+        // ALL-CAPS standalone named titles (≥ 4 uppercase letters/spaces, e.g. "THE AWAKENING")
+        /^([A-Z][A-Z ]{2,}[A-Z])\s*$/m,
 ];
 
-const DIVIDER_RE = /^[*-]{3,}\s*$/;
+const DIVIDER_RE = /^[*\-#=~_]{3,}\s*$|^\.{3,}\s*$/;
 
 /** Tests whether a trimmed line matches any chapter heading pattern. */
 function matchesAnyPattern(line: string): boolean {
@@ -55,6 +61,7 @@ function isSubtitleLine(line: string): boolean {
 }
 
 export function segmentChapters(fullText: string): ChapterSegment[] {
+    if (fullText.trim().length === 0) return [];
     const lines = fullText.split('\n');
     const segments: ChapterSegment[] = [];
     let currentSegment: { title: string; startLine: number; lines: string[] } | null = null;
@@ -115,8 +122,8 @@ export function segmentChapters(fullText: string): ChapterSegment[] {
             // Save previous segment
             if (currentSegment && currentSegment.lines.length > 0) {
                 const content = currentSegment.lines.join('\n').trim();
-                if (content.length > 100) {
-                    // Minimum chapter length
+                if (content.length > 100 || segments.length === 0) {
+                    // Minimum chapter length, but always allow first segment
                     segments.push({
                         title: currentSegment.title,
                         content,
@@ -148,7 +155,7 @@ export function segmentChapters(fullText: string): ChapterSegment[] {
     // Don't forget the last segment
     if (currentSegment && currentSegment.lines.length > 0) {
         const content = currentSegment.lines.join('\n').trim();
-        if (content.length > 100) {
+        if (content.length > 100 || segments.length === 0) {
             segments.push({
                 title: currentSegment.title,
                 content,
@@ -158,8 +165,9 @@ export function segmentChapters(fullText: string): ChapterSegment[] {
         }
     }
 
-    // If no chapters were found, create one chapter from all text
+    // If no chapters were found, create one chapter from all text (AI fallback stub)
     if (segments.length === 0 && fullText.trim().length > 0) {
+        // TODO: In future, call AI/ML model to suggest boundaries
         segments.push({
             title: 'Full Text',
             content: fullText.trim(),

@@ -41,7 +41,6 @@
 - **Offline-First** — IndexedDB via Dexie + PWA service worker
 - **Composable Pipeline** — Modular stage-based processing (cleaning → reconstruction → analysis → cinematification → enrichment)
 - **Responsive** — 480px mobile to 1200px+ desktop
-- **Backend Server** — Optional Express server with Redis caching, RabbitMQ job queue, and per-IP rate limiting
 
 ## Tech Stack
 
@@ -60,7 +59,6 @@
 | Linting | ESLint + Prettier |
 | Hooks | Husky + lint-staged |
 | CI/CD | GitHub Actions |
-| Server | Express 5 + Redis + RabbitMQ |
 
 ## Free APIs & Algorithms
 
@@ -114,88 +112,6 @@ npm run build
 | `npm run test:coverage` | Run tests with coverage |
 | `npm run preview` | Preview production build |
 
-## Environment Variables
-
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `VITE_API_PROXY_URL` | Backend server URL for server-side API keys | No |
-
-AI API keys are configured at runtime through the in-app AI Settings panel and stored encrypted (AES-GCM) in browser localStorage. For production deployments with shared keys, use the optional backend server (see below).
-
-## Backend Server (Recommended for Production)
-
-The backend server (`server/src/index.ts`) provides:
-
-- **Centralized API key management** — Store keys server-side, not in browser
-- **Redis caching** — Cache AI responses for 30 minutes (configurable) to reduce API costs
-- **Job queuing** — RabbitMQ-based async cinematification for large books
-- **Per-IP rate limiting** — Sliding window, 30 req/min by default (Redis-backed)
-- **Security** — API keys never exposed to client
-
-### Quick Start (Docker)
-
-```bash
-# Start Redis, RabbitMQ, API server, and 2 workers
-docker compose up
-
-# Scale workers for throughput
-docker compose up --scale worker=4
-```
-
-### Manual Start
-
-```bash
-# Install server dependencies
-cd server && npm install
-
-# Start the API server
-npm run dev
-
-# Start a worker (separate terminal)
-npm run dev:worker
-```
-
-### Configure the frontend
-
-```bash
-# In your .env
-VITE_API_PROXY_URL=http://localhost:3001
-```
-
-### Server Environment Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `PORT` | API server port | `3001` |
-| `ALLOWED_ORIGINS` | Comma-separated CORS origins | `http://localhost:5173` |
-| `REDIS_URL` | Redis connection URL | `redis://localhost:6379` |
-| `RABBITMQ_URL` | RabbitMQ connection URL | `amqp://infinitycn:infinitycn_dev@localhost:5672` |
-| `GEMINI_API_KEY` | Google Gemini API key | — |
-| `OPENAI_API_KEY` | OpenAI API key | — |
-| `ANTHROPIC_API_KEY` | Anthropic API key | — |
-| `GROQ_API_KEY` | Groq API key | — |
-| `DEEPSEEK_API_KEY` | DeepSeek API key | — |
-| `OLLAMA_URL` | Local Ollama server URL | `http://localhost:11434` |
-| `CACHE_TTL_SECONDS` | AI response cache TTL | `1800` |
-| `RATE_WINDOW_MS` | Rate limit window | `60000` |
-| `RATE_MAX_REQUESTS` | Max AI proxy requests per window per IP | `30` |
-| `JOBS_RATE_WINDOW_MS` | Job API rate-limit window | `60000` |
-| `JOBS_RATE_MAX_REQUESTS` | Max job API requests per window per IP | `20` |
-| `REQUIRE_JOB_TOKEN` | Require per-job access token for read/cancel/SSE routes | `true` |
-| `MAX_TOKENS_CAP` | Output token cap (cost protection) | `2048` |
-| `WORKER_CONCURRENCY` | Concurrent chapters per worker | `1` |
-
-### API Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `GET /health` | GET | Health check — Redis, RabbitMQ, available providers |
-| `POST /api/ai/:provider` | POST | Proxy AI request with caching |
-| `POST /api/jobs` | POST | Submit book for server-side cinematification |
-| `GET /api/jobs/:bookId` | GET | Get job status |
-| `GET /api/jobs/:bookId/chapters/:index` | GET | Get processed chapter result |
-| `DELETE /api/jobs/:bookId` | DELETE | Cancel a job |
-| `GET /api/jobs/:bookId/events` | GET | SSE stream for real-time progress |
 
 ## Project Structure
 

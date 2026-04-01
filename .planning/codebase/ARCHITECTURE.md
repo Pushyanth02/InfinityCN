@@ -1,56 +1,48 @@
-# Architecture Overview
+# System Architecture: InfinityCN
+## The Cinematifier Engine Flow
 
-**Analysis Date:** 2026-03-25
-
-## System Design
-
-InfinityCN is an offline-first, cinematic storytelling engine. It transforms raw text (novels) into a screenplay-like experience with SFX, transitions, and narrative beats using AI.
-
-### Core Architectural Layers
-
-1.  **UI/UX Layer (React 19):**
-    - Entry Point: `CinematifierApp.tsx`
-    - Logic: Custom hooks (`useFileProcessing`, `useBookHydration`, `useAmbientAudio`)
-    - Animation: Framer Motion for cinematic transitions.
-    - Componentization: Atomic UI components in `src/components/ui/` and feature-specific components (`CinematicReader`, `UploadZone`).
-
-2.  **Cinematification Engine (Core):**
-    - Orchestrator: `src/lib/cinematifier/pipeline.ts`
-    - Stages: Parsing (`parser.ts`) -> Segmentation (`chapterSegmentation.ts`) -> Analysis (`sentimentTracker.ts`, `pacingAnalyzer.ts`) -> Transformation (`aiEngine.ts` or `offlineEngine.ts`).
-    - Local ML: `@xenova/transformers` for semantic analysis and offline fallback.
-
-3.  **Persistence Layer (IndexedDB):**
-    - Tech: Dexie (`src/lib/cinematifierDb.ts`).
-    - Structure: `books` table stores the full cinematified JSON; `readingProgress` tracks current chapter/block.
-    - Purpose: Zero-latency reading and offline availability.
-
-4.  **Global State (Zustand):**
-    - Store: `src/store/cinematifierStore.ts`.
-    - Function: Transient UI state, processing progress, and current book hydration.
-
-5.  **Backend Services (Node/Express):**
-    - API Server: `server/src/index.ts`.
-    - AI Proxy: Securely caches AI calls using Redis.
-    - Job Manager: For large books, queues chapter processing in RabbitMQ.
-    - Workers: `server/src/worker.ts` consumes jobs, performs AI cinematification, and updates Redis.
-
-## Data Flow
-
-### 1. Book Upload & Processing
-- User drops file -> `useFileProcessing` hook -> `parser.ts` extracts text.
-- Small Book (< 100k words): Client orchestrates `pipeline.ts` with direct AI calls or local ML.
-- Large Book: Client uploads metadata -> Server queues chapters in RabbitMQ -> Workers process via AI -> Client polls SSE `/api/jobs/:id/events`.
-
-### 2. Reading Experience
-- Book loaded from IndexedDB -> `CinematicReader.tsx` renders blocks sequentially.
-- `useAmbientAudio`: Triggers SFX based on block metadata (`sfx: "thunder_distant"`).
-- `useAutoScroll`: Maintains narrative pacing by dynamically adjusting scroll speed based on reading speed and "tension" markers.
-
-## Key Design Patterns
-
-- **Pipeline Pattern:** Sequential transformation stages with clearly defined input/output interfaces.
-- **Provider Pattern:** AI calls abstract through `callAI` router supporting multiple cloud/local models.
-- **Offline-First:** IndexedDB is the source of truth for the reader; the server/AI is a processing enhancement.
+**Analysis Date:** 2026-03-30
+**Pattern:** Input → Pipeline → Structured Data → Runtime → UI
 
 ---
-*Architecture mapping: 2026-03-25*
+
+## 🏗️ 1. Input Layer
+The system accepts raw story text (TXT, MD, PDF, OCR scan).
+- **Parsers:** `src/lib/cinematifier/parser.ts` handles multiformat extraction.
+- **Scanning:** `tesseract.js` for physical document intake.
+
+## ⚙️ 2. Processing Pipeline
+The heart of the engine, breaking the story into cinematic beats.
+1. **Structural Scan:** Analyzes chapter markings.
+2. **Scene Segmentation:** Identifies scene boundaries using `sceneDetection.ts`.
+3. **Narrative Analysis:** Tracks entities using `entities.ts` and `metadata.ts`.
+4. **Emotion + Tension Mapping:** Map emotional peaks and troughs via `sentimentTracker.ts`.
+5. **Pacing Analysis:** Evaluates reading speed and flow via `pacingAnalyzer.ts`.
+
+## 📦 3. Structured Data Output
+All processing results in a strictly defined JSON structure.
+- **Validation:** `src/lib/cinematifier/aiEngine.ts` ensures the AI output matches the schema.
+- **Persistence:** Syncs to IndexedDB (Dexie) immediately, ensuring the data is available offline.
+
+## 🎬 4. Runtime Rendering
+The runtime engine transforms the structured JSON into an immersive experience.
+- **Scene-Based Rendering:** Only the current, previous, and next scenes are rendered at any time for performance.
+- **Dynamic Adjustments:** The runtime modifies typography and spacing based on the narrative tension.
+- **Ambient Orchestration:** `useAmbientAudio.ts` syncs SFX and music to the narrative flow.
+
+## 🎨 5. UI Layer
+The "invisible" UI that keeps the focus entirely on the story.
+- **Typography:** Optimized for readability with a max width of ~720px.
+- **Transitions:** Fluid, framer-motion powered transitions between narrative beats.
+- **Dark Mode:** A sleek, minimal design system using glassmorphism.
+
+---
+
+## 🏗️ Hybrid Service Architecture
+- **API Gateway (Node.js):** Handles user sessions, lightweight jobs, and AI orchestration.
+- **Core Engine (.NET):** Handles high-performance document serialization and legacy logic.
+- **Message Bus (RabbitMQ):** Manages asynchronous cinematification jobs between Node and .NET workers.
+- **State Sync (Redis):** Ensures real-time state consistency across distributed instances.
+
+---
+*Architecture audit: 2026-03-30*

@@ -63,6 +63,8 @@ export interface PipelineContext {
     onProgress?: (percent: number, message: string) => void;
     /** Optional chunk callback for streaming updates */
     onChunk?: (blocks: CinematicBlock[], isDone: boolean) => void;
+    /** Optional abort signal for cancellation */
+    signal?: AbortSignal;
     /** Readability analysis results (populated by ReadabilityAnalysisStage) */
     readability?: ReadabilityMetrics;
     /** Sentiment flow analysis (populated by SentimentEnrichmentStage) */
@@ -85,8 +87,17 @@ export interface PipelineContext {
 export interface PipelineStage {
     /** Human-readable stage name for progress reporting */
     readonly name: string;
-    /** Execute this stage, mutating the pipeline context */
+    /**
+     * Execute this stage, mutating the pipeline context.
+     * Should check for cancellation (context.signal) and report progress (context.onProgress).
+     */
     execute(context: PipelineContext): Promise<void> | void;
+}
+// Utility: Check for cancellation and throw if aborted
+export function checkCancelled(context: PipelineContext) {
+    if (context.signal?.aborted) {
+        throw new Error('Pipeline cancelled');
+    }
 }
 
 // ─── Built-in Stages ───────────────────────────────────────
@@ -96,6 +107,8 @@ export class TextCleaningStage implements PipelineStage {
     readonly name = 'Text Cleaning';
 
     execute(context: PipelineContext): void {
+        checkCancelled(context);
+        context.onProgress?.(0.05, 'Cleaning text...');
         context.text = cleanExtractedText(context.text);
     }
 }
@@ -105,6 +118,8 @@ export class ParagraphReconstructionStage implements PipelineStage {
     readonly name = 'Paragraph Reconstruction';
 
     execute(context: PipelineContext): void {
+        checkCancelled(context);
+        context.onProgress?.(0.10, 'Reconstructing paragraphs...');
         context.text = reconstructParagraphs(context.text);
     }
 }
@@ -114,6 +129,7 @@ export class AICinematificationStage implements PipelineStage {
     readonly name = 'AI Cinematification';
 
     async execute(context: PipelineContext): Promise<void> {
+        checkCancelled(context);
         if (!context.aiConfig) {
             throw new Error('AICinematificationStage requires aiConfig in the pipeline context');
         }
@@ -123,6 +139,7 @@ export class AICinematificationStage implements PipelineStage {
             context.aiConfig,
             context.onProgress,
             context.onChunk,
+            context.signal
         );
 
         context.blocks = result.blocks;
@@ -138,6 +155,8 @@ export class OfflineCinematificationStage implements PipelineStage {
     readonly name = 'Offline Cinematification';
 
     execute(context: PipelineContext): void {
+        checkCancelled(context);
+        context.onProgress?.(0.20, 'Cinematifying (offline)...');
         const result = cinematifyOffline(context.text);
 
         context.blocks = result.blocks;
@@ -155,6 +174,8 @@ export class ReadabilityAnalysisStage implements PipelineStage {
     readonly name = 'Readability Analysis';
 
     execute(context: PipelineContext): void {
+        checkCancelled(context);
+        context.onProgress?.(0.60, 'Analyzing readability...');
         context.readability = analyzeReadability(context.text);
     }
 }
@@ -164,6 +185,8 @@ export class SentimentEnrichmentStage implements PipelineStage {
     readonly name = 'Sentiment Enrichment';
 
     execute(context: PipelineContext): void {
+        checkCancelled(context);
+        context.onProgress?.(0.70, 'Analyzing sentiment...');
         context.sentiment = analyzeSentimentFlow(context.text);
 
         // Enrich blocks that lack emotion tags with sentiment-derived emotions
@@ -188,6 +211,8 @@ export class PacingAnalysisStage implements PipelineStage {
     readonly name = 'Pacing Analysis';
 
     execute(context: PipelineContext): void {
+        checkCancelled(context);
+        context.onProgress?.(0.80, 'Analyzing pacing...');
         context.pacing = analyzePacing(context.blocks);
     }
 }
@@ -197,6 +222,8 @@ export class TextStatisticsStage implements PipelineStage {
     readonly name = 'Text Statistics';
 
     execute(context: PipelineContext): void {
+        checkCancelled(context);
+        context.onProgress?.(0.85, 'Computing text statistics...');
         context.textStats = computeTextStatistics(context.text);
     }
 }
@@ -206,6 +233,8 @@ export class NarrativeAnalysisStage implements PipelineStage {
     readonly name = 'Narrative Analysis';
 
     execute(context: PipelineContext): void {
+        checkCancelled(context);
+        context.onProgress?.(0.90, 'Analyzing narrative mode...');
         const paragraphs = context.text
             .split(/\n\n+/)
             .map(p => p.trim())
@@ -225,6 +254,8 @@ export class SceneSegmentationStage implements PipelineStage {
     readonly name = 'Scene Segmentation';
 
     execute(context: PipelineContext): void {
+        checkCancelled(context);
+        context.onProgress?.(0.95, 'Segmenting scenes...');
         const paragraphs = context.text
             .split(/\n\n+/)
             .map(p => p.trim())
@@ -274,6 +305,7 @@ export class CinematificationPipeline {
             aiConfig?: AIConfig;
             onProgress?: (percent: number, message: string) => void;
             onChunk?: (blocks: CinematicBlock[], isDone: boolean) => void;
+            signal?: AbortSignal;
         } = {},
     ): Promise<CinematificationResult> {
         const context: PipelineContext = {
@@ -290,9 +322,11 @@ export class CinematificationPipeline {
             aiConfig: options.aiConfig,
             onProgress: options.onProgress,
             onChunk: options.onChunk,
+            signal: options.signal,
         };
 
         for (const stage of this.stages) {
+            checkCancelled(context);
             await stage.execute(context);
         }
 

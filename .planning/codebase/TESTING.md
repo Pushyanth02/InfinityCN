@@ -1,47 +1,31 @@
-# Testing Strategy
+# Testing Strategy: InfinityCN
+## Comprehensive Validation
 
-**Analysis Date:** 2026-03-25
-
-## Tools & Configuration
-
-- **Test Runner:** Vitest
-- **Environment:** `jsdom` (simulates browser environment)
-- **Assertion Library:** Vitest (Expect) with `@testing-library/jest-dom` matchers.
-- **Setup:** `src/test/setup.ts` (Global mocks for `matchMedia`, etc.)
-
-## Test Structure
-
-Tests are co-located within feature directories in `__tests__` folders:
-- `src/components/__tests__/*.test.tsx` — Component rendering and user interaction.
-- `src/lib/__tests__/*.test.ts` — Engine logic, pipeline, AI routing.
-- `src/store/__tests__/*.test.ts` — Global state transitions.
-
-## Key Test Categories
-
-### 1. Engine Logic (Critical)
-- **Pipeline:** Verifies the sequential flow from raw text to cinematified blocks.
-- **AI Engine:** Mocks AI responses and validates JSON parsing.
-- **Segmentation:** Correctness of chapter and scene splitting.
-
-### 2. UI/UX
-- **Reader Rendering:** Ensures cinematic blocks (beats, SFX, transitions) display correctly.
-- **Upload Flow:** Mocks file drops and ensures the processing overlay appears.
-
-### 3. Persistence
-- **IndexedDB:** Validates Dexie store/load operations (using `indexeddb-fast-mock` if necessary, or `jsdom`).
-
-## Running Tests
-
-```bash
-# Run all tests
-npm test
-
-# Run tests in watch mode
-npm run test:watch
-
-# UI test runner
-npx vitest --ui
-```
+**Analysis Date:** 2026-03-30
+**Standard:** Verify Every Phase
 
 ---
-*Testing audit: 2026-03-25*
+
+## 🏛️ Frontend Testing (React)
+- **Framework:** Vitest 4.0.18.
+- **Tools:** `@testing-library/react` and `jsdom`.
+- **Strategy:**
+  - **Unit Testing:** Focus on core cinematifier logic in `src/lib/cinematifier` (segmentation, sentiment analysis, parsing).
+  - **Component Testing:** Verify the "Cinematic Reader" rendering and dynamic typography adjustments.
+  - **Visual Audit:** Cross-phase visual audit of all implemented UI pillars.
+
+## 🏗️ Backend Testing (.NET)
+- **Framework:** NUnit and xUnit.
+- **Strategy:**
+  - **Core Integration:** Testing the document transformation pipeline between .NET and Node.js.
+  - **Mocking:** Intensive mocking of external AI providers to test logic isolation.
+
+## 🧪 GSD Verification Requirements
+Every phase of work must be tested against:
+1. **Valid Input:** Standard use cases with normal story length.
+2. **Invalid Input:** Malformed files, unexpected JSON, or empty documents.
+3. **Large Input:** 100K+ word novels to ensure no memory leaks or UI lag.
+4. **Failure Scenarios:** Disconnected internet, AI timeout, or processing service crash.
+
+---
+*Testing audit: 2026-03-30*

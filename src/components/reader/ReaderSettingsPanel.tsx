@@ -1,13 +1,14 @@
 /**
  * ReaderSettingsPanel.tsx — Reader Settings Dropdown
  *
- * Controls for font size, line spacing, immersion level, dyslexia font,
- * dark/light theme, and AI provider display.
+ * Cinematic Editorial glassmorphic settings panel that slides
+ * down from the reader header. Controls font size, line spacing,
+ * immersion level, dyslexia font, dark/light theme, and AI provider display.
  */
 
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Minus, Plus, Moon, Sun } from 'lucide-react';
+import { Minus, Plus, Moon, Sun, BookmarkCheck } from 'lucide-react';
 import type { ImmersionLevel } from '../../types/cinematifier';
 
 interface ReaderSettingsPanelProps {
@@ -41,54 +42,67 @@ export const ReaderSettingsPanel: React.FC<ReaderSettingsPanelProps> = ({
 }) => {
     return (
         <motion.div
-            className="cine-settings"
-            initial={{ opacity: 0, y: -20 }}
+            className="cine-settings-overlay"
+            initial={{ opacity: 0, y: -12 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
+            exit={{ opacity: 0, y: -12 }}
+            transition={{ duration: 0.2 }}
         >
-            <div className="cine-settings-group">
-                <label>Font Size</label>
-                <div className="cine-settings-row">
-                    <button
-                        className="cine-btn cine-btn--sm"
-                        onClick={() => setFontSize(fontSize - 2)}
-                    >
-                        <Minus size={14} />
-                    </button>
-                    <span className="cine-settings-value">{fontSize}px</span>
-                    <button
-                        className="cine-btn cine-btn--sm"
-                        onClick={() => setFontSize(fontSize + 2)}
-                    >
-                        <Plus size={14} />
-                    </button>
+            {/* Typography Section */}
+            <div className="cine-settings-section">
+                <h4 className="cine-settings-section-title">Typography</h4>
+
+                <div className="cine-setting-row">
+                    <span className="cine-setting-label">Font Size</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <button
+                            className="cine-btn--icon"
+                            onClick={() => setFontSize(Math.max(12, fontSize - 1))}
+                            aria-label="Decrease font size"
+                        >
+                            <Minus size={14} />
+                        </button>
+                        <span className="cine-setting-value">{fontSize}px</span>
+                        <button
+                            className="cine-btn--icon"
+                            onClick={() => setFontSize(Math.min(32, fontSize + 1))}
+                            aria-label="Increase font size"
+                        >
+                            <Plus size={14} />
+                        </button>
+                    </div>
+                </div>
+
+                <div className="cine-setting-row">
+                    <span className="cine-setting-label">Line Spacing</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <button
+                            className="cine-btn--icon"
+                            onClick={() => setLineSpacing(Math.max(1, +(lineSpacing - 0.1).toFixed(1)))}
+                            aria-label="Decrease line spacing"
+                        >
+                            <Minus size={14} />
+                        </button>
+                        <span className="cine-setting-value">{lineSpacing.toFixed(1)}</span>
+                        <button
+                            className="cine-btn--icon"
+                            onClick={() => setLineSpacing(Math.min(3, +(lineSpacing + 0.1).toFixed(1)))}
+                            aria-label="Increase line spacing"
+                        >
+                            <Plus size={14} />
+                        </button>
+                    </div>
                 </div>
             </div>
-            <div className="cine-settings-group">
-                <label>Line Spacing</label>
-                <div className="cine-settings-row">
-                    <button
-                        className="cine-btn cine-btn--sm"
-                        onClick={() => setLineSpacing(lineSpacing - 0.2)}
-                    >
-                        <Minus size={14} />
-                    </button>
-                    <span className="cine-settings-value">{lineSpacing.toFixed(1)}</span>
-                    <button
-                        className="cine-btn cine-btn--sm"
-                        onClick={() => setLineSpacing(lineSpacing + 0.2)}
-                    >
-                        <Plus size={14} />
-                    </button>
-                </div>
-            </div>
-            <div className="cine-settings-group">
-                <label>Immersion</label>
-                <div className="cine-settings-row">
+
+            {/* Immersion Section */}
+            <div className="cine-settings-section">
+                <h4 className="cine-settings-section-title">Immersion</h4>
+                <div className="cine-immersion-segment">
                     {(['minimal', 'balanced', 'cinematic'] as const).map(level => (
                         <button
                             key={level}
-                            className={`cine-btn cine-btn--sm ${immersionLevel === level ? 'active' : ''}`}
+                            className={`cine-immersion-btn ${immersionLevel === level ? 'active' : ''}`}
                             onClick={() => setImmersionLevel(level)}
                         >
                             {level.charAt(0).toUpperCase() + level.slice(1)}
@@ -96,39 +110,55 @@ export const ReaderSettingsPanel: React.FC<ReaderSettingsPanelProps> = ({
                     ))}
                 </div>
             </div>
-            <div className="cine-settings-group">
-                <label>Dyslexia Font</label>
-                <button
-                    className={`cine-btn cine-btn--toggle ${dyslexiaFont ? 'active' : ''}`}
-                    onClick={toggleDyslexiaFont}
-                >
-                    {dyslexiaFont ? 'On' : 'Off'}
-                </button>
+
+            {/* Appearance Section */}
+            <div className="cine-settings-section">
+                <h4 className="cine-settings-section-title">Appearance</h4>
+
+                <div className="cine-setting-row">
+                    <span className="cine-setting-label">Theme</span>
+                    <button
+                        className="cine-btn cine-btn--sm"
+                        onClick={toggleDarkMode}
+                        style={{ gap: '6px' }}
+                    >
+                        {darkMode ? <Moon size={14} /> : <Sun size={14} />}
+                        {darkMode ? 'Theater' : 'Library'}
+                    </button>
+                </div>
+
+                <div className="cine-setting-row">
+                    <span className="cine-setting-label">Dyslexia Font</span>
+                    <button
+                        className={`cine-btn cine-btn--sm ${dyslexiaFont ? 'cine-btn--primary' : ''}`}
+                        onClick={toggleDyslexiaFont}
+                    >
+                        {dyslexiaFont ? 'On' : 'Off'}
+                    </button>
+                </div>
             </div>
-            <div className="cine-settings-group">
-                <label>Theme</label>
-                <button
-                    className={`cine-btn cine-btn--toggle ${darkMode ? 'active' : ''}`}
-                    onClick={toggleDarkMode}
-                >
-                    {darkMode ? <Moon size={16} /> : <Sun size={16} />}
-                    {darkMode ? 'Dark' : 'Light'}
-                </button>
-            </div>
-            <div className="cine-settings-group">
-                <label>AI Provider</label>
-                <span className="cine-settings-value cine-settings-value--muted">
-                    {aiProvider === 'none' ? 'Offline' : aiProvider}
-                </span>
-            </div>
-            {bookmarkCount > 0 && (
-                <div className="cine-settings-group">
-                    <label>Bookmarks</label>
-                    <span className="cine-settings-value cine-settings-value--muted">
-                        {bookmarkCount} chapter{bookmarkCount !== 1 ? 's' : ''}
+
+            {/* Info Section */}
+            <div className="cine-settings-section">
+                <h4 className="cine-settings-section-title">Info</h4>
+
+                <div className="cine-setting-row">
+                    <span className="cine-setting-label">AI Provider</span>
+                    <span className="cine-ai-provider-label">
+                        {aiProvider === 'none' ? 'Offline' : aiProvider}
                     </span>
                 </div>
-            )}
+
+                {bookmarkCount > 0 && (
+                    <div className="cine-setting-row">
+                        <span className="cine-setting-label">Bookmarks</span>
+                        <span className="cine-bookmark-badge">
+                            <BookmarkCheck size={12} />
+                            {bookmarkCount}
+                        </span>
+                    </div>
+                )}
+            </div>
         </motion.div>
     );
 };

@@ -1,0 +1,435 @@
+/**
+ * reader-components.css — Velvet Noir Reader Sub-Component Styles
+ *
+ * Styles for ChapterNav, ReaderHeader buttons, ReaderFooter,
+ * ReaderSettingsPanel, and OriginalTextView.
+ * Uses Velvet Noir tokens — no 1px solid borders.
+ */
+
+/* ═══════════════════════════════════════════════════════════
+   READER HEADER ICON BUTTONS
+   ═══════════════════════════════════════════════════════════ */
+
+.cine-btn--icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-sm);
+    border: none;
+    background: rgba(220, 38, 38, 0.08);
+    color: #dc2626;
+    cursor: pointer;
+    transition: color var(--transition-fast), background var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
+    flex-shrink: 0;
+}
+
+.cine-btn--icon:hover {
+    color: #fff;
+    background: #dc2626;
+    transform: scale(1.08);
+    box-shadow: 0 0 14px rgba(220, 38, 38, 0.45);
+}
+
+.cine-btn--icon:focus-visible {
+    outline: 2px solid #dc2626;
+    outline-offset: 2px;
+}
+
+.cine-btn--active {
+    color: #dc2626;
+    background: rgba(220, 38, 38, 0.15);
+}
+
+.cine-btn--active:hover {
+    color: #fff;
+    background: #dc2626;
+}
+
+.cine-btn--bookmarked {
+    color: #dc2626;
+    background: rgba(220, 38, 38, 0.15);
+}
+
+/* Book title in reader header */
+.cine-title {
+    font-family: var(--font-headline);
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--on-surface);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 240px;
+    margin: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MODE TOGGLE (Original / Cinematic)
+   ═══════════════════════════════════════════════════════════ */
+
+.cine-mode-toggle {
+    display: flex;
+    align-items: center;
+    background: var(--surface-container);
+    border-radius: var(--radius-full);
+    padding: 3px;
+    gap: 2px;
+}
+
+.cine-mode-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 13px;
+    border-radius: var(--radius-full);
+    border: none;
+    background: transparent;
+    color: var(--on-surface-variant);
+    font-family: var(--font-label);
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    white-space: nowrap;
+}
+
+.cine-mode-btn.active {
+    background: var(--primary-gradient);
+    color: var(--on-primary);
+    font-weight: 600;
+    box-shadow: 0 2px 8px var(--glow-primary);
+}
+
+.cine-mode-btn:not(.active):hover {
+    color: var(--on-surface);
+    background: var(--surface-container-high);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CHAPTER NAVIGATION OVERLAY (slide-in panel)
+   ═══════════════════════════════════════════════════════════ */
+
+.chapter-nav-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 190;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+}
+
+.chapter-nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 320px;
+    height: 100%;
+    z-index: 200;
+    background: var(--surface-container-low);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 4px 0 40px rgba(0, 0, 0, 0.4);
+}
+
+.chapter-nav-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--spacing-5) var(--spacing-5) var(--spacing-4);
+    background: var(--surface-container);
+    flex-shrink: 0;
+}
+
+.chapter-nav-header h3 {
+    font-family: var(--font-headline);
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: var(--on-surface);
+    margin: 0;
+}
+
+.chapter-nav-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-sm);
+    border: none;
+    background: transparent;
+    color: var(--on-surface-variant);
+    cursor: pointer;
+    transition: color var(--transition-fast), background var(--transition-fast);
+}
+.chapter-nav-close:hover { color: var(--on-surface); background: var(--surface-container-high); }
+
+.chapter-nav-list {
+    flex: 1;
+    overflow-y: auto;
+    list-style: none;
+    padding: var(--spacing-4) var(--spacing-3);
+    margin: 0;
+}
+
+.chapter-nav-item {
+    display: flex;
+    align-items: baseline;
+    gap: var(--spacing-3);
+    width: 100%;
+    padding: var(--spacing-3) var(--spacing-3);
+    border-radius: var(--radius-sm);
+    border: none;
+    background: transparent;
+    color: var(--on-surface-variant);
+    font-family: var(--font-headline);
+    font-size: 0.875rem;
+    cursor: pointer;
+    text-align: left;
+    transition: all var(--transition-fast);
+}
+
+.chapter-nav-item:hover { background: var(--surface-container); color: var(--on-surface); }
+
+.chapter-nav-item.active {
+    background: var(--surface-container);
+    color: var(--on-surface);
+    border-left: 3px solid var(--primary);
+    padding-left: calc(var(--spacing-3) - 3px);
+}
+
+.chapter-nav-number {
+    font-family: var(--font-label);
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--primary);
+    flex-shrink: 0;
+}
+
+.chapter-nav-title {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.chapter-nav-bookmark {
+    color: var(--primary);
+    flex-shrink: 0;
+}
+
+.chapter-nav-processed {
+    color: var(--secondary);
+    flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   READER FOOTER NAVIGATION
+   ═══════════════════════════════════════════════════════════ */
+
+.cine-nav-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    border-radius: var(--radius-sm);
+    border: none;
+    background: var(--surface-container);
+    color: var(--on-surface-variant);
+    font-family: var(--font-label);
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+.cine-nav-btn:hover { background: var(--surface-container-high); color: var(--on-surface); }
+.cine-nav-btn:disabled { opacity: 0.3; cursor: not-allowed; pointer-events: none; }
+
+.cine-reading-progress {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-3);
+    flex: 1;
+    justify-content: center;
+}
+
+.cine-progress-track-outer {
+    width: 120px;
+    height: 3px;
+    background: var(--surface-container-high);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+}
+
+.cine-progress-fill-inner {
+    height: 100%;
+    background: var(--primary-gradient);
+    border-radius: var(--radius-full);
+    transition: width 0.5s ease;
+}
+
+.cine-progress-label {
+    font-family: var(--font-label);
+    font-size: 0.75rem;
+    color: var(--on-surface-variant);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   READER SETTINGS PANEL
+   ═══════════════════════════════════════════════════════════ */
+
+.cine-settings-overlay {
+    position: absolute;
+    top: 56px;    /* below header */
+    right: 0;
+    width: 340px;
+    max-height: calc(100vh - 110px);
+    overflow-y: auto;
+    z-index: 150;
+    background: var(--surface-container-low);
+    border-radius: 0 0 0 var(--radius-xl);
+    box-shadow: var(--shadow-md);
+    padding: var(--spacing-6);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-5);
+    border-left: 1px solid var(--ghost-border);
+    border-bottom: 1px solid var(--ghost-border);
+}
+
+.cine-settings-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-4);
+}
+
+.cine-settings-section-title {
+    font-family: var(--font-label);
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--on-surface-variant);
+    margin: 0;
+}
+
+.cine-setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-3);
+}
+
+.cine-setting-label {
+    font-family: var(--font-label);
+    font-size: 0.8125rem;
+    color: var(--on-surface);
+    flex: 1;
+}
+
+.cine-setting-value {
+    font-family: var(--font-label);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--primary);
+    min-width: 32px;
+    text-align: right;
+}
+
+/* Immersion Level Segment */
+.cine-immersion-segment {
+    display: flex;
+    background: var(--surface-container);
+    border-radius: var(--radius-full);
+    padding: 3px;
+    gap: 2px;
+}
+
+.cine-immersion-btn {
+    flex: 1;
+    padding: 5px 8px;
+    border-radius: var(--radius-full);
+    border: none;
+    background: transparent;
+    color: var(--on-surface-variant);
+    font-family: var(--font-label);
+    font-size: 0.7rem;
+    font-weight: 500;
+    cursor: pointer;
+    text-align: center;
+    transition: all var(--transition-fast);
+}
+
+.cine-immersion-btn.active {
+    background: var(--surface-container-high);
+    color: var(--on-surface);
+    font-weight: 600;
+}
+
+/* Bookmark count badge */
+.cine-bookmark-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: var(--radius-full);
+    background: rgba(255, 179, 177, 0.12);
+    color: var(--primary);
+    font-family: var(--font-label);
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+
+/* AI Provider row */
+.cine-ai-provider-label {
+    font-family: var(--font-label);
+    font-size: 0.75rem;
+    color: var(--on-surface-variant);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   ORIGINAL TEXT VIEW
+   ═══════════════════════════════════════════════════════════ */
+
+.original-text-view {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-5);
+}
+
+.original-paragraph {
+    font-family: var(--font-body);
+    font-size: var(--cine-reader-font-size, 17px);
+    line-height: var(--cine-reader-line-height, 1.8);
+    color: var(--on-surface);
+    text-align: justify;
+    margin: 0;
+}
+
+/* Drop cap on first paragraph */
+.original-paragraph:first-child::first-letter {
+    font-size: 3.5em;
+    font-weight: 400;
+    line-height: 0.8;
+    float: left;
+    margin: 0.05em 0.08em 0 0;
+    color: var(--primary);
+    font-family: var(--font-body);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   EMOTION HEATMAP (tweaked for new tokens)
+   ═══════════════════════════════════════════════════════════ */
+
+.cine-emotion-heatmap {
+    display: flex;
+    gap: 3px;
+    margin: 0 auto var(--spacing-8);
+    max-width: 760px;
+    padding: 0;
+    flex-wrap: wrap;
+}

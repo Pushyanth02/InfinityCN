@@ -7,7 +7,7 @@
 export { CinematicBlockView } from './CinematicBlockView';
 export { OriginalTextView } from './OriginalTextView';
 export { EmotionHeatmap } from './EmotionHeatmap';
-export { ChapterNav } from './ChapterNav';
+export { default as ChapterNav } from './ChapterNav';
 export { ReaderHeader } from './ReaderHeader';
 export { ReaderSettingsPanel } from './ReaderSettingsPanel';
 export { ReaderFooter } from './ReaderFooter';

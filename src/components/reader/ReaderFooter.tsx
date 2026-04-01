@@ -1,13 +1,11 @@
 /**
  * ReaderFooter.tsx — Chapter Navigation Footer
- *
- * Displays previous/next navigation buttons, chapter position indicator,
- * and a reading progress bar.
  */
-
 import React from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { ReadingProgress, Book } from '../../types/cinematifier';
+import { Scrubber } from '../ui/Scrubber';
+import { Button } from '../ui/Button';
 
 interface ReaderFooterProps {
     book: Book;
@@ -25,50 +23,42 @@ export const ReaderFooter: React.FC<ReaderFooterProps> = ({
     const canGoPrev = currentChapterIndex > 0;
     const canGoNext = currentChapterIndex < book.chapters.length - 1;
 
+    const progressPercent = ((readingProgress?.readChapters.length || 0) / book.chapters.length) * 100;
+
     return (
-        <footer className="cine-footer">
-            <button
-                className="cine-nav-btn"
+        <footer className="glass-panel ghost-border-bottom" style={{ position: 'fixed', bottom: 0, left: 0, right: 0, padding: 'var(--spacing-4) var(--spacing-8)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 50 }}>
+            <Button
+                variant="ghost"
                 onClick={() => setCurrentChapter(currentChapterIndex - 1)}
                 disabled={!canGoPrev}
             >
-                <ChevronLeft size={24} />
-                <span>Previous</span>
-            </button>
+                <ChevronLeft size={20} style={{ marginRight: '8px' }} />
+                Previous
+            </Button>
 
-            <div className="cine-progress">
-                <span>
-                    {currentChapterIndex + 1} / {book.chapters.length}
+            <div style={{ flexGrow: 1, maxWidth: '400px', margin: '0 var(--spacing-8)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span className="typography-label" style={{ color: 'var(--on-surface-variant)' }}>
+                        {currentChapterIndex + 1} / {book.chapters.length}
+                    </span>
                     {readingProgress && readingProgress.readChapters.length > 0 && (
-                        <span
-                            style={{
-                                marginLeft: '0.5rem',
-                                color: 'var(--cine-gold)',
-                                fontSize: '0.625rem',
-                            }}
-                        >
+                        <span className="typography-label" style={{ color: 'var(--secondary)' }}>
                             {readingProgress.readChapters.length} read
                         </span>
                     )}
-                </span>
-                <div className="cine-progress-bar">
-                    <div
-                        className="cine-progress-fill"
-                        style={{
-                            width: `${((readingProgress?.readChapters.length || 0) / book.chapters.length) * 100}%`,
-                        }}
-                    />
                 </div>
+                <Scrubber progress={progressPercent} />
             </div>
 
-            <button
-                className="cine-nav-btn"
+            <Button
+                variant="ghost"
                 onClick={() => setCurrentChapter(currentChapterIndex + 1)}
                 disabled={!canGoNext}
             >
-                <span>Next</span>
-                <ChevronRight size={24} />
-            </button>
+                Next
+                <ChevronRight size={20} style={{ marginLeft: '8px' }} />
+            </Button>
         </footer>
     );
 };
+

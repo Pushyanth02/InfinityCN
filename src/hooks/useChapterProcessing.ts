@@ -6,7 +6,7 @@
  * Extracted from CinematicReader.
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useCinematifierStore, getCinematifierAIConfig } from '../store/cinematifierStore';
 import { cinematifyText, cinematifyOffline, CinematificationPipeline } from '../lib/cinematifier';
 import { saveBook } from '../lib/cinematifierDb';
@@ -17,14 +17,19 @@ export function useChapterProcessing(
     currentChapterIndex: number,
     readerMode: ReaderMode,
 ) {
+
     const updateChapter = useCinematifierStore(s => s.updateChapter);
     const [isProcessingChapter, setIsProcessingChapter] = useState(false);
+    const abortControllerRef = useRef<AbortController | null>(null);
+
 
     const processCurrentChapter = useCallback(async () => {
         if (!currentChapter || currentChapter.isProcessed) return;
         if (isProcessingChapter) return;
 
         setIsProcessingChapter(true);
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
 
         try {
             const config = getCinematifierAIConfig();
@@ -32,6 +37,7 @@ export function useChapterProcessing(
 
             if (config.provider === 'none') {
                 const pipeline = CinematificationPipeline.createEnrichedOfflinePipeline();
+                // If pipeline supports abort signal, pass it here (future-proof)
                 result = await pipeline.execute(currentChapter.originalText);
             } else {
                 const accumulatedBlocks: CinematicBlock[] = [];
@@ -46,6 +52,7 @@ export function useChapterProcessing(
                             isProcessed: isDone,
                         });
                     },
+                    controller.signal
                 );
             }
 
@@ -60,6 +67,10 @@ export function useChapterProcessing(
                     console.warn('[CinematicReader] Failed to persist book:', e);
                 });
         } catch (err) {
+            if (controller.signal.aborted) {
+                // Cancelled by user, do not update chapter
+                return;
+            }
             console.error('[CinematicReader] Process error:', err);
             if (!currentChapter) return;
             const result = cinematifyOffline(currentChapter.originalText);
@@ -75,8 +86,15 @@ export function useChapterProcessing(
                 });
         } finally {
             setIsProcessingChapter(false);
+            abortControllerRef.current = null;
         }
     }, [currentChapter, currentChapterIndex, isProcessingChapter, updateChapter]);
+
+    const cancelProcessing = useCallback(() => {
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+        }
+    }, []);
 
     // Auto-process chapter when it changes
     useEffect(() => {
@@ -88,5 +106,6 @@ export function useChapterProcessing(
     return {
         isProcessingChapter,
         processCurrentChapter,
+        cancelProcessing,
     };
 }

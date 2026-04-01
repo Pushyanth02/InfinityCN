@@ -1,5 +1,5 @@
 /**
- * useFileProcessing — File upload and cinematification hook
+        async (file: File, options: ProcessOptions = {}) => {
  *
  * Handles the full processing pipeline: text extraction → chapter
  * segmentation → cinematification (server or client path) → persistence.
@@ -19,14 +19,8 @@ import {
     reconstructParagraphs,
     extractOverallMetadata,
 } from '../lib/cinematifier';
-import {
-    isServerProcessingAvailable,
-    submitBookForServerProcessing,
-    connectToJobEvents,
-    getProcessedChapter,
-} from '../lib/serverJobs';
+
 import type { Book, CharacterAppearance, ProcessingProgress } from '../types/cinematifier';
-import { toClientBlocks } from '../types/cinematifier';
 
 export function useFileProcessing(onComplete: () => void) {
     const setBook = useCinematifierStore(s => s.setBook);
@@ -86,27 +80,8 @@ export function useFileProcessing(onComplete: () => void) {
 
                 setBook(bookWithId);
 
-                // ── Server-side processing path ──────────────────────
                 const config = getCinematifierAIConfig();
                 const totalChapters = bookWithId.chapters.length;
-
-                if (
-                    isServerProcessingAvailable() &&
-                    config.provider !== 'none' &&
-                    config.provider !== 'chrome'
-                ) {
-                    await processServerSide(
-                        bookWithId,
-                        totalChapters,
-                        config,
-                        setProgress,
-                        updateChapter,
-                        updateBook,
-                        setProcessing,
-                        onComplete,
-                    );
-                    return;
-                }
 
                 // ── Client-side processing path ───────────────────────
                 await processClientSide(
@@ -129,105 +104,6 @@ export function useFileProcessing(onComplete: () => void) {
     );
 
     return processFile;
-}
-
-// ─── Server-side processing helper ──────────────────────────
-
-async function processServerSide(
-    bookWithId: Book,
-    totalChapters: number,
-    config: ReturnType<typeof getCinematifierAIConfig>,
-    setProgress: (progress: ProcessingProgress) => void,
-    updateChapter: (
-        index: number,
-        updates: Partial<import('../types/cinematifier').Chapter>,
-    ) => void,
-    updateBook: (updates: Partial<Book>) => void,
-    setProcessing: (v: boolean) => void,
-    onComplete: () => void,
-) {
-    setProgress({
-        phase: 'cinematifying',
-        currentChapter: 0,
-        totalChapters,
-        percentComplete: 50,
-        message: 'Submitting to server for processing...',
-    });
-
-    const chaptersPayload = bookWithId.chapters.map(ch => ({
-        title: ch.title,
-        originalText: ch.originalText,
-    }));
-
-    await submitBookForServerProcessing(
-        bookWithId.id,
-        bookWithId.title,
-        chaptersPayload,
-        config.provider,
-    );
-
-    // Connect SSE and wait for completion
-    await new Promise<void>((resolve, reject) => {
-        const cleanup = connectToJobEvents(
-            bookWithId.id,
-            // onProgress
-            event => {
-                const processed = event.processedChapters ?? 0;
-                const total = event.totalChapters ?? totalChapters;
-                const pct = 50 + Math.round((processed / total) * 45);
-                setProgress({
-                    phase: 'cinematifying',
-                    currentChapter: (event.chapterIndex ?? processed) + 1,
-                    totalChapters: total,
-                    percentComplete: pct,
-                    message: `Server processing chapter ${(event.chapterIndex ?? processed) + 1} of ${total}...`,
-                });
-            },
-            // onComplete
-            async () => {
-                try {
-                    for (let i = 0; i < totalChapters; i++) {
-                        const result = await getProcessedChapter(bookWithId.id, i);
-                        updateChapter(i, {
-                            cinematifiedBlocks: toClientBlocks(result.blocks),
-                            cinematifiedText: result.rawText,
-                            isProcessed: true,
-                        });
-                    }
-                    resolve();
-                } catch (err) {
-                    reject(err);
-                }
-            },
-            // onError
-            errorMsg => {
-                cleanup();
-                reject(new Error(errorMsg));
-            },
-        );
-    });
-
-    // Finalize
-    updateBook({ status: 'ready' as const });
-
-    setProgress({
-        phase: 'complete',
-        currentChapter: totalChapters,
-        totalChapters,
-        percentComplete: 100,
-        message: 'Ready to read!',
-    });
-
-    const finalBook = useCinematifierStore.getState().book;
-    if (finalBook) {
-        saveBook(finalBook).catch(err =>
-            console.warn('[Cinematifier] Failed to persist book:', err),
-        );
-    }
-
-    await new Promise(r => setTimeout(r, 500));
-    setProcessing(false);
-    onComplete();
 }
 
 // ─── Client-side processing helper ──────────────────────────

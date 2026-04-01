@@ -1,45 +1,41 @@
-# Coding Conventions
+# Coding Conventions: InfinityCN
+## Development & Quality Standards
 
-**Analysis Date:** 2026-03-25
-
-## General Principles
-
-- **Narrative First:** All code must improve pacing, emotional flow, or immersion.
-- **Cinematifier Core:** Follow the `Input -> Pipeline -> Structured Data -> Runtime -> UI` flow.
-- **TypeScript Strict:** No `any`, explicit types for all interfaces and functions.
-
-## Naming Conventions
-
-- **Components:** `PascalCase` (e.g., `CinematicReader.tsx`)
-- **Hooks:** `camelCase` with `use` prefix (e.g., `useAmbientAudio.ts`)
-- **Variables/Functions:** `camelCase`
-- **Constants:** `SCREAMING_SNAKE_CASE` (e.g., `AI_JSON_TIMEOUT_MS`)
-- **Files:** `camelCase` for utilities, `PascalCase` for React components.
-
-## Styles & UI
-
-- **CSS Modules:** Vanilla CSS with scoped classes (pref. `cine-` prefix).
-- **Icons:** `lucide-react`
-- **Animations:** `framer-motion` for all transitions.
-- **Max Width:** Typography should target `~720px` for optimal readability.
-
-## State Management
-
-- **Zustand:** Used for global application state (`src/store/`).
-- **Dexie:** Source of truth for persistent data (books, progress).
-- **Persistence:** Book data must never reside only in memory; sync to IndexedDB immediately after processing.
-
-## AI Interaction
-
-- **Structured Output:** AI must return valid JSON (validated in `aiEngine.ts` or server worker).
-- **Prompting:** Use system prompts to enforce formatting. Avoid markdown in AI output unless intended for final render.
-- **Fallback:** Always provide an offline fallback (`offlineEngine.ts`) using local ML if the cloud provider fails.
-
-## Git & Workflow
-
-- **Atomic Commits:** Prefer small, focused commits.
-- **Linting:** Pre-commit hooks (`husky`, `lint-staged`) enforce ESLint and Prettier rules.
-- **Branches:** Feature-based branching.
+**Analysis Date:** 2026-03-30
+**Standard:** TypeScript Strict & Clean Code
 
 ---
-*Conventions audit: 2026-03-25*
+
+## 🏛️ General Principles
+- **Narrative First:** All code must improve pacing, emotional flow, or immersion.
+- **Cinematifier Core:** Follow the `Input -> Pipeline -> Structured Data -> Runtime -> UI` flow.
+- **Systems > Features:** Build reusable, modular systems.
+- **Clean Code:** Remove unused code, dead functions, and duplicate logic. Prefer clarity over cleverness.
+
+## ⌨️ TypeScript Styling
+- **Strict Mode:** No `any`. Explicit types required for all function signatures and complex objects.
+- **Zustand Stores:** Explicit interface definitions for all store state and actions.
+- **Interfaces over Types:** Use `interface` for object definitions, `type` for unions/aliases.
+
+## 📁 Naming Conventions
+- **PascalCase:** React Components (`CinematicReader.tsx`), .NET Classes.
+- **camelCase:** Hooks (`useAmbientAudio.ts`), variables, functions, and utility files.
+- **SCREAMING_SNAKE_CASE:** Global constants and environment variables.
+
+## 🎨 UI & UX Standards
+- **Typography:** Target `~720px` max width for text containers to ensure readability.
+- **Styles:** Vanilla CSS or CSS Modules with `cine-` prefix.
+- **Animations:** Fluid, subtle transitions via `framer-motion`.
+
+## 🧪 Testing Standards
+- **Frontend:** Vitest for all logical units in `src/lib/cinematifier`.
+- **Backend:** NUnit or xUnit for .NET core services.
+- **Verification:** Mandatory checks for valid/invalid/large inputs and failure scenarios.
+
+## ⚙️ Git Workflow
+- **GSD Protocol:** Follow `PLAN -> BUILD -> VERIFY -> CLEAN -> SHIP`.
+- **Atomic Commits:** Small, focused meaningful commits.
+- **Pre-commit Hooks:** Automatic linting and formatting via Husky.
+
+---
+*Conventions audit: 2026-03-30*

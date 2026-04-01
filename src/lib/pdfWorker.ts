@@ -1,3 +1,16 @@
+// ─── Text Normalization Utility ──────────────────────────
+/**
+ * Normalize extracted text: trims, collapses whitespace, removes invisible chars.
+ */
+function normalizeExtractedText(text: string): string {
+    return text
+        .replace(/[\u200B-\u200D\uFEFF]/g, '') // Remove zero-width/invisible chars
+        .replace(/\r\n|\r/g, '\n') // Normalize newlines
+        .replace(/\s+$/gm, '') // Trim trailing whitespace on each line
+        .replace(/\n{3,}/g, '\n\n') // Collapse 3+ newlines to 2
+        .replace(/[ \t]+/g, ' ') // Collapse spaces/tabs
+        .trim();
+}
 /**
  * pdfWorker.ts — Document text extraction
  * Supports PDF, EPUB, DOCX, PPTX, and TXT formats.
@@ -70,19 +83,27 @@ export const ACCEPTED_EXTENSIONS = '.pdf,.epub,.docx,.pptx,.txt';
  */
 export async function extractText(file: File): Promise<string> {
     const format = detectFormat(file);
-
-    switch (format) {
-        case 'txt':
-            return file.text();
-        case 'pdf':
-            return extractTextFromPDF(file);
-        case 'epub':
-            return extractTextFromEPUB(file);
-        case 'docx':
-            return extractTextFromDOCX(file);
-        case 'pptx':
-            return extractTextFromPPTX(file);
+    let raw = '';
+    try {
+        switch (format) {
+            case 'txt':
+                raw = await file.text(); break;
+            case 'pdf':
+                raw = await extractTextFromPDF(file); break;
+            case 'epub':
+                raw = await extractTextFromEPUB(file); break;
+            case 'docx':
+                raw = await extractTextFromDOCX(file); break;
+            case 'pptx':
+                raw = await extractTextFromPPTX(file); break;
+        }
+    } catch (err) {
+        if (err instanceof Error) {
+            throw new Error(`Failed to extract text from ${file.name}: ${err.message}`, { cause: err });
+        }
+        throw err;
     }
+    return normalizeExtractedText(raw);
 }
 
 // ─── PDF Extraction ───────────────────────────────────────
@@ -291,40 +312,32 @@ function decodeUTF8(data: Uint8Array): string {
 
 async function extractTextFromEPUB(file: File): Promise<string> {
     const files = await unzipFile(file);
-
     // 1. Read container.xml to find the OPF file
     const containerData = files['META-INF/container.xml'];
     if (!containerData) {
         throw new Error('Invalid EPUB: missing META-INF/container.xml');
     }
-
     const containerXml = decodeUTF8(containerData);
     const parser = new DOMParser();
     const containerDoc = parser.parseFromString(containerXml, 'application/xml');
-
     if (containerDoc.querySelector('parsererror')) {
         throw new Error('Invalid EPUB: container.xml is malformed');
     }
-
     const rootFileEl = containerDoc.querySelector('rootfile');
     const opfPath = rootFileEl?.getAttribute('full-path');
     if (!opfPath) {
         throw new Error('Invalid EPUB: cannot locate content file');
     }
-
     // 2. Read the OPF file to get the spine (reading order)
     const opfData = files[opfPath];
     if (!opfData) {
         throw new Error(`Invalid EPUB: missing content file at ${opfPath}`);
     }
-
     const opfDir = opfPath.includes('/') ? opfPath.substring(0, opfPath.lastIndexOf('/') + 1) : '';
     const opfDoc = parser.parseFromString(decodeUTF8(opfData), 'application/xml');
-
     if (opfDoc.querySelector('parsererror')) {
         throw new Error('Invalid EPUB: content file is malformed');
     }
-
     // Build manifest map: id → href
     const manifest = new Map<string, string>();
     for (const item of opfDoc.querySelectorAll('manifest > item')) {
@@ -334,7 +347,6 @@ async function extractTextFromEPUB(file: File): Promise<string> {
             manifest.set(id, href);
         }
     }
-
     // Get spine order
     const spineItems: string[] = [];
     for (const itemref of opfDoc.querySelectorAll('spine > itemref')) {
@@ -344,72 +356,54 @@ async function extractTextFromEPUB(file: File): Promise<string> {
             if (href) spineItems.push(href);
         }
     }
-
     if (spineItems.length === 0) {
         throw new Error('Invalid EPUB: no readable content found in spine');
     }
-
-    // 3. Extract text from each XHTML chapter in spine order
-    const chapters: string[] = [];
-
-    for (const href of spineItems) {
+    // 3. Extract text from each XHTML chapter in spine order (parallelized)
+    const chapters: string[] = await Promise.all(spineItems.map(async href => {
         const filePath = opfDir + href;
         const data = files[filePath];
-        if (!data) continue;
-
+        if (!data) return '';
         const html = decodeUTF8(data);
         const doc = parser.parseFromString(html, 'application/xhtml+xml');
         const body = doc.querySelector('body');
-        if (body) {
-            const text = body.textContent?.trim();
-            if (text) chapters.push(text);
-        }
+        return body?.textContent?.trim() || '';
+    }));
+    const filtered = chapters.filter(Boolean);
+    if (filtered.length === 0) {
+        throw new Error('Could not extract text from EPUB. The file may be DRM-protected or empty.');
     }
-
-    if (chapters.length === 0) {
-        throw new Error('Could not extract text from EPUB. The file may be DRM-protected.');
-    }
-
-    return chapters.join('\n\n');
+    return filtered.join('\n\n');
 }
 
 // ─── DOCX Extraction ─────────────────────────────────────
 
 async function extractTextFromDOCX(file: File): Promise<string> {
     const files = await unzipFile(file);
-
     const docData = files['word/document.xml'];
     if (!docData) {
         throw new Error('Invalid DOCX: missing word/document.xml');
     }
-
     const parser = new DOMParser();
     const doc = parser.parseFromString(decodeUTF8(docData), 'application/xml');
-
     const WP_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
-    const paragraphs = doc.getElementsByTagNameNS(WP_NS, 'p');
-    const textParts: string[] = [];
-
-    for (let i = 0; i < paragraphs.length; i++) {
-        const textNodes = paragraphs[i].getElementsByTagNameNS(WP_NS, 't');
+    const paragraphs = Array.from(doc.getElementsByTagNameNS(WP_NS, 'p'));
+    // Parallelize extraction of paragraph text
+    const textParts: string[] = await Promise.all(paragraphs.map(async para => {
+        const textNodes = para.getElementsByTagNameNS(WP_NS, 't');
         const paraText: string[] = [];
-
         for (let j = 0; j < textNodes.length; j++) {
             const content = textNodes[j].textContent;
             if (content) paraText.push(content);
         }
-
         const joined = paraText.join('');
-        if (joined.trim()) {
-            textParts.push(joined);
-        }
-    }
-
-    if (textParts.length === 0) {
+        return joined.trim() ? joined : '';
+    }));
+    const filtered = textParts.filter(Boolean);
+    if (filtered.length === 0) {
         throw new Error('Could not extract text from DOCX. The file may be empty or corrupted.');
     }
-
-    return textParts.join('\n\n');
+    return filtered.join('\n\n');
 }
 
 // ─── PPTX Extraction ─────────────────────────────────────

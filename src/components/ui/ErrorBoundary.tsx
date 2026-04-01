@@ -28,27 +28,12 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                 this.props.fallback ?? (
                     <div
                         role="alert"
-                        style={{
-                            padding: '1rem 1.5rem',
-                            margin: '1rem',
-                            background: 'rgba(239, 68, 68, 0.1)',
-                            border: '1px solid rgba(239, 68, 68, 0.3)',
-                            borderRadius: '8px',
-                            color: '#f87171',
-                            fontSize: '0.875rem',
-                        }}
+                        className="cine-error-alert"
                     >
                         Something went wrong loading this component.
                         <button
                             onClick={() => this.setState({ hasError: false, error: null })}
-                            style={{
-                                marginLeft: '0.5rem',
-                                textDecoration: 'underline',
-                                background: 'none',
-                                border: 'none',
-                                color: 'inherit',
-                                cursor: 'pointer',
-                            }}
+                            className="cine-ml-05 cine-underline cine-btn-reset"
                         >
                             Try again
                         </button>

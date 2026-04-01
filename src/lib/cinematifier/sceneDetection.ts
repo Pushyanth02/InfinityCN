@@ -9,9 +9,16 @@
  * dream, memory), and improved scene-title derivation.
  */
 
-/** Matches time shifts, location changes, and narrative jumps that typically indicate scene breaks */
+/** Matches time shifts, location changes, whitespace dividers, and narrative jumps that typically indicate scene breaks */
 export const SCENE_BREAK_SIGNALS =
-    /(later that night|meanwhile|hours later|at dawn|suddenly|in another place|elsewhere|the next (morning|day|evening|night)|days later|weeks later|months later|years later|across town|back at|far away|on the other side|that morning|at nightfall|before sunrise|after sunset|in a flash|without warning|in an instant|moments later|a while later|at the same time|at that moment)/i;
+    /(later that night|meanwhile|hours later|at dawn|suddenly|in another place|elsewhere|the next (morning|day|evening|night)|days later|weeks later|months later|years later|across town|back at|far away|on the other side|that morning|at nightfall|before sunrise|after sunset|in a flash|without warning|in an instant|moments later|a while later|at the same time|at that moment|\*\*\*|---|###|\.{3,}|\s{3,})/i;
+
+/** Customizable scene break patterns (user/configurable) */
+export const CUSTOM_SCENE_BREAK_PATTERNS: RegExp[] = [
+    /^\s*[*\-#=~_]{3,}\s*$/, // e.g., *** --- ###
+    /^\s*\.{3,}\s*$/,       // e.g., ...
+    /^\s*\s*$/               // blank/whitespace-only lines (optional, can be toggled)
+];
 
 /** Matches preposition + optional article + capitalized location name (e.g., "in the Forest", "at Castle Rock") */
 export const LOCATION_PATTERN =
@@ -52,12 +59,21 @@ export function detectSceneBreaks(paragraphs: string[]): string[][] {
     let currentScene: string[] = [];
 
     for (const p of paragraphs) {
-        if (SCENE_BREAK_SIGNALS.test(p) && currentScene.length > 0) {
+        // Normalize paragraph for break detection
+        const normalized = p.toLowerCase().replace(/[.,!?;:()"'-]/g, ''); // preserve spaces
+        // Check for built-in and custom scene break signals (substring match)
+        const isCustomBreak = CUSTOM_SCENE_BREAK_PATTERNS.some(re => re.test(p));
+        const isSignalBreak = normalized.match(SCENE_BREAK_SIGNALS) !== null;
+        
+        if ((isCustomBreak || isSignalBreak) && currentScene.length > 0) {
             scenes.push(currentScene);
             currentScene = [];
         }
-
-        currentScene.push(p);
+        
+        // Drop the line entirely if it's just a structural divider
+        if (!isCustomBreak) {
+            currentScene.push(p);
+        }
     }
 
     if (currentScene.length) scenes.push(currentScene);
@@ -91,6 +107,11 @@ export function deriveSceneTitle(sceneParagraphs: string[], sceneNumber: number)
             return `${prefix} Scene ${sceneNumber}`;
         }
     }
+
+    // POV-based title: if a POV shift is detected, use the character's name (not pronoun)
+    const pov = detectPOVShift(sceneParagraphs);
+    const pronouns = ['He', 'She', 'They', 'We', 'I', 'You', 'It'];
+    if (pov && !pronouns.includes(pov)) return `${pov}'s Scene`;
 
     return `Scene ${sceneNumber}`;
 }

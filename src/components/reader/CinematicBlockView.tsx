@@ -236,11 +236,11 @@ export const CinematicBlockView = React.memo(function CinematicBlockView({
                                 title={`Tension: ${block.tensionScore}`}
                             >
                                 <div
-                                    className="cine-tension-bar"
+                                    className="cine-tension-bar cine-tension-bar-dynamic"
                                     style={{
-                                        width: `${block.tensionScore}%`,
-                                        backgroundColor: `hsl(${120 - block.tensionScore * 1.2}, 80%, 50%)`,
-                                    }}
+                                        '--cine-tension-bar-width': `${block.tensionScore}%`,
+                                        '--cine-tension-bar-color': `hsl(${120 - block.tensionScore * 1.2}, 80%, 50%)`
+                                    } as React.CSSProperties}
                                 />
                             </div>
                         )}

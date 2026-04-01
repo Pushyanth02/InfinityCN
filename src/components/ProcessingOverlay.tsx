@@ -1,48 +1,118 @@
 /**
- * ProcessingOverlay.tsx — Processing Status Overlay
+ * ProcessingOverlay.tsx — Cinematic book processing screen
  *
- * Displays a full-screen overlay with spinner, phase message,
- * progress bar, and an inspirational quote during document processing.
+ * Velvet Noir design system — "upload_processing_dark" reference.
+ * Full-screen glass overlay with amber glow, step progress,
+ * gradient progress bar, and animated film-strip accent.
  */
 
 import React from 'react';
-import type { ProcessingProgress } from '../types/cinematifier';
-import { getOfflineQuote } from '../lib/quotableApi';
+import { Film, Sparkles, BookOpen, Zap, FileText, CheckCircle } from 'lucide-react';
+
+interface ProcessingStep {
+    id: string;
+    label: string;
+    icon: React.ReactNode;
+}
 
 interface ProcessingOverlayProps {
-    progress: ProcessingProgress | null;
+    progress: {
+        stage: string;
+        percent: number;
+        detail?: string;
+    };
+}
+
+const STEPS: ProcessingStep[] = [
+    { id: 'extract',    label: 'Extracting manuscript text',      icon: <FileText size={16} /> },
+    { id: 'segment',   label: 'Segmenting into chapters',         icon: <BookOpen size={16} /> },
+    { id: 'structure', label: 'Mapping narrative structure',       icon: <Zap size={16} /> },
+    { id: 'cinematify',label: 'Applying cinematic engine',        icon: <Sparkles size={16} /> },
+    { id: 'finalize',  label: 'Finalizing the experience',        icon: <Film size={16} /> },
+];
+
+function getStepStatus(stepId: string, currentStage: string): 'done' | 'active' | 'pending' {
+    const stageOrder = ['extract', 'segment', 'structure', 'cinematify', 'finalize'];
+    const stepIdx  = stageOrder.indexOf(stepId);
+    const stageIdx = stageOrder.indexOf(currentStage);
+    if (stepIdx < stageIdx)  return 'done';
+    if (stepIdx === stageIdx) return 'active';
+    return 'pending';
 }
 
 export const ProcessingOverlay: React.FC<ProcessingOverlayProps> = ({ progress }) => {
-    if (!progress) return null;
-
-    // Deterministic quote selection based on progress phase (stable across re-renders)
-    const quote = getOfflineQuote(progress.message);
+    const { stage, percent, detail } = progress;
 
     return (
-        <div className="cine-processing-overlay cine-fade-in" role="status" aria-live="polite">
-            <div className="cine-processing-content">
-                <div className="cine-processing-spinner" aria-hidden="true" />
-                <p className="cine-processing-phase">{progress.message}</p>
-                <div
-                    className="cine-processing-bar"
-                    role="progressbar"
-                    aria-valuenow={progress.percentComplete}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-label={`Processing: ${progress.percentComplete}%`}
-                >
+        <div className="proc-backdrop" role="dialog" aria-modal="true" aria-label="Processing your manuscript" aria-live="polite">
+            {/* Ambient glows */}
+            <div className="proc-glow proc-glow--amber" aria-hidden="true" />
+            <div className="proc-glow proc-glow--rose"  aria-hidden="true" />
+
+            {/* Main card */}
+            <div className="proc-card">
+                {/* Film strip accent */}
+                <div className="proc-film-strip" aria-hidden="true">
+                    {Array.from({ length: 8 }).map((_, i) => (
+                        <div key={i} className={`proc-film-frame proc-film-frame--${(i % 3) + 1}`} />
+                    ))}
+                </div>
+
+                {/* Header */}
+                <div className="proc-card-header">
+                    <div className="proc-spinner-ring" aria-hidden="true">
+                        <Film size={24} color="var(--primary)" strokeWidth={1.5} />
+                    </div>
+                    <div>
+                        <h2 className="proc-title">Cinematifying your novel</h2>
+                        <p className="proc-subtitle">Your manuscript is being transformed into cinema</p>
+                    </div>
+                </div>
+
+                {/* Progress bar */}
+                <div className="proc-progress-track" role="progressbar" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100} aria-label={`Processing progress: ${percent}%`}>
                     <div
-                        className="cine-processing-bar-fill"
-                        style={{ width: `${progress.percentComplete}%` }}
+                        className="proc-progress-fill"
+                        style={{ width: `${Math.min(100, Math.max(0, percent))}%` }}
                     />
                 </div>
-                <span className="cine-processing-percent">{progress.percentComplete}%</span>
-                <blockquote className="cine-processing-quote">
-                    <p>"{quote.content}"</p>
-                    <footer>— {quote.author}</footer>
-                </blockquote>
+                <div className="proc-progress-labels">
+                    <span className="proc-stage-label">
+                        {detail || STEPS.find(s => s.id === stage)?.label || 'Processing…'}
+                    </span>
+                    <span className="proc-percent-label">{Math.round(percent)}%</span>
+                </div>
+
+                {/* Steps checklist */}
+                <ol className="proc-steps" aria-label="Processing steps">
+                    {STEPS.map(step => {
+                        const status = getStepStatus(step.id, stage);
+                        return (
+                            <li key={step.id} className={`proc-step proc-step--${status}`}>
+                                <div className="proc-step-icon" aria-hidden="true">
+                                    {status === 'done'
+                                        ? <CheckCircle size={16} />
+                                        : status === 'active'
+                                        ? <div className="proc-step-spinner" />
+                                        : step.icon
+                                    }
+                                </div>
+                                <span className="proc-step-label">{step.label}</span>
+                            </li>
+                        );
+                    })}
+                </ol>
+
+                {/* AI insight teaser */}
+                <div className="proc-insight-card">
+                    <Sparkles size={14} color="var(--primary)" aria-hidden="true" />
+                    <p className="proc-insight-text">
+                        Emotional arcs, dialogue cadence, and scene pacing are being calculated for your story…
+                    </p>
+                </div>
             </div>
         </div>
     );
 };
+
+export default ProcessingOverlay;

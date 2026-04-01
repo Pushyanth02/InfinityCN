@@ -5,6 +5,9 @@
  */
 
 import React, { useState, useCallback } from 'react';
+import ProviderSection from './ProviderSection';
+import { PreferencesSection } from './PreferencesSection';
+import type { Preferences } from './PreferencesSection';
 import {
     Globe,
     Cpu,
@@ -19,7 +22,6 @@ import {
 } from 'lucide-react';
 import { useCinematifierStore, getCinematifierAIConfig } from '../store/cinematifierStore';
 import { testConnection } from '../lib/ai/index';
-import { isServerProcessingAvailable } from '../lib/serverJobs';
 import type { AIConnectionStatus } from '../types/cinematifier';
 
 type Provider =
@@ -94,17 +96,30 @@ interface CinematifierSettingsProps {
     onClose?: () => void;
 }
 
-export const CinematifierSettings: React.FC<CinematifierSettingsProps> = ({ onClose }) => {
+function CinematifierSettings({ onClose }: CinematifierSettingsProps) {
+    // AI Provider state
     const aiProvider = useCinematifierStore(s => s.aiProvider);
     const geminiKey = useCinematifierStore(s => s.geminiKey);
     const ollamaUrl = useCinematifierStore(s => s.ollamaUrl);
     const ollamaModel = useCinematifierStore(s => s.ollamaModel);
     const openAiKey = useCinematifierStore(s => s.openAiKey);
-    const anthropicKey = useCinematifierStore(s => s.anthropicKey);
     const groqKey = useCinematifierStore(s => s.groqKey);
     const deepseekKey = useCinematifierStore(s => s.deepseekKey);
+    const anthropicKey = useCinematifierStore(s => s.anthropicKey);
     const useSearchGrounding = useCinematifierStore(s => s.useSearchGrounding);
     const setAiConfig = useCinematifierStore(s => s.setAiConfig);
+
+    // Preferences state
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const font = useCinematifierStore(s => (s as any).font || 'default');
+    const fontSize = useCinematifierStore(s => s.fontSize);
+    const lineSpacing = useCinematifierStore(s => s.lineSpacing);
+    const dyslexiaMode = useCinematifierStore(s => s.dyslexiaFont);
+    const theme = useCinematifierStore(s => s.darkMode ? 'dark' : 'light');
+    const setFontSize = useCinematifierStore(s => s.setFontSize);
+    const setLineSpacing = useCinematifierStore(s => s.setLineSpacing);
+    const toggleDyslexiaFont = useCinematifierStore(s => s.toggleDyslexiaFont);
+    const toggleDarkMode = useCinematifierStore(s => s.toggleDarkMode);
 
     const [testStatus, setTestStatus] = useState<AIConnectionStatus | null>(null);
     const [isTesting, setIsTesting] = useState(false);
@@ -218,7 +233,7 @@ export const CinematifierSettings: React.FC<CinematifierSettingsProps> = ({ onCl
                             onChange={e => setAiConfig({ ollamaUrl: e.target.value })}
                             placeholder="http://localhost:11434"
                         />
-                        <label htmlFor="ollama-model" style={{ marginTop: '0.75rem' }}>
+                        <label htmlFor="ollama-model" className="cine-mt-075">
                             Model Name
                         </label>
                         <input
@@ -235,39 +250,34 @@ export const CinematifierSettings: React.FC<CinematifierSettingsProps> = ({ onCl
         }
     };
 
+    // PreferencesSection handler
+    const preferences: Preferences = {
+        font,
+        fontSize,
+        lineSpacing,
+        dyslexiaMode,
+        theme,
+    };
+    const handlePreferencesChange = (updated: Partial<Preferences>) => {
+        if (updated.fontSize !== undefined) setFontSize(updated.fontSize);
+        if (updated.lineSpacing !== undefined) setLineSpacing(updated.lineSpacing);
+        if (updated.dyslexiaMode !== undefined) toggleDyslexiaFont();
+        if (updated.theme !== undefined) toggleDarkMode();
+        // font is not yet implemented in store, so ignore for now
+    };
+
     return (
         <div className="cine-settings-panel">
-            {/* Server Processing Indicator */}
-            {isServerProcessingAvailable() && (
-                <div className="cine-server-badge">
-                    <span className="cine-server-dot" />
-                    Server processing available
-                </div>
-            )}
 
             {/* Provider Selection */}
-            <div className="cine-provider-grid">
-                {PROVIDERS.map(p => (
-                    <button
-                        key={p.id}
-                        type="button"
-                        className={`cine-provider-card ${aiProvider === p.id ? 'active' : ''}`}
-                        style={{ '--provider-color': p.color } as React.CSSProperties}
-                        onClick={() => {
-                            setTestStatus(null);
-                            setAiConfig({ aiProvider: p.id });
-                        }}
-                    >
-                        <div className="cine-provider-icon" style={{ color: p.color }}>
-                            {p.icon}
-                        </div>
-                        <div className="cine-provider-info">
-                            <span className="cine-provider-label">{p.label}</span>
-                            <span className="cine-provider-desc">{p.desc}</span>
-                        </div>
-                    </button>
-                ))}
-            </div>
+            <ProviderSection
+                providers={PROVIDERS}
+                selectedId={aiProvider}
+                onSelect={id => {
+                    setTestStatus(null);
+                    setAiConfig({ aiProvider: id as Provider });
+                }}
+            />
 
             {/* API Key Input */}
             {aiProvider !== 'none' && aiProvider !== 'chrome' && (
@@ -304,6 +314,9 @@ export const CinematifierSettings: React.FC<CinematifierSettingsProps> = ({ onCl
                 </div>
             )}
 
+            {/* Preferences Section */}
+            <PreferencesSection preferences={preferences} onChange={handlePreferencesChange} />
+
             {/* Close Button */}
             {onClose && (
                 <div className="cine-settings-footer">
@@ -314,6 +327,6 @@ export const CinematifierSettings: React.FC<CinematifierSettingsProps> = ({ onCl
             )}
         </div>
     );
-};
+}
 
 export default CinematifierSettings;

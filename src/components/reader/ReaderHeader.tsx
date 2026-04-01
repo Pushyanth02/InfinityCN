@@ -40,7 +40,11 @@ interface ReaderHeaderProps {
     onClose: () => void;
 }
 
-export const ReaderHeader: React.FC<ReaderHeaderProps> = ({
+interface ReaderHeaderWithRefProps extends ReaderHeaderProps {
+    chapterNavTriggerRef?: React.RefObject<HTMLButtonElement | null>;
+}
+
+export const ReaderHeader: React.FC<ReaderHeaderWithRefProps> = ({
     book,
     readerMode,
     setReaderMode,
@@ -54,6 +58,7 @@ export const ReaderHeader: React.FC<ReaderHeaderProps> = ({
     onToggleSettings,
     onShowChapterNav,
     onClose,
+    chapterNavTriggerRef,
 }) => {
     const handleDownload = () => {
         const text = book.chapters
@@ -72,12 +77,13 @@ export const ReaderHeader: React.FC<ReaderHeaderProps> = ({
         <header className="cine-header">
             <div className="cine-header-left">
                 <button
-                    className="cine-btn cine-btn--icon"
+                    className="cine-btn--icon"
                     onClick={onShowChapterNav}
                     title="Chapter list"
                     aria-label="Chapter list"
+                    ref={chapterNavTriggerRef}
                 >
-                    <List size={20} />
+                    <List size={22} />
                 </button>
                 <h1 className="cine-title">{book.title}</h1>
             </div>
@@ -103,7 +109,7 @@ export const ReaderHeader: React.FC<ReaderHeaderProps> = ({
 
             <div className="cine-header-right">
                 <button
-                    className={`cine-btn cine-btn--icon ${isAmbientSoundEnabled ? 'cine-btn--active' : ''}`}
+                    className={`cine-btn--icon ${isAmbientSoundEnabled ? 'cine-btn--active' : ''}`}
                     onClick={onToggleAmbientSound}
                     title={isAmbientSoundEnabled ? 'Disable Ambient Sound' : 'Enable Ambient Sound'}
                     aria-label={
@@ -111,53 +117,53 @@ export const ReaderHeader: React.FC<ReaderHeaderProps> = ({
                     }
                 >
                     <Volume2
-                        size={20}
+                        size={22}
                         color={isAmbientSoundEnabled ? 'var(--cine-gold)' : undefined}
                     />
                 </button>
                 <button
-                    className={`cine-btn cine-btn--icon ${isAutoScrolling ? 'cine-btn--active' : ''}`}
+                    className={`cine-btn--icon ${isAutoScrolling ? 'cine-btn--active' : ''}`}
                     onClick={onToggleAutoScroll}
                     title={isAutoScrolling ? 'Stop Auto-Scroll' : 'Start Auto-Scroll'}
                     aria-label={isAutoScrolling ? 'Stop Auto-Scroll' : 'Start Auto-Scroll'}
                 >
                     {isAutoScrolling ? (
-                        <Square size={20} color="var(--cine-red)" />
+                        <Square size={22} color="var(--cine-red)" />
                     ) : (
-                        <Play size={20} />
+                        <Play size={22} />
                     )}
                 </button>
                 <button
-                    className={`cine-btn cine-btn--icon ${isBookmarked ? 'cine-btn--bookmarked' : ''}`}
+                    className={`cine-btn--icon ${isBookmarked ? 'cine-btn--bookmarked' : ''}`}
                     onClick={() => toggleBookmark(currentChapterIndex)}
                     title={isBookmarked ? 'Remove bookmark' : 'Bookmark chapter'}
                     aria-label={isBookmarked ? 'Remove bookmark' : 'Bookmark chapter'}
                 >
-                    {isBookmarked ? <BookmarkCheck size={20} /> : <Bookmark size={20} />}
+                    {isBookmarked ? <BookmarkCheck size={22} /> : <Bookmark size={22} />}
                 </button>
                 <button
-                    className="cine-btn cine-btn--icon"
+                    className="cine-btn--icon"
                     onClick={handleDownload}
                     title="Export Original Text"
                     aria-label="Export Original Text"
                 >
-                    <Download size={20} />
+                    <Download size={22} />
                 </button>
                 <button
-                    className="cine-btn cine-btn--icon"
+                    className="cine-btn--icon"
                     onClick={onToggleSettings}
                     title="Settings"
                     aria-label="Settings"
                 >
-                    <Settings size={20} />
+                    <Settings size={22} />
                 </button>
                 <button
-                    className="cine-btn cine-btn--icon"
+                    className="cine-btn--icon"
                     onClick={onClose}
                     title="Close"
                     aria-label="Close reader"
                 >
-                    <X size={20} />
+                    <X size={22} />
                 </button>
             </div>
         </header>

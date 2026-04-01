@@ -1,52 +1,38 @@
-# Codebase Structure
+# Codebase Structure: InfinityCN
+## Global Architecture Map
 
-**Analysis Date:** 2026-03-25
-
-## Root Directory
-
-- `.planning/` — GSD Protocol integration (Requirements, Roadmap, State, Codebase Map)
-- `.gemini/` — Project-specific AI rules (`gemini.md`) and configuration
-- `dotnet/` — Cinematic engine core (.NET 9.0 Solution)
-- `public/` — Static assets (SFX, Icons, PWA manifest)
-- `server/` — Express backend (Job Manager, AI Proxy, Workers)
-- `src/` — React frontend source
-- `tests/` — High-level integration tests
-
-## Core Components (`src/`)
-
-- `src/components/` — UI components
-  - `ui/` — Base design system (Buttons, Cards, Modals)
-  - `CinematifierApp.tsx` — Main application shell
-  - `CinematicReader.tsx` — Narrative rendering engine
-  - `UploadZone.tsx` — File intake
-- `src/hooks/` — Logic-specific custom hooks
-  - `useAmbientAudio.ts` — SFX orchestration
-  - `useFileProcessing.ts` — Processing pipeline hook
-  - `useReadingProgress.ts` — IndexedDB sync
-- `src/lib/` — Business logic and utilities
-  - `cinematifier/` — **The Core Engine**
-    - `pipeline.ts` — Main orchestrator
-    - `aiEngine.ts` — AI model routing
-    - `offlineEngine.ts` — Local ML fallback
-    - `parser.ts` — Multiformat text extraction
-  - `cinematifierDb.ts` — Dexie/IndexedDB configuration
-- `src/store/` — Zustand state containers
-- `src/styles/` — Global and utility CSS
-- `src/test/` — Vitest setup and global mocks
-
-## Backend (`server/`)
-
-- `server/src/`
-  - `services/` — Business services (Redis, RabbitMQ, cache, AI routing)
-  - `routes/` — API endpoint definitions
-  - `middleware/` — Security, rate-limiting, error handling
-  - `index.ts` — API Server entry
-  - `worker.ts` — Job worker entry
-  - `types.ts` — Shared backend interfaces
-
-## Engine (`dotnet/`)
-
-- `dotnet/Cinematifier/` — C# core logic (likely used for heavy document processing or legacy integration)
+**Analysis Date:** 2026-03-30
+**Architecture:** Hybrid Node/.NET System
 
 ---
-*Structure mapping: 2026-03-25*
+
+## 📁 Root Directory
+- `.planning/` — GSD Protocol and project vision (RULES.md, PROJECT.md, Codebase Map).
+- `dotnet/` — Cinematic engine solution (.NET 9.0 Solution).
+  - `src/` — Main service projects (API, Core, Infrastructure, Worker).
+  - `tests/` — NUnit and xUnit verification projects.
+- `server/` — Express API gateway and job manager.
+  - `src/` — Core Node.js services and worker scripts.
+- `src/` — React frontend and browser-side narrative engine.
+  - `components/` — UI elements and specific narrative renderers.
+  - `lib/` — Business logical units (Cinematifier Engine).
+  - `store/` — Zustand state containers.
+- `public/` — Static assets and PWA manifest.
+- `tests/` — Vitest frontend integration tests.
+
+## 📁 The Cinematifier Engine (`src/lib/cinematifier`)
+- `pipeline.ts` — Main orchestrator for scene processing.
+- `aiEngine.ts` — Routing and validation for multiple AI providers.
+- `offlineEngine.ts` — Local-ML fallback using Transformers.js.
+- `parser.ts` — Extraction of raw story text from multiple formats.
+- `sceneDetection.ts` — Core logic for identifying narrative boundaries.
+- `sentimentTracker.ts` — Tracking of character emotion and narrative tension.
+- `pacingAnalyzer.ts` — Analysis of readability and narrative flow.
+
+## 📁 Backend Services (`server/src/services`)
+- `redis/` — Session management and state synchronization.
+- `rabbitmq/` — Distributed job queuing.
+- `aiProxy/` — Secure proxying to cloud AI providers.
+
+---
+*Structure audit: 2026-03-30*

@@ -1,107 +1,129 @@
 /**
- * UploadZone.tsx — Drag-and-Drop File Upload Component
+ * UploadZone.tsx — Cinematic manuscript upload panel
  *
- * Handles file selection via drag-drop or click-to-browse,
- * with format validation and visual feedback.
+ * Velvet Noir design system — "upload_processing_dark" reference.
+ * Ghost-border dashed upload area, gradient CTA, ember glow hover effect.
  */
 
-import React, { useState, useCallback, useRef } from 'react';
-import { Upload } from 'lucide-react';
-import { detectFormat, ACCEPTED_EXTENSIONS } from '../lib/pdfWorker';
+import React, { useCallback, useState, useRef } from 'react';
+import { Upload, FileText } from 'lucide-react';
 
 interface UploadZoneProps {
     onFileSelect: (file: File) => void;
     isProcessing: boolean;
+    compact?: boolean;
 }
 
-export const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelect, isProcessing }) => {
+export const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelect, isProcessing, compact = false }) => {
     const [isDragging, setIsDragging] = useState(false);
-    const [dropError, setDropError] = useState<string | null>(null);
-    const inputRef = useRef<HTMLInputElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const handleDragOver = useCallback((e: React.DragEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setIsDragging(true);
-    }, []);
-
-    const handleDragLeave = useCallback((e: React.DragEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setIsDragging(false);
-    }, []);
+    const handleFile = useCallback(
+        (file: File) => {
+            if (!isProcessing && (file.type === 'application/pdf' || file.name.endsWith('.txt') || file.name.endsWith('.epub'))) {
+                onFileSelect(file);
+            }
+        },
+        [onFileSelect, isProcessing],
+    );
 
     const handleDrop = useCallback(
         (e: React.DragEvent) => {
             e.preventDefault();
-            e.stopPropagation();
             setIsDragging(false);
-            setDropError(null);
-
-            const files = e.dataTransfer.files;
-            if (files.length > 0) {
-                const file = files[0];
-                try {
-                    detectFormat(file);
-                    onFileSelect(file);
-                } catch (err) {
-                    setDropError(err instanceof Error ? err.message : 'Unsupported file format');
-                }
-            }
+            const file = e.dataTransfer.files[0];
+            if (file) handleFile(file);
         },
-        [onFileSelect],
+        [handleFile],
     );
 
-    const handleFileChange = useCallback(
+    const handleDragOver = useCallback((e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(true);
+    }, []);
+
+    const handleDragLeave = useCallback(() => setIsDragging(false), []);
+
+    const handleChange = useCallback(
         (e: React.ChangeEvent<HTMLInputElement>) => {
-            const files = e.target.files;
-            if (files && files.length > 0) {
-                const file = files[0];
-                try {
-                    detectFormat(file);
-                    onFileSelect(file);
-                } catch (err) {
-                    setDropError(err instanceof Error ? err.message : 'Unsupported file format');
-                }
-            }
+            const file = e.target.files?.[0];
+            if (file) handleFile(file);
         },
-        [onFileSelect],
+        [handleFile],
     );
+
+    if (compact) {
+        return (
+            <label className="upload-compact" aria-label="Upload a new manuscript">
+                <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,.txt,.epub"
+                    onChange={handleChange}
+                    disabled={isProcessing}
+                    className="upload-input-hidden"
+                    aria-label="Select a PDF, TXT, or EPUB file"
+                />
+                <Upload size={16} aria-hidden="true" />
+                Browse files
+            </label>
+        );
+    }
 
     return (
         <div
-            className={`cine-upload-zone ${isDragging ? 'dragging' : ''}`}
+            className={`upload-zone ${isDragging ? 'upload-zone--active' : ''} ${isProcessing ? 'upload-zone--processing' : ''}`}
+            onDrop={handleDrop}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            onClick={() => !isProcessing && inputRef.current?.click()}
             role="button"
             tabIndex={0}
-            aria-label="Upload a document file"
-            onKeyDown={e => {
-                if (e.key === 'Enter' || e.key === ' ') inputRef.current?.click();
-            }}
+            aria-label="Upload zone: drag and drop or click to select a manuscript"
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') fileInputRef.current?.click(); }}
         >
             <input
-                ref={inputRef}
+                ref={fileInputRef}
                 type="file"
-                accept={ACCEPTED_EXTENSIONS}
-                style={{ display: 'none' }}
-                onChange={handleFileChange}
+                accept=".pdf,.txt,.epub"
+                onChange={handleChange}
                 disabled={isProcessing}
+                className="upload-input-hidden"
+                id="manuscript-file-input"
+                aria-label="Select a PDF, TXT, or EPUB file"
             />
-            <div className="cine-upload-content">
-                <Upload size={48} className="cine-upload-icon" />
-                <p className="cine-upload-text">
-                    {isDragging ? 'Drop your file here' : 'Drop a document or click to upload'}
-                </p>
-                <p className="cine-upload-hint">PDF, EPUB, DOCX, PPTX, TXT supported</p>
-                {dropError && (
-                    <p className="cine-upload-error" role="alert">
-                        {dropError}
-                    </p>
-                )}
+
+            {/* Icon */}
+            <div className={`upload-icon-ring ${isDragging ? 'upload-icon-ring--active' : ''}`} aria-hidden="true">
+                <Upload size={28} strokeWidth={1.5} color="var(--primary)" />
             </div>
+
+            {/* Text */}
+            <div className="upload-text-group">
+                <p className="upload-headline">
+                    {isDragging ? 'Drop it here' : 'Drop your manuscript'}
+                </p>
+                <p className="upload-subtext">
+                    PDF, TXT, or EPUB · up to 50 MB
+                </p>
+            </div>
+
+            {/* CTA Button */}
+            <label
+                htmlFor="manuscript-file-input"
+                className="upload-cta-btn"
+                role="button"
+                tabIndex={-1}
+                aria-label="Select a manuscript file from your device"
+            >
+                <FileText size={16} aria-hidden="true" />
+                Select Manuscript
+            </label>
+
+            <p className="upload-footnote">
+                Processed locally — your manuscript never leaves your device
+            </p>
         </div>
     );
 };
+
+export default UploadZone;

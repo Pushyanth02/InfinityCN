@@ -1,32 +1,26 @@
 /**
  * CinematifierApp.tsx — Main Application Component
  *
- * Handles the full flow: Document Upload → Processing → Reading
- *
- * Custom hooks (extracted to src/hooks/):
- *   - useBookHydration   — IndexedDB book hydration on mount
- *   - useFileProcessing  — Text extraction + chapter segmentation + cinematification
- *
- * Sub-components extracted to separate files:
- *   - UploadZone.tsx        — Drag-drop file upload
- *   - ProcessingOverlay.tsx — Processing status overlay
+ * Cinematic Editorial design — "The Theater" (dark) / "The Library" (light).
+ * Velvet Noir design system applied throughout.
  */
 
 import React, { useState, useCallback, lazy, Suspense } from 'react';
-import { Film, Settings, X, Sparkles, AlertCircle, Moon, Sun } from 'lucide-react';
+import { Film, Settings, X, Sparkles, AlertCircle, Moon, Sun, BookOpen } from 'lucide-react';
 import { useCinematifierStore } from '../store/cinematifierStore';
 import { useBookHydration, useFileProcessing } from '../hooks';
 
 // Extracted sub-components
 import { UploadZone } from './UploadZone';
 import { ProcessingOverlay } from './ProcessingOverlay';
+import { Button } from './ui/Button';
 
 // Lazy load components
 const CinematicReader = lazy(() =>
     import('./CinematicReader').then(m => ({ default: m.CinematicReader })),
 );
 const CinematifierSettings = lazy(() =>
-    import('./CinematifierSettings').then(m => ({ default: m.CinematifierSettings })),
+    import('./CinematifierSettings').then(m => ({ default: m.default })),
 );
 
 // ─── Main App Component ────────────────────────────────────
@@ -45,203 +39,206 @@ export const CinematifierApp: React.FC = () => {
     const [showSettings, setShowSettings] = useState(false);
     const [showReader, setShowReader] = useState(false);
 
-    // Hydrate book from IndexedDB on mount
     useBookHydration();
-
-    // File processing pipeline
     const processFile = useFileProcessing(useCallback(() => setShowReader(true), []));
 
-    // Close reader and go back to home
-    const handleCloseReader = useCallback(() => {
-        setShowReader(false);
-    }, []);
-
-    // Continue reading existing book
-    const handleContinueReading = useCallback(() => {
-        if (book) {
-            setShowReader(true);
-        }
-    }, [book]);
-
-    // Start fresh
-    const handleNewBook = useCallback(() => {
-        reset();
-    }, [reset]);
+    const handleCloseReader = useCallback(() => setShowReader(false), []);
+    const handleContinueReading = useCallback(() => { if (book) setShowReader(true); }, [book]);
+    const handleNewBook = useCallback(() => reset(), [reset]);
 
     return (
-        <div className={`cinematifier-app ${!darkMode ? 'cinematifier-app--light' : ''}`}>
-            {/* Reader View */}
+        <div
+            className={darkMode ? '' : 'theme-light'}
+            style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--surface)', color: 'var(--on-surface)' }}
+        >
+            {/* Cinematic Reader View */}
             {showReader && book && (
-                <Suspense
-                    fallback={
-                        <div className="cine-reader cine-reader--empty">
-                            <div className="cine-processing-spinner" />
-                        </div>
-                    }
-                >
+                <Suspense fallback={
+                    <div className="app-loading-screen">
+                        <div className="app-loading-spinner" />
+                    </div>
+                }>
                     <CinematicReader onClose={handleCloseReader} />
                 </Suspense>
             )}
 
-            {/* Home View */}
+            {/* Home / Landing View */}
             {!showReader && (
-                <div className="cine-home">
-                    {/* Header */}
-                    <header className="cine-home-header">
-                        <div className="cine-logo">
-                            <Film size={32} />
-                            <span className="cine-logo-text">Cinematifier</span>
+                <div className="cin-app-home">
+                    {/* Ambient background glows */}
+                    <div className="cin-hero-glow cin-hero-glow--1" aria-hidden="true" />
+                    <div className="cin-hero-glow cin-hero-glow--2" aria-hidden="true" />
+
+                    {/* ── Header ── */}
+                    <header className="cin-header" role="banner">
+                        <a href="#main-content" className="skip-to-content">Skip to main content</a>
+
+                        <div className="cin-header-brand">
+                            <Film size={28} color="var(--primary)" strokeWidth={1.5} aria-hidden="true" />
+                            <span className="cin-brand-name">Cinematifier</span>
                         </div>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+
+                        {book && !isProcessing && (
+                            <nav className="cin-header-nav" aria-label="Primary navigation">
+                                <button className="cin-nav-link" onClick={handleContinueReading}>
+                                    <BookOpen size={16} aria-hidden="true" />
+                                    Library
+                                </button>
+                            </nav>
+                        )}
+
+                        <div className="cin-header-actions">
+                            <span className="cin-ai-badge">
+                                <span className="cin-ai-badge-dot" aria-hidden="true" />
+                                {aiProvider === 'none' ? 'Offline' : aiProvider}
+                            </span>
                             <button
-                                className="cine-btn cine-btn--icon"
+                                className="cin-icon-btn"
                                 onClick={toggleDarkMode}
-                                title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
-                                aria-label={
-                                    darkMode ? 'Switch to light mode' : 'Switch to dark mode'
-                                }
+                                title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+                                aria-label={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
                             >
-                                {darkMode ? <Sun size={20} /> : <Moon size={20} />}
+                                {darkMode ? <Sun size={18} strokeWidth={1.5} /> : <Moon size={18} strokeWidth={1.5} />}
                             </button>
                             <button
-                                className="cine-btn cine-btn--icon"
+                                className="cin-icon-btn"
                                 onClick={() => setShowSettings(true)}
-                                title="AI Settings"
-                                aria-label="AI Settings"
+                                title="AI Engine Settings"
+                                aria-label="Open AI Engine Settings"
                             >
-                                <Settings size={20} />
+                                <Settings size={18} strokeWidth={1.5} />
                             </button>
                         </div>
                     </header>
 
-                    {/* Main Content */}
-                    <main className="cine-home-content">
-                        <div className="cine-home-hero">
-                            <h1>Transform Novels into Cinematic Experiences</h1>
-                            <p>
-                                Upload a novel and watch it come alive with dramatic SFX, cinematic
-                                transitions, and screenplay-style formatting. AI-powered
-                                transformation for an immersive reading experience.
+                    {/* ── Hero ── */}
+                    <main id="main-content" role="main" className="cin-hero">
+                        <div className="cin-hero-content">
+                            {/* Eyebrow label */}
+                            <div className="cin-eyebrow">
+                                <Sparkles size={12} aria-hidden="true" />
+                                AI-Powered Narrative Engine
+                            </div>
+
+                            {/* Main headline */}
+                            <h1 className="cin-hero-title">
+                                Transform Novels<br />
+                                <em>into Cinema</em>
+                            </h1>
+
+                            <p className="cin-hero-subtitle">
+                                Upload any novel PDF and watch it transform into a breathtaking
+                                cinematic reading experience — with dramatic SFX, emotional arcs,
+                                and screenplay-style formatting.
                             </p>
+
+                            {/* Continue Reading CTA */}
+                            {book && !isProcessing && (
+                                <div className="cin-resume-card">
+                                    <div className="cin-resume-card-info">
+                                        <BookOpen size={18} color="var(--primary)" aria-hidden="true" />
+                                        <div>
+                                            <div className="cin-resume-label">Currently in Library</div>
+                                            <div className="cin-resume-title">{book.title}</div>
+                                        </div>
+                                    </div>
+                                    <div className="cin-resume-actions">
+                                        <button className="cin-btn-primary" onClick={handleContinueReading}>
+                                            <Sparkles size={15} aria-hidden="true" />
+                                            Continue Reading
+                                        </button>
+                                        <button className="cin-btn-ghost" onClick={handleNewBook}>
+                                            New Book
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
-                        {/* Show existing novel option or upload */}
-                        {book && !isProcessing && (
-                            <div style={{ marginBottom: '2rem', textAlign: 'center' }}>
-                                <p
-                                    style={{
-                                        color: 'var(--cine-text-secondary)',
-                                        marginBottom: '1rem',
-                                    }}
-                                >
-                                    Continue reading <strong>{book.title}</strong>?
-                                </p>
-                                <div
-                                    style={{
-                                        display: 'flex',
-                                        gap: '1rem',
-                                        justifyContent: 'center',
-                                    }}
-                                >
+                        {/* ── Upload Panel ── */}
+                        <div className="cin-upload-panel">
+                            {(!book || isProcessing) && (
+                                <UploadZone onFileSelect={processFile} isProcessing={isProcessing} />
+                            )}
+                            {book && !isProcessing && (
+                                <div className="cin-change-book-panel">
+                                    <p className="cin-change-book-label">Load a different manuscript</p>
+                                    <UploadZone onFileSelect={processFile} isProcessing={isProcessing} compact />
+                                </div>
+                            )}
+
+                            {/* Error */}
+                            {error && (
+                                <div className="cin-error-card" role="alert" aria-live="polite">
+                                    <AlertCircle size={20} aria-hidden="true" />
+                                    <p className="cin-error-message">{error}</p>
                                     <button
-                                        className="cine-btn cine-btn--primary"
-                                        onClick={handleContinueReading}
+                                        className="cin-btn-ghost cin-btn-ghost--sm"
+                                        onClick={() => setError(null)}
+                                        aria-label="Dismiss error"
                                     >
-                                        <Sparkles size={16} />
-                                        Continue Reading
-                                    </button>
-                                    <button className="cine-btn" onClick={handleNewBook}>
-                                        New Book
+                                        <X size={16} aria-hidden="true" />
                                     </button>
                                 </div>
-                            </div>
-                        )}
-
-                        {/* Upload Zone */}
-                        {(!book || isProcessing) && (
-                            <UploadZone onFileSelect={processFile} isProcessing={isProcessing} />
-                        )}
-
-                        {/* Error Display */}
-                        {error && (
-                            <div className="cine-error cine-fade-in" role="alert">
-                                <AlertCircle size={24} aria-hidden="true" />
-                                <p className="cine-error-text">{error}</p>
-                                <button className="cine-btn" onClick={() => setError(null)}>
-                                    Dismiss
-                                </button>
-                            </div>
-                        )}
-
-                        {/* AI Provider Status */}
-                        <div
-                            style={{
-                                marginTop: '2rem',
-                                textAlign: 'center',
-                                color: 'var(--cine-text-muted)',
-                                fontSize: '0.875rem',
-                            }}
-                        >
-                            AI: {aiProvider === 'none' ? 'Offline mode' : aiProvider}
-                            {aiProvider === 'none' && (
-                                <span style={{ display: 'block', marginTop: '0.25rem' }}>
-                                    Click settings to configure an AI provider for enhanced results
-                                </span>
                             )}
                         </div>
                     </main>
+
+                    {/* ── Feature Strip ── */}
+                    <section className="cin-features" aria-label="Key features">
+                        {[
+                            { icon: '🎬', label: 'Cinematic Blocks', desc: 'Dialogue, action, SFX, scene breaks' },
+                            { icon: '🎭', label: 'Emotion Engine', desc: 'Real-time tension & emotion tracking' },
+                            { icon: '📖', label: 'Dual Modes', desc: 'Original text or full cinematification' },
+                            { icon: '🌒', label: 'Offline-First', desc: 'No cloud required, runs locally' },
+                        ].map(f => (
+                            <div key={f.label} className="cin-feature-tile">
+                                <span className="cin-feature-icon" aria-hidden="true">{f.icon}</span>
+                                <span className="cin-feature-label">{f.label}</span>
+                                <span className="cin-feature-desc">{f.desc}</span>
+                            </div>
+                        ))}
+                    </section>
+
+                    {/* ── Footer ── */}
+                    <footer className="cin-footer" role="contentinfo">
+                        <span>InfinityCN · Cinematifier</span>
+                        <span aria-hidden="true">·</span>
+                        <span>Stories deserve a stage</span>
+                    </footer>
                 </div>
             )}
 
-            {/* Processing Overlay */}
+            {/* ── Processing Overlay ── */}
             {isProcessing && <ProcessingOverlay progress={processingProgress} />}
 
-            {/* AI Settings Modal */}
+            {/* ── Settings Modal ── */}
             {showSettings && (
                 <div
-                    className="cine-settings-modal-backdrop cine-fade-in"
+                    className="cin-modal-backdrop"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="settings-modal-title"
                     onClick={() => setShowSettings(false)}
-                    style={{
-                        position: 'fixed',
-                        inset: 0,
-                        background: 'rgba(0, 0, 0, 0.8)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        zIndex: 200,
-                    }}
+                    onKeyDown={e => { if (e.key === 'Escape') setShowSettings(false); }}
+                    tabIndex={-1}
                 >
                     <div
-                        className="cine-fade-in"
+                        className="cin-modal-card"
                         onClick={e => e.stopPropagation()}
-                        style={{
-                            background: 'var(--cine-bg-secondary)',
-                            borderRadius: '12px',
-                            padding: '1.5rem',
-                            maxWidth: '500px',
-                            width: '90%',
-                            maxHeight: '80vh',
-                            overflow: 'auto',
-                        }}
+                        tabIndex={0}
                     >
-                        <div
-                            style={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                marginBottom: '1rem',
-                            }}
-                        >
-                            <h2 style={{ margin: 0, fontSize: '1.25rem' }}>AI Settings</h2>
+                        <div className="cin-modal-header">
+                            <h2 id="settings-modal-title" className="cin-modal-title">Engine Configuration</h2>
                             <button
-                                className="cine-btn cine-btn--icon"
+                                className="cin-icon-btn"
                                 onClick={() => setShowSettings(false)}
                                 aria-label="Close settings"
                             >
-                                <X size={20} />
+                                <X size={20} strokeWidth={1.5} />
                             </button>
                         </div>
-                        <Suspense fallback={<div>Loading...</div>}>
+                        <Suspense fallback={<div className="cin-modal-loading">Loading modules…</div>}>
                             <CinematifierSettings onClose={() => setShowSettings(false)} />
                         </Suspense>
                     </div>
