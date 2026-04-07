@@ -23,6 +23,7 @@ import { encrypt, decrypt, deobfuscateLegacy, isLegacyEncryption } from '../lib/
 // API keys are encrypted before persisting to localStorage.
 
 const API_KEY_FIELDS = [
+    'universalApiKey',
     'geminiKey',
     'openAiKey',
     'anthropicKey',
@@ -142,6 +143,8 @@ export interface CinematifierState {
         | 'anthropic'
         | 'groq'
         | 'deepseek';
+    universalApiKey: string;
+    aiModel: string;
     geminiKey: string;
     useSearchGrounding: boolean;
     openAiKey: string;
@@ -176,6 +179,8 @@ export interface CinematifierState {
             Pick<
                 CinematifierState,
                 | 'aiProvider'
+                | 'universalApiKey'
+                | 'aiModel'
                 | 'geminiKey'
                 | 'useSearchGrounding'
                 | 'openAiKey'
@@ -224,6 +229,8 @@ export const useCinematifierStore = create<CinematifierState>()(
 
             // AI Settings
             aiProvider: 'none',
+            universalApiKey: '',
+            aiModel: '',
             geminiKey: '',
             useSearchGrounding: false,
             openAiKey: '',
@@ -315,6 +322,8 @@ export const useCinematifierStore = create<CinematifierState>()(
                     Pick<
                         CinematifierState,
                         | 'aiProvider'
+                        | 'universalApiKey'
+                        | 'aiModel'
                         | 'geminiKey'
                         | 'useSearchGrounding'
                         | 'openAiKey'
@@ -419,6 +428,8 @@ export const useCinematifierStore = create<CinematifierState>()(
                     dyslexiaFont: state.dyslexiaFont,
                     darkMode: state.darkMode,
                     aiProvider: state.aiProvider,
+                    universalApiKey: encryptedKeyCache.get('universalApiKey') ?? '',
+                    aiModel: state.aiModel,
                     geminiKey: encryptedKeyCache.get('geminiKey') ?? '',
                     useSearchGrounding: state.useSearchGrounding,
                     openAiKey: encryptedKeyCache.get('openAiKey') ?? '',
@@ -436,6 +447,7 @@ export const useCinematifierStore = create<CinematifierState>()(
                     ...current,
                     ...stored,
                     // API keys will be decrypted asynchronously in onRehydrateStorage
+                    universalApiKey: '',
                     geminiKey: '',
                     openAiKey: '',
                     anthropicKey: '',
@@ -475,6 +487,7 @@ export const useCinematifierStore = create<CinematifierState>()(
 
                         // Update state with decrypted keys
                         useCinematifierStore.setState({
+                            universalApiKey: decrypted.universalApiKey ?? '',
                             geminiKey: decrypted.geminiKey ?? '',
                             openAiKey: decrypted.openAiKey ?? '',
                             anthropicKey: decrypted.anthropicKey ?? '',
@@ -498,6 +511,8 @@ export function getCinematifierAIConfig(): AIConfig {
     const s = useCinematifierStore.getState();
     return {
         provider: s.aiProvider,
+        model: s.aiModel,
+        universalApiKey: s.universalApiKey,
         geminiKey: s.geminiKey,
         useSearchGrounding: s.useSearchGrounding,
         openAiKey: s.openAiKey,

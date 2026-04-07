@@ -18,7 +18,7 @@ import { getCacheKey, getFromCache, setCache } from './cache';
 import { withRetry } from './errors';
 
 // ─── Providers ─────────────────────────────────────────────
-import { callAI } from './providers';
+import { callAI, prepareAICall } from './providers';
 
 // ─── Streaming ─────────────────────────────────────────────
 export { streamAI } from './streaming';
@@ -42,7 +42,7 @@ import type { AIConfig } from './types';
  * running request rather than launching a duplicate.
  */
 export async function callAIWithDedup(prompt: string, config: AIConfig): Promise<string> {
-    const cacheKey = getCacheKey(prompt, config.provider);
+    const cacheKey = getCacheKey(prompt, config.provider, config.model ?? '');
 
     // Check cache first
     const cached = getFromCache(cacheKey);
@@ -57,9 +57,10 @@ export async function callAIWithDedup(prompt: string, config: AIConfig): Promise
     // any concurrent caller that reaches this point will hit the check above
     // instead of launching a duplicate network request.
     const requestPromise = (async () => {
+        const prepared = prepareAICall(prompt, config);
         const limiter = getRateLimiter(config.provider);
-        await limiter.acquire();
-        return withRetry(() => callAI(prompt, config), config.provider);
+        await limiter.acquire({ requests: 1, tokens: prepared.tokenPlan.totalBudgetTokens });
+        return withRetry(() => callAI(prompt, config, prepared), config.provider);
     })();
 
     inflightRequests.set(cacheKey, requestPromise);

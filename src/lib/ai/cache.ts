@@ -15,7 +15,7 @@ interface CacheEntry {
 
 const apiCache = new Map<string, CacheEntry>();
 
-export function getCacheKey(prompt: string, provider: string): string {
+export function getCacheKey(prompt: string, provider: string, model = ''): string {
     // DJB2 hash + length + head/tail substring for collision resistance
     let hash = 5381;
     for (let i = 0; i < prompt.length; i++) {
@@ -23,7 +23,7 @@ export function getCacheKey(prompt: string, provider: string): string {
     }
     const head = prompt.slice(0, 32);
     const tail = prompt.length > 64 ? prompt.slice(-32) : '';
-    return `${provider}:${hash >>> 0}:${prompt.length}:${head}${tail}`;
+    return `${provider}:${model}:${hash >>> 0}:${prompt.length}:${head}${tail}`;
 }
 
 export function getFromCache(key: string): string | null {

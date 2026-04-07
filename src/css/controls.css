@@ -1106,11 +1106,47 @@
     gap: var(--spacing-3);
 }
 
+.cine-settings-notes {
+    padding: 0 var(--spacing-8) var(--spacing-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-2);
+}
+
+.cine-security-note,
+.cine-flow-note {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    border-radius: var(--radius-sm);
+    padding: var(--spacing-2) var(--spacing-3);
+    font-family: var(--font-label);
+    font-size: 0.75rem;
+    color: var(--on-surface-variant);
+}
+
+.cine-security-note {
+    border: 1px solid color-mix(in srgb, var(--tertiary) 25%, transparent);
+    background: color-mix(in srgb, var(--tertiary) 10%, transparent);
+}
+
+.cine-flow-note {
+    border: 1px solid color-mix(in srgb, var(--provider-color, var(--primary)) 25%, transparent);
+    background: color-mix(in srgb, var(--primary) 10%, transparent);
+}
+
 /* ── Input Group ── */
 .cine-input-group {
     display: flex;
     flex-direction: column;
     gap: var(--spacing-2);
+}
+
+.cine-field-help {
+    margin-top: var(--spacing-1);
+    font-family: var(--font-label);
+    font-size: 0.75rem;
+    color: var(--outline);
 }
 
 .cine-input-group label {

@@ -2,7 +2,7 @@
  * crypto.ts — Encrypted Storage Utilities
  *
  * Provides AES-GCM encryption for sensitive data (API keys) using
- * the Web Crypto API (SubtleCrypto) with a device-derived key.
+ * the Web Crypto API (SubtleCrypto) with a local install secret.
  *
  * The key is derived from browser fingerprint, ensuring:
  * - API keys are encrypted at rest in localStorage
@@ -25,25 +25,103 @@ function getDeviceFingerprint(): string {
     return parts.join('|');
 }
 
+const INSTALL_SECRET_KEY = 'cinematifier-install-secret';
+const ENCRYPTION_PREFIX = 'v2:';
+
+function randomBase64(bytes = 32): string {
+    const data = crypto.getRandomValues(new Uint8Array(bytes));
+    let binary = '';
+    for (let i = 0; i < data.length; i++) {
+        binary += String.fromCharCode(data[i]);
+    }
+    return btoa(binary);
+}
+
+function getInstallSecret(): string {
+    try {
+        const existing = localStorage.getItem(INSTALL_SECRET_KEY);
+        if (existing) return existing;
+
+        const created = randomBase64(32);
+        localStorage.setItem(INSTALL_SECRET_KEY, created);
+        return created;
+    } catch {
+        // localStorage can fail in privacy mode; fallback still improves over
+        // static fingerprint-only derivation for this runtime session.
+        return randomBase64(32);
+    }
+}
+
+function combineIvAndCiphertext(iv: Uint8Array, ciphertext: ArrayBuffer): Uint8Array {
+    const combined = new Uint8Array(iv.length + ciphertext.byteLength);
+    combined.set(iv);
+    combined.set(new Uint8Array(ciphertext), iv.length);
+    return combined;
+}
+
+function encodeBase64(data: Uint8Array): string {
+    let binary = '';
+    for (let i = 0; i < data.length; i++) {
+        binary += String.fromCharCode(data[i]);
+    }
+    return btoa(binary);
+}
+
+function decodeBase64(encoded: string): Uint8Array {
+    return Uint8Array.from(atob(encoded), c => c.charCodeAt(0));
+}
+
 // ─── Crypto Key Management ─────────────────────────────────────────────────
 
-let cachedKey: CryptoKey | null = null;
+let cachedKeyV2: CryptoKey | null = null;
+let cachedKeyV1: CryptoKey | null = null;
 
 /**
- * Derive a stable AES-GCM key from the device fingerprint.
- * Uses PBKDF2 with a fixed salt to ensure deterministic key derivation.
+ * Derive the current AES-GCM key from install secret + fingerprint.
  */
-async function getDerivedKey(): Promise<CryptoKey> {
-    if (cachedKey) return cachedKey;
+async function getDerivedKeyV2(): Promise<CryptoKey> {
+    if (cachedKeyV2) return cachedKeyV2;
 
+    const secret = getInstallSecret();
     const fingerprint = getDeviceFingerprint();
     const encoder = new TextEncoder();
 
-    // Fixed salt — ensures deterministic key derivation across sessions.
-    // Security note: The key's entropy comes from the fingerprint, not the salt.
+    const salt = encoder.encode('InfinityCN-v2-salt');
+
+    const keyMaterial = await crypto.subtle.importKey(
+        'raw',
+        encoder.encode(`${secret}|${fingerprint}`),
+        'PBKDF2',
+        false,
+        ['deriveKey'],
+    );
+
+    cachedKeyV2 = await crypto.subtle.deriveKey(
+        {
+            name: 'PBKDF2',
+            salt,
+            iterations: 250_000,
+            hash: 'SHA-256',
+        },
+        keyMaterial,
+        { name: 'AES-GCM', length: 256 },
+        false,
+        ['encrypt', 'decrypt'],
+    );
+
+    return cachedKeyV2;
+}
+
+/**
+ * Legacy AES key derivation (v1) kept for transparent migration.
+ */
+async function getDerivedKeyV1(): Promise<CryptoKey> {
+    if (cachedKeyV1) return cachedKeyV1;
+
+    const fingerprint = getDeviceFingerprint();
+    const encoder = new TextEncoder();
     const salt = encoder.encode('InfinityCN-v1-salt');
 
-    // Import the fingerprint as base key material
     const keyMaterial = await crypto.subtle.importKey(
         'raw',
         encoder.encode(fingerprint),
@@ -52,8 +130,7 @@ async function getDerivedKey(): Promise<CryptoKey> {
         ['deriveKey'],
     );
 
-    // Derive AES-GCM key
-    cachedKey = await crypto.subtle.deriveKey(
+    cachedKeyV1 = await crypto.subtle.deriveKey(
         {
             name: 'PBKDF2',
             salt,
@@ -66,7 +143,7 @@ async function getDerivedKey(): Promise<CryptoKey> {
         ['encrypt', 'decrypt'],
     );
 
-    return cachedKey;
+    return cachedKeyV1;
 }
 
 // ─── Encryption Functions ──────────────────────────────────────────────────
@@ -79,7 +156,7 @@ export async function encrypt(plaintext: string): Promise<string> {
     if (!plaintext) return '';
 
     try {
-        const key = await getDerivedKey();
+        const key = await getDerivedKeyV2();
         const encoder = new TextEncoder();
         const data = encoder.encode(plaintext);
 
@@ -88,17 +165,8 @@ export async function encrypt(plaintext: string): Promise<string> {
 
         const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data);
 
-        // Combine IV + ciphertext for storage
-        const combined = new Uint8Array(iv.length + ciphertext.byteLength);
-        combined.set(iv);
-        combined.set(new Uint8Array(ciphertext), iv.length);
-
-        // Encode as base64 for safe JSON storage
-        let binary = '';
-        for (let i = 0; i < combined.length; i++) {
-            binary += String.fromCharCode(combined[i]);
-        }
-        return btoa(binary);
+        const combined = combineIvAndCiphertext(iv, ciphertext);
+        return `${ENCRYPTION_PREFIX}${encodeBase64(combined)}`;
     } catch (error) {
         console.error('[Crypto] Encryption failed:', error);
         // Fall back to empty string on error — don't expose plaintext
@@ -113,19 +181,28 @@ export async function encrypt(plaintext: string): Promise<string> {
 export async function decrypt(encoded: string): Promise<string> {
     if (!encoded) return '';
 
-    try {
-        const key = await getDerivedKey();
-
-        // Decode from base64
-        const combined = Uint8Array.from(atob(encoded), c => c.charCodeAt(0));
-
-        // Extract IV (first 12 bytes) and ciphertext
+    const tryDecrypt = async (payload: string, getKey: () => Promise<CryptoKey>): Promise<string> => {
+        const key = await getKey();
+        const combined = decodeBase64(payload);
         const iv = combined.slice(0, 12);
         const ciphertext = combined.slice(12);
 
         const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext);
-
         return new TextDecoder().decode(decrypted);
+    };
+
+    try {
+        if (encoded.startsWith(ENCRYPTION_PREFIX)) {
+            return await tryDecrypt(encoded.slice(ENCRYPTION_PREFIX.length), getDerivedKeyV2);
+        }
+
+        // Migration path: old AES payload without prefix
+        try {
+            return await tryDecrypt(encoded, getDerivedKeyV1);
+        } catch {
+            // As a fallback, attempt current key in case prefix was stripped
+            return await tryDecrypt(encoded, getDerivedKeyV2);
+        }
     } catch {
         // Decryption failure — likely corrupted data or different device
         console.warn('[Crypto] Decryption failed, clearing stored value');
@@ -171,8 +248,9 @@ export function deobfuscateLegacy(encoded: string): string {
  */
 export function isLegacyEncryption(encoded: string): boolean {
     if (!encoded) return false;
+    if (encoded.startsWith(ENCRYPTION_PREFIX)) return false;
     try {
-        const decoded = Uint8Array.from(atob(encoded), c => c.charCodeAt(0));
+        const decoded = decodeBase64(encoded);
         // AES-GCM encrypted data: 12 bytes IV + at least 16 bytes auth tag
         // Minimum 28 bytes for any non-empty ciphertext
         // Legacy XOR would typically be shorter for API keys

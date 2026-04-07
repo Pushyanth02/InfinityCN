@@ -11,16 +11,22 @@ export type { AIConnectionStatus };
 
 // ─── PUBLIC CONFIG TYPE ────────────────────────────────────────────────────────
 
+export type AIProvider =
+    | 'none'
+    | 'chrome'
+    | 'gemini'
+    | 'ollama'
+    | 'openai'
+    | 'anthropic'
+    | 'groq'
+    | 'deepseek';
+
 export interface AIConfig {
-    provider:
-        | 'none'
-        | 'chrome'
-        | 'gemini'
-        | 'ollama'
-        | 'openai'
-        | 'anthropic'
-        | 'groq'
-        | 'deepseek';
+    provider: AIProvider;
+    /** Optional model override. When omitted, provider defaults from MODEL_PRESETS are used. */
+    model?: string;
+    /** Optional universal API key that can be reused across provider selections. */
+    universalApiKey?: string;
     geminiKey: string;
     useSearchGrounding: boolean;
     openAiKey: string;
@@ -39,11 +45,13 @@ export interface AIConfig {
 
 export interface ModelPreset {
     model: string;
+    contextWindow: number;
     maxTokens: number;
     temperature: number;
     supportsJSON: boolean;
     supportsStreaming: boolean;
     rateLimitRPM: number;
+    rateLimitTPM: number;
 }
 
 // ─── ERROR TYPES ───────────────────────────────────────────────────────────────

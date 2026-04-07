@@ -9,14 +9,15 @@ import type { AIConfig } from './types';
 import { MODEL_PRESETS } from './presets';
 import { RateLimiter } from '../rateLimiter';
 import {
-    SYSTEM_PROMPT,
     API_PROXY_URL,
-    getTimeoutMs,
     handleHttpError,
     proxyFetch,
     OPENAI_COMPATIBLE_PROVIDERS,
-    capitalizeProvider,
+    prepareAICall,
+    getApiKeyCandidates,
+    fetchWithKeyRotation,
 } from './providers';
+import { assertSecureEndpoint } from './security';
 
 // ─── RATE LIMITER (shared with callAI via getRateLimiter) ──
 
@@ -24,8 +25,8 @@ const rateLimiters = new Map<string, RateLimiter>();
 
 export function getRateLimiter(provider: string): RateLimiter {
     if (!rateLimiters.has(provider)) {
-        const preset = MODEL_PRESETS[provider] || { rateLimitRPM: 60 };
-        rateLimiters.set(provider, new RateLimiter(preset.rateLimitRPM));
+        const preset = MODEL_PRESETS[provider] || { rateLimitRPM: 60, rateLimitTPM: 60_000 };
+        rateLimiters.set(provider, new RateLimiter(preset.rateLimitRPM, preset.rateLimitTPM));
     }
     return rateLimiters.get(provider)!;
 }
@@ -92,28 +93,21 @@ const sseExtractors = {
  * Dedup and caching are not applied to streaming to keep things real-time.
  */
 export async function* streamAI(prompt: string, config: AIConfig): AsyncGenerator<string> {
-    if (config.provider === 'none') {
-        throw new Error('AI provider is not configured.');
-    }
+    const prepared = prepareAICall(prompt, config);
+    const provider = prepared.provider;
 
-    const preset = MODEL_PRESETS[config.provider];
-    if (!preset) throw new Error(`No model preset configured for provider "${config.provider}".`);
-
-    const sysPrompt = config.systemPrompt ?? SYSTEM_PROMPT;
-    const maxTokens = config.rawTextMode ? Math.min(preset.maxTokens, 4096) : 800;
-    const timeoutMs = getTimeoutMs(config.rawTextMode);
     // Acquire rate limit token
-    const limiter = getRateLimiter(config.provider);
-    await limiter.acquire();
+    const limiter = getRateLimiter(provider);
+    await limiter.acquire({ requests: 1, tokens: prepared.tokenPlan.totalBudgetTokens });
 
     // ── CHROME NANO STREAMING ────────────────────────────────
-    if (config.provider === 'chrome') {
+    if (provider === 'chrome') {
         if (!window.ai?.languageModel) {
             throw new Error('Chrome AI is not available.');
         }
-        const session = await window.ai.languageModel.create({ systemPrompt: sysPrompt });
+        const session = await window.ai.languageModel.create({ systemPrompt: prepared.systemPrompt });
         try {
-            const stream = session.promptStreaming(prompt);
+            const stream = session.promptStreaming(prepared.prompt);
             let previousLength = 0;
             for await (const chunk of stream) {
                 // Chrome returns the FULL accumulated string each time, so we yield only the delta
@@ -128,21 +122,27 @@ export async function* streamAI(prompt: string, config: AIConfig): AsyncGenerato
     }
 
     // ── OLLAMA STREAMING ─────────────────────────────────────
-    if (config.provider === 'ollama') {
+    if (provider === 'ollama') {
         if (!config.ollamaUrl && !API_PROXY_URL) {
             throw new Error('Ollama URL is not configured.');
         }
+
+        const ollamaUrl = config.ollamaUrl?.replace(/\/$/, '') ?? '';
+        if (!API_PROXY_URL) {
+            assertSecureEndpoint(ollamaUrl, 'Ollama URL', { allowHttpLocalhost: true });
+        }
+
         const ollamaBody = {
-            model: config.ollamaModel || preset.model,
-            prompt: `${sysPrompt}\n\n${prompt}`,
+            model: prepared.model,
+            prompt: `${prepared.systemPrompt}\n\n${prepared.prompt}`,
             stream: true,
         };
         const res = API_PROXY_URL
-            ? await proxyFetch('ollama', ollamaBody, timeoutMs)
-            : await fetch(`${config.ollamaUrl!.replace(/\/$/, '')}/api/generate`, {
+            ? await proxyFetch('ollama', ollamaBody, prepared.timeoutMs)
+            : await fetch(`${ollamaUrl}/api/generate`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  signal: AbortSignal.timeout(timeoutMs),
+                  signal: AbortSignal.timeout(prepared.timeoutMs),
                   body: JSON.stringify(ollamaBody),
               });
 
@@ -151,13 +151,16 @@ export async function* streamAI(prompt: string, config: AIConfig): AsyncGenerato
 
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
+        let buffer = '';
 
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            const chunk = decoder.decode(value, { stream: true });
-            const lines = chunk.split('\n').filter(Boolean);
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() ?? '';
             for (const line of lines) {
+                if (!line.trim()) continue;
                 try {
                     const data = JSON.parse(line);
                     if (data.response) yield data.response;
@@ -170,34 +173,42 @@ export async function* streamAI(prompt: string, config: AIConfig): AsyncGenerato
     }
 
     // ── OPENAI COMPATIBLE STREAMING (OpenAI, Groq, DeepSeek) ─
-    if (config.provider in OPENAI_COMPATIBLE_PROVIDERS) {
-        const providerCfg = OPENAI_COMPATIBLE_PROVIDERS[config.provider];
-        const apiKey = config[providerCfg.keyField] as string;
-        if (!API_PROXY_URL && !apiKey)
-            throw new Error(`${capitalizeProvider(config.provider)} API key is not set.`);
-
-        const url = API_PROXY_URL ? `${API_PROXY_URL}/api/ai/${config.provider}` : providerCfg.url;
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-        if (!API_PROXY_URL) headers['Authorization'] = `Bearer ${apiKey}`;
+    if (provider in OPENAI_COMPATIBLE_PROVIDERS) {
+        const providerCfg = OPENAI_COMPATIBLE_PROVIDERS[provider];
+        const url = API_PROXY_URL ? `${API_PROXY_URL}/api/ai/${provider}` : providerCfg.url;
 
         const body = {
-            model: preset.model,
+            model: prepared.model,
             messages: [
-                { role: 'system', content: sysPrompt },
-                { role: 'user', content: prompt },
+                { role: 'system', content: prepared.systemPrompt },
+                { role: 'user', content: prepared.prompt },
             ],
             stream: true,
-            max_tokens: maxTokens,
-            temperature: preset.temperature,
+            [providerCfg.maxTokensField]: prepared.maxTokens,
+            temperature: prepared.preset.temperature,
         };
 
-        const res = await fetch(url, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(body),
-            signal: AbortSignal.timeout(timeoutMs),
-        });
-        if (!res.ok) await handleHttpError(res, config.provider);
+        const res = API_PROXY_URL
+            ? await fetch(url, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(body),
+                  signal: AbortSignal.timeout(prepared.timeoutMs),
+              })
+            : await fetchWithKeyRotation(provider, getApiKeyCandidates(config, provider), apiKey => {
+                  assertSecureEndpoint(providerCfg.url, `${provider} endpoint`);
+                  return fetch(providerCfg.url, {
+                      method: 'POST',
+                      headers: {
+                          'Content-Type': 'application/json',
+                          Authorization: `Bearer ${apiKey}`,
+                      },
+                      body: JSON.stringify(body),
+                      signal: AbortSignal.timeout(prepared.timeoutMs),
+                  });
+              });
+
+        if (!res.ok) await handleHttpError(res, provider);
         if (!res.body) throw new Error('No response body');
 
         yield* parseSSEStream(res.body.getReader(), sseExtractors.openai);
@@ -205,14 +216,17 @@ export async function* streamAI(prompt: string, config: AIConfig): AsyncGenerato
     }
 
     // ── GEMINI STREAMING ─────────────────────────────────────
-    if (config.provider === 'gemini') {
-        if (!API_PROXY_URL && !config.geminiKey) throw new Error('Gemini API key is not set.');
+    if (provider === 'gemini') {
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${prepared.model}:streamGenerateContent?alt=sse`;
 
         const geminiBody = {
-            system_instruction: { parts: [{ text: sysPrompt }] },
-            contents: [{ parts: [{ text: prompt }] }],
+            system_instruction: { parts: [{ text: prepared.systemPrompt }] },
+            contents: [{ parts: [{ text: prepared.prompt }] }],
             tools: config.useSearchGrounding ? [{ google_search: {} }] : undefined,
-            generationConfig: { temperature: preset.temperature, maxOutputTokens: maxTokens },
+            generationConfig: {
+                temperature: prepared.preset.temperature,
+                maxOutputTokens: prepared.maxTokens,
+            },
         };
 
         const url = API_PROXY_URL
@@ -221,17 +235,28 @@ export async function* streamAI(prompt: string, config: AIConfig): AsyncGenerato
               // :streamGenerateContent upstream URL).  A stale ?stream=true query param was
               // previously appended here but the proxy never read it — removed to avoid confusion.
               `${API_PROXY_URL}/api/ai/gemini`
-            : `https://generativelanguage.googleapis.com/v1beta/models/${preset.model}:streamGenerateContent?alt=sse`;
+            : geminiUrl;
 
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-        if (!API_PROXY_URL) headers['x-goog-api-key'] = config.geminiKey;
+        const res = API_PROXY_URL
+            ? await fetch(url, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(geminiBody),
+                  signal: AbortSignal.timeout(prepared.timeoutMs),
+              })
+            : await fetchWithKeyRotation(provider, getApiKeyCandidates(config, provider), apiKey => {
+                  assertSecureEndpoint(geminiUrl, 'Gemini streaming endpoint');
+                  return fetch(geminiUrl, {
+                      method: 'POST',
+                      headers: {
+                          'Content-Type': 'application/json',
+                          'x-goog-api-key': apiKey,
+                      },
+                      body: JSON.stringify(geminiBody),
+                      signal: AbortSignal.timeout(prepared.timeoutMs),
+                  });
+              });
 
-        const res = await fetch(url, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(geminiBody),
-            signal: AbortSignal.timeout(timeoutMs),
-        });
         if (!res.ok) await handleHttpError(res, 'gemini');
         if (!res.body) throw new Error('No response body');
 
@@ -240,38 +265,45 @@ export async function* streamAI(prompt: string, config: AIConfig): AsyncGenerato
     }
 
     // ── ANTHROPIC STREAMING ──────────────────────────────────
-    if (config.provider === 'anthropic') {
-        if (!API_PROXY_URL && !config.anthropicKey)
-            throw new Error('Anthropic API key is not set.');
+    if (provider === 'anthropic') {
+        const anthropicUrl = 'https://api.anthropic.com/v1/messages';
 
         const anthropicBody = {
-            model: preset.model,
-            max_tokens: maxTokens,
-            system: sysPrompt,
-            messages: [{ role: 'user', content: prompt }],
-            temperature: preset.temperature,
+            model: prepared.model,
+            max_tokens: prepared.maxTokens,
+            system: prepared.systemPrompt,
+            messages: [{ role: 'user', content: prepared.prompt }],
+            temperature: prepared.preset.temperature,
             stream: true,
         };
 
-        const url = API_PROXY_URL
-            ? `${API_PROXY_URL}/api/ai/anthropic`
-            : 'https://api.anthropic.com/v1/messages';
-        const headers: Record<string, string> = {
-            'Content-Type': 'application/json',
-            'anthropic-version': '2023-06-01',
-        };
+        const url = API_PROXY_URL ? `${API_PROXY_URL}/api/ai/anthropic` : anthropicUrl;
 
-        if (!API_PROXY_URL) {
-            headers['x-api-key'] = config.anthropicKey;
-            headers['anthropic-dangerous-direct-browser-access'] = 'true';
-        }
+        const res = API_PROXY_URL
+            ? await fetch(url, {
+                  method: 'POST',
+                  headers: {
+                      'Content-Type': 'application/json',
+                      'anthropic-version': '2023-06-01',
+                  },
+                  body: JSON.stringify(anthropicBody),
+                  signal: AbortSignal.timeout(prepared.timeoutMs),
+              })
+            : await fetchWithKeyRotation(provider, getApiKeyCandidates(config, provider), apiKey => {
+                  assertSecureEndpoint(anthropicUrl, 'Anthropic streaming endpoint');
+                  return fetch(anthropicUrl, {
+                      method: 'POST',
+                      headers: {
+                          'Content-Type': 'application/json',
+                          'anthropic-version': '2023-06-01',
+                          'x-api-key': apiKey,
+                          'anthropic-dangerous-direct-browser-access': 'true',
+                      },
+                      body: JSON.stringify(anthropicBody),
+                      signal: AbortSignal.timeout(prepared.timeoutMs),
+                  });
+              });
 
-        const res = await fetch(url, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(anthropicBody),
-            signal: AbortSignal.timeout(timeoutMs),
-        });
         if (!res.ok) await handleHttpError(res, 'anthropic');
         if (!res.body) throw new Error('No response body');
 
@@ -279,5 +311,5 @@ export async function* streamAI(prompt: string, config: AIConfig): AsyncGenerato
         return;
     }
 
-    throw new Error(`Streaming not implemented for provider ${config.provider}`);
+    throw new Error(`Streaming not implemented for provider ${provider}`);
 }

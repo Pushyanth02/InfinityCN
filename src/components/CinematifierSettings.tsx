@@ -1,7 +1,5 @@
 /**
  * CinematifierSettings.tsx — AI Settings for Cinematifier
- *
- * Simplified AI provider configuration for the Cinematifier app.
  */
 
 import React, { useState, useCallback } from 'react';
@@ -19,20 +17,14 @@ import {
     XCircle,
     Loader,
     Search,
+    Shield,
 } from 'lucide-react';
 import { useCinematifierStore, getCinematifierAIConfig } from '../store/cinematifierStore';
 import { testConnection } from '../lib/ai/index';
 import type { AIConnectionStatus } from '../types/cinematifier';
+import type { AIProvider } from '../lib/ai/types';
 
-type Provider =
-    | 'none'
-    | 'chrome'
-    | 'gemini'
-    | 'ollama'
-    | 'openai'
-    | 'anthropic'
-    | 'groq'
-    | 'deepseek';
+type Provider = AIProvider;
 
 const PROVIDERS: {
     id: Provider;
@@ -51,35 +43,35 @@ const PROVIDERS: {
     {
         id: 'gemini',
         label: 'Google Gemini',
-        desc: 'Gemini 2.5 Flash',
+        desc: 'Gemini API + custom model IDs',
         icon: <Globe size={18} />,
         color: '#f87171',
     },
     {
         id: 'openai',
         label: 'OpenAI',
-        desc: 'GPT-4o mini',
+        desc: 'OpenAI-compatible model routing',
         icon: <Brain size={18} />,
         color: '#10a37f',
     },
     {
         id: 'anthropic',
         label: 'Claude',
-        desc: 'Claude 3.5 Sonnet',
+        desc: 'Anthropic models + fallback key map',
         icon: <MessageSquare size={18} />,
         color: '#d97757',
     },
     {
         id: 'groq',
         label: 'Groq',
-        desc: 'Llama 3.3 70B',
+        desc: 'OpenAI-compatible Groq endpoints',
         icon: <Zap size={18} />,
         color: '#f55036',
     },
     {
         id: 'deepseek',
         label: 'DeepSeek',
-        desc: 'DeepSeek Chat',
+        desc: 'DeepSeek chat + custom model IDs',
         icon: <Cpu size={18} />,
         color: '#4d6bfe',
     },
@@ -97,8 +89,9 @@ interface CinematifierSettingsProps {
 }
 
 function CinematifierSettings({ onClose }: CinematifierSettingsProps) {
-    // AI Provider state
     const aiProvider = useCinematifierStore(s => s.aiProvider);
+    const universalApiKey = useCinematifierStore(s => s.universalApiKey);
+    const aiModel = useCinematifierStore(s => s.aiModel);
     const geminiKey = useCinematifierStore(s => s.geminiKey);
     const ollamaUrl = useCinematifierStore(s => s.ollamaUrl);
     const ollamaModel = useCinematifierStore(s => s.ollamaModel);
@@ -115,7 +108,7 @@ function CinematifierSettings({ onClose }: CinematifierSettingsProps) {
     const fontSize = useCinematifierStore(s => s.fontSize);
     const lineSpacing = useCinematifierStore(s => s.lineSpacing);
     const dyslexiaMode = useCinematifierStore(s => s.dyslexiaFont);
-    const theme = useCinematifierStore(s => s.darkMode ? 'dark' : 'light');
+    const theme = useCinematifierStore(s => (s.darkMode ? 'dark' : 'light'));
     const setFontSize = useCinematifierStore(s => s.setFontSize);
     const setLineSpacing = useCinematifierStore(s => s.setLineSpacing);
     const toggleDyslexiaFont = useCinematifierStore(s => s.toggleDyslexiaFont);
@@ -123,6 +116,9 @@ function CinematifierSettings({ onClose }: CinematifierSettingsProps) {
 
     const [testStatus, setTestStatus] = useState<AIConnectionStatus | null>(null);
     const [isTesting, setIsTesting] = useState(false);
+
+    const selectedProvider = PROVIDERS.find(p => p.id === aiProvider);
+    const isProviderConfigured = aiProvider !== 'none' && aiProvider !== 'chrome';
 
     const handleTest = useCallback(async () => {
         setIsTesting(true);
@@ -142,27 +138,25 @@ function CinematifierSettings({ onClose }: CinematifierSettingsProps) {
         }
     }, [aiProvider]);
 
-    const renderKeyInput = () => {
+    const renderProviderKeyInput = () => {
         switch (aiProvider) {
             case 'gemini':
                 return (
                     <div className="cine-input-group">
-                        <label htmlFor="gemini-key">Gemini API Key</label>
+                        <label htmlFor="gemini-key">Gemini Key (Optional Provider Override)</label>
                         <input
                             id="gemini-key"
                             type="password"
                             value={geminiKey}
                             onChange={e => setAiConfig({ geminiKey: e.target.value })}
-                            placeholder="Enter your Gemini API key"
+                            placeholder="AIza..."
                         />
                         <div className="cine-checkbox-row">
                             <input
                                 type="checkbox"
                                 id="search-grounding"
                                 checked={useSearchGrounding}
-                                onChange={e =>
-                                    setAiConfig({ useSearchGrounding: e.target.checked })
-                                }
+                                onChange={e => setAiConfig({ useSearchGrounding: e.target.checked })}
                             />
                             <label htmlFor="search-grounding">
                                 <Search size={14} /> Enable Search Grounding
@@ -173,7 +167,7 @@ function CinematifierSettings({ onClose }: CinematifierSettingsProps) {
             case 'openai':
                 return (
                     <div className="cine-input-group">
-                        <label htmlFor="openai-key">OpenAI API Key</label>
+                        <label htmlFor="openai-key">OpenAI Key (Optional Provider Override)</label>
                         <input
                             id="openai-key"
                             type="password"
@@ -186,7 +180,7 @@ function CinematifierSettings({ onClose }: CinematifierSettingsProps) {
             case 'anthropic':
                 return (
                     <div className="cine-input-group">
-                        <label htmlFor="anthropic-key">Anthropic API Key</label>
+                        <label htmlFor="anthropic-key">Anthropic Key (Optional Provider Override)</label>
                         <input
                             id="anthropic-key"
                             type="password"
@@ -199,7 +193,7 @@ function CinematifierSettings({ onClose }: CinematifierSettingsProps) {
             case 'groq':
                 return (
                     <div className="cine-input-group">
-                        <label htmlFor="groq-key">Groq API Key</label>
+                        <label htmlFor="groq-key">Groq Key (Optional Provider Override)</label>
                         <input
                             id="groq-key"
                             type="password"
@@ -212,7 +206,7 @@ function CinematifierSettings({ onClose }: CinematifierSettingsProps) {
             case 'deepseek':
                 return (
                     <div className="cine-input-group">
-                        <label htmlFor="deepseek-key">DeepSeek API Key</label>
+                        <label htmlFor="deepseek-key">DeepSeek Key (Optional Provider Override)</label>
                         <input
                             id="deepseek-key"
                             type="password"
@@ -222,8 +216,17 @@ function CinematifierSettings({ onClose }: CinematifierSettingsProps) {
                         />
                     </div>
                 );
-            case 'ollama':
-                return (
+            default:
+                return null;
+        }
+    };
+
+    const renderKeyInput = () => {
+        if (!isProviderConfigured) return null;
+
+        if (aiProvider === 'ollama') {
+            return (
+                <>
                     <div className="cine-input-group">
                         <label htmlFor="ollama-url">Ollama Server URL</label>
                         <input
@@ -233,9 +236,10 @@ function CinematifierSettings({ onClose }: CinematifierSettingsProps) {
                             onChange={e => setAiConfig({ ollamaUrl: e.target.value })}
                             placeholder="http://localhost:11434"
                         />
-                        <label htmlFor="ollama-model" className="cine-mt-075">
-                            Model Name
-                        </label>
+                    </div>
+
+                    <div className="cine-input-group">
+                        <label htmlFor="ollama-model">Default Local Model</label>
                         <input
                             id="ollama-model"
                             type="text"
@@ -244,13 +248,64 @@ function CinematifierSettings({ onClose }: CinematifierSettingsProps) {
                             placeholder="llama3"
                         />
                     </div>
-                );
-            default:
-                return null;
+
+                    <div className="cine-input-group">
+                        <label htmlFor="ai-model">Runtime Model Override (Optional)</label>
+                        <input
+                            id="ai-model"
+                            type="text"
+                            value={aiModel}
+                            onChange={e => setAiConfig({ aiModel: e.target.value })}
+                            placeholder="llama3.1:8b-instruct-q4_K_M"
+                        />
+                        <p className="cine-field-help">
+                            If provided, this model ID is used first for every AI call.
+                        </p>
+                    </div>
+                </>
+            );
         }
+
+        return (
+            <>
+                <div className="cine-input-group">
+                    <label htmlFor="universal-key">Universal API Key</label>
+                    <input
+                        id="universal-key"
+                        type="password"
+                        value={universalApiKey}
+                        onChange={e => setAiConfig({ universalApiKey: e.target.value })}
+                        placeholder="Use one key across provider/model selections"
+                    />
+                    <p className="cine-field-help">
+                        Keys are auto-tried across configured providers so a key entered in any slot
+                        can still be used.
+                    </p>
+                </div>
+
+                {renderProviderKeyInput()}
+
+                <div className="cine-input-group">
+                    <label htmlFor="ai-model">Model ID Override (Optional)</label>
+                    <input
+                        id="ai-model"
+                        type="text"
+                        value={aiModel}
+                        onChange={e => setAiConfig({ aiModel: e.target.value })}
+                        placeholder={
+                            selectedProvider
+                                ? `Override ${selectedProvider.label} model`
+                                : 'Enter model id'
+                        }
+                    />
+                    <p className="cine-field-help">
+                        Leave empty to use the app default model for the selected provider.
+                    </p>
+                </div>
+            </>
+        );
     };
 
-    // PreferencesSection handler
     const preferences: Preferences = {
         font,
         fontSize,
@@ -258,18 +313,16 @@ function CinematifierSettings({ onClose }: CinematifierSettingsProps) {
         dyslexiaMode,
         theme,
     };
+
     const handlePreferencesChange = (updated: Partial<Preferences>) => {
         if (updated.fontSize !== undefined) setFontSize(updated.fontSize);
         if (updated.lineSpacing !== undefined) setLineSpacing(updated.lineSpacing);
         if (updated.dyslexiaMode !== undefined) toggleDyslexiaFont();
         if (updated.theme !== undefined) toggleDarkMode();
-        // font is not yet implemented in store, so ignore for now
     };
 
     return (
         <div className="cine-settings-panel">
-
-            {/* Provider Selection */}
             <ProviderSection
                 providers={PROVIDERS}
                 selectedId={aiProvider}
@@ -279,12 +332,21 @@ function CinematifierSettings({ onClose }: CinematifierSettingsProps) {
                 }}
             />
 
-            {/* API Key Input */}
-            {aiProvider !== 'none' && aiProvider !== 'chrome' && (
-                <div className="cine-key-section">{renderKeyInput()}</div>
+            {isProviderConfigured && (
+                <div className="cine-settings-notes">
+                    <div className="cine-security-note">
+                        <Shield size={15} /> API keys are encrypted at rest. Remote AI calls enforce
+                        HTTPS endpoints.
+                    </div>
+                    <div className="cine-flow-note">
+                        <Zap size={15} /> Request and token flow limits are automatically applied for
+                        stable AI processing.
+                    </div>
+                </div>
             )}
 
-            {/* Test Connection */}
+            {isProviderConfigured && <div className="cine-key-section">{renderKeyInput()}</div>}
+
             {aiProvider !== 'none' && (
                 <div className="cine-test-section">
                     <button
@@ -314,10 +376,8 @@ function CinematifierSettings({ onClose }: CinematifierSettingsProps) {
                 </div>
             )}
 
-            {/* Preferences Section */}
             <PreferencesSection preferences={preferences} onChange={handlePreferencesChange} />
 
-            {/* Close Button */}
             {onClose && (
                 <div className="cine-settings-footer">
                     <button className="cine-btn" onClick={onClose}>
