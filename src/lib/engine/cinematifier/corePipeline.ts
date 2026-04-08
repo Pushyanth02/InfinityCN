@@ -48,6 +48,10 @@ const TENSION_CUES =
 const DIALOGUE_LINE = /^\s*(?:["“']|[A-Z][A-Za-z]+:\s)/;
 const SENTENCE_BOUNDARY = /(?<=[.!?]["”']?)\s+/;
 const SPEECH_VERBS_PATTERN = 'said|asked|replied|whispered|shouted|muttered';
+const SPEECH_ATTRIBUTION_PATTERN = new RegExp(
+    `(["”])\\s+([A-Z][a-z]+(?:\\s+[a-z]+){0,3}\\s+(?:${SPEECH_VERBS_PATTERN})\\b)`,
+    'g',
+);
 
 function splitParagraphs(text: string): string[] {
     return text
@@ -83,14 +87,9 @@ function breakSentenceIntoShortLines(sentence: string, maxWords = 8): string {
 }
 
 function separateDialogue(text: string): string {
-    const speechAttributionPattern = new RegExp(
-        `(["”])\\s+([A-Z][a-z]+(?:\\s+[a-z]+){0,3}\\s+(?:${SPEECH_VERBS_PATTERN})\\b)`,
-        'g',
-    );
-
     return text
         .replace(/(["”])\s+(?=["“])/g, '$1\n')
-        .replace(speechAttributionPattern, '$1\n$2');
+        .replace(SPEECH_ATTRIBUTION_PATTERN, '$1\n$2');
 }
 
 function scoreTension(sceneText: string, shortLineCount: number): number {
