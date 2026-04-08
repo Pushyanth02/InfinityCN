@@ -52,6 +52,22 @@ export {
     TextStatisticsStage,
     NarrativeAnalysisStage,
     SceneSegmentationStage,
+    // Core Pipeline (Prompt 2A)
+    rebuildParagraphs,
+    segmentScenes,
+    analyzeScene,
+    cinematizeScene,
+    validateOutput,
+    runCorePipeline,
 } from './cinematifier/index';
 
-export type { NarrativeMetadata, PipelineStage, PipelineContext } from './cinematifier/index';
+export type {
+    NarrativeMetadata,
+    PipelineStage,
+    PipelineContext,
+    CoreScene,
+    SceneAnalysis,
+    OutputValidation,
+    CorePipelineSceneResult,
+    CorePipelineResult,
+} from './cinematifier/index';

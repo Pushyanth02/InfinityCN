@@ -68,3 +68,20 @@ export {
     SceneSegmentationStage,
 } from './pipeline';
 export type { PipelineStage, PipelineContext } from './pipeline';
+
+// ─── Core Pipeline (Prompt 2A) ─────────────────────────────
+export {
+    rebuildParagraphs,
+    segmentScenes,
+    analyzeScene,
+    cinematizeScene,
+    validateOutput,
+    runCorePipeline,
+} from './corePipeline';
+export type {
+    CoreScene,
+    SceneAnalysis,
+    OutputValidation,
+    CorePipelineSceneResult,
+    CorePipelineResult,
+} from './corePipeline';
