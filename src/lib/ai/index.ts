@@ -11,6 +11,10 @@ export type { AIConfig, ModelPreset, AIErrorType } from './types';
 // ─── Presets ───────────────────────────────────────────────
 export { MODEL_PRESETS } from './presets';
 
+// ─── Orchestrator ──────────────────────────────────────────
+export { AIManager } from './manager';
+export type { Provider, AIManagerProvider, AIManagerOptions, AIManagerResult } from './manager';
+
 // ─── Cache ─────────────────────────────────────────────────
 import { getCacheKey, getFromCache, setCache } from './cache';
 
