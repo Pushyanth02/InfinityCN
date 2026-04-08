@@ -51,9 +51,11 @@ export const ProcessingOverlay: React.FC<ProcessingOverlayProps> = ({ progress }
             case 'error':
                 // Error is terminal in this flow, so reuse the final step bucket.
                 return 'finalize';
-            default:
-                return 'finalize';
         }
+
+        const unreachablePhase: never = progress.phase;
+        console.warn('[ProcessingOverlay] Unhandled processing phase:', unreachablePhase);
+        return 'finalize';
     })();
     const percent = progress.percentComplete;
     const detail = progress.message;
