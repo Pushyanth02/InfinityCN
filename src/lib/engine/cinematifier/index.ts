@@ -20,10 +20,12 @@ export { segmentChapters } from './chapterSegmentation';
 // ─── Scene Detection ───────────────────────────────────────
 export {
     detectSceneBreaks,
+    segmentScenesUniversal,
     detectPOVShift,
     detectNarrativeMode,
     deriveSceneTitle,
 } from './sceneDetection';
+export type { Scene } from './sceneDetection';
 
 // ─── Block Parser ──────────────────────────────────────────
 export { parseCinematifiedText } from './parser';

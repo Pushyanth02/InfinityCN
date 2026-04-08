@@ -24,16 +24,16 @@ export const CUSTOM_SCENE_BREAK_PATTERNS: RegExp[] = [
 
 /** Matches preposition + optional article + capitalized location name (e.g., "in the Forest", "at Castle Rock") */
 export const LOCATION_PATTERN =
-    /\b(?:in|at|on|near|beside|inside|outside|beneath|above|across)\s+(?:the\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/;
+    /\b(?:[Ii]n|[Aa]t|[Oo]n|[Nn]ear|[Bb]eside|[Ii]nside|[Oo]utside|[Bb]eneath|[Aa]bove|[Aa]cross)\s+(?:the\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/;
 
 /** Matches time-of-day or temporal phrases for scene title derivation */
 export const TIME_PATTERN =
     /\b(that night|that morning|the next day|at dawn|at dusk|hours later|days later|meanwhile)\b/i;
 
 const TIME_SHIFT_PATTERN =
-    /\b(later|earlier|meanwhile|the next (?:morning|day|night|evening)|at (?:dawn|dusk|sunrise|sunset)|that (?:night|morning|evening)|hours later|days later|weeks later|months later|years later)\b/i;
+    /\b(later|earlier|meanwhile|the next (?:morning|day|night|evening)|at (?:dawn|dusk|sunrise|sunset|nightfall)|that (?:night|morning|evening)|hours later|days later|weeks later|months later|years later)\b/i;
 const LOCATION_SHIFT_PATTERN =
-    /\b(?:in|at|on|inside|outside|near|across|back at|beyond)\s+(?:the\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/;
+    /\b(?:[Ii]n|[Aa]t|[Oo]n|[Ii]nside|[Oo]utside|[Nn]ear|[Aa]cross|[Bb]ack at|[Bb]eyond)\s+(?:the\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/;
 const NARRATIVE_TRANSITION_PATTERN =
     /\b(meanwhile|elsewhere|back in|back at|on the other side|later|earlier|in another place|at the same time|as for)\b/i;
 const EMOTIONAL_RESET_THRESHOLD = 0.55;
@@ -100,10 +100,10 @@ function shouldStartNewScene(previous: string, current: string, currentSceneLeng
     const emotionalReset = hasEmotionalReset(previous, current);
 
     let score = 0;
-    if (timeShift) score += 1;
-    if (locationChanged) score += 1;
-    if (legacySignal || narrativeTransition || modeTransition) score += 1;
-    if (emotionalReset) score += 1;
+    if (timeShift) score += 2;
+    if (locationChanged) score += 2;
+    if (legacySignal || narrativeTransition || modeTransition) score += 2;
+    if (emotionalReset) score += 2;
 
     if (currentSceneLength >= MAX_PARAGRAPHS_PER_SCENE && score >= 1) return true;
     return score >= SCENE_BREAK_THRESHOLD;

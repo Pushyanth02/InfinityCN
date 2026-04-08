@@ -29,6 +29,7 @@ export {
     segmentChapters,
     // Scene Detection
     detectSceneBreaks,
+    segmentScenesUniversal,
     detectPOVShift,
     detectNarrativeMode,
     deriveSceneTitle,
@@ -70,4 +71,5 @@ export type {
     OutputValidation,
     CorePipelineSceneResult,
     CorePipelineResult,
+    Scene,
 } from './cinematifier/index';
