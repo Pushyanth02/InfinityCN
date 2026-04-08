@@ -44,9 +44,10 @@ export interface CorePipelineResult {
 }
 
 const TENSION_CUES =
-    /\b(suddenly|danger|threat|panic|fear|dread|blood|scream|gun|knife|fight|attack|urgent|run|now)\b/gi;
+    /\b(suddenly|danger|threat|panic|fear|dread|blood|scream|gun|knife|fight|attack|urgent|run|now)\b/i;
 const DIALOGUE_LINE = /^\s*(?:["“']|[A-Z][A-Za-z]+:\s)/;
 const SENTENCE_BOUNDARY = /(?<=[.!?]["”']?)\s+/;
+const SPEECH_VERBS_PATTERN = 'said|asked|replied|whispered|shouted|muttered';
 
 function splitParagraphs(text: string): string[] {
     return text
@@ -82,16 +83,18 @@ function breakSentenceIntoShortLines(sentence: string, maxWords = 8): string {
 }
 
 function separateDialogue(text: string): string {
+    const speechAttributionPattern = new RegExp(
+        `(["”])\\s+([A-Z][a-z]+(?:\\s+[a-z]+){0,3}\\s+(?:${SPEECH_VERBS_PATTERN})\\b)`,
+        'g',
+    );
+
     return text
         .replace(/(["”])\s+(?=["“])/g, '$1\n')
-        .replace(
-            /(["”])\s+([A-Z][a-z]+(?:\s+[a-z]+){0,3}\s+(?:said|asked|replied|whispered|shouted|muttered)\b)/g,
-            '$1\n$2',
-        );
+        .replace(speechAttributionPattern, '$1\n$2');
 }
 
 function scoreTension(sceneText: string, shortLineCount: number): number {
-    const cueMatches = sceneText.match(TENSION_CUES)?.length ?? 0;
+    const cueMatches = [...sceneText.matchAll(new RegExp(TENSION_CUES.source, 'gi'))].length;
     const exclamations = (sceneText.match(/!/g) || []).length;
     const sentiment = analyzeSentiment(sceneText);
 
