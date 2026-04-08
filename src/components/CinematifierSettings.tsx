@@ -103,13 +103,13 @@ function CinematifierSettings({ onClose }: CinematifierSettingsProps) {
     const setAiConfig = useCinematifierStore(s => s.setAiConfig);
 
     // Preferences state
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const font = useCinematifierStore(s => (s as any).font || 'default');
+    const font = useCinematifierStore(s => s.font);
     const fontSize = useCinematifierStore(s => s.fontSize);
     const lineSpacing = useCinematifierStore(s => s.lineSpacing);
     const dyslexiaMode = useCinematifierStore(s => s.dyslexiaFont);
     const theme = useCinematifierStore(s => (s.darkMode ? 'dark' : 'light'));
     const setFontSize = useCinematifierStore(s => s.setFontSize);
+    const setFont = useCinematifierStore(s => s.setFont);
     const setLineSpacing = useCinematifierStore(s => s.setLineSpacing);
     const toggleDyslexiaFont = useCinematifierStore(s => s.toggleDyslexiaFont);
     const toggleDarkMode = useCinematifierStore(s => s.toggleDarkMode);
@@ -315,6 +315,7 @@ function CinematifierSettings({ onClose }: CinematifierSettingsProps) {
     };
 
     const handlePreferencesChange = (updated: Partial<Preferences>) => {
+        if (updated.font !== undefined) setFont(updated.font);
         if (updated.fontSize !== undefined) setFontSize(updated.fontSize);
         if (updated.lineSpacing !== undefined) setLineSpacing(updated.lineSpacing);
         if (updated.dyslexiaMode !== undefined) toggleDyslexiaFont();

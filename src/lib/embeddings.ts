@@ -4,15 +4,14 @@ import type { FeatureExtractionPipeline } from '@xenova/transformers';
 // @xenova/transformers (~800KB + onnxruntime-web) is loaded dynamically
 // so it never enters the main bundle.
 class PipelineSingleton {
-    static task = 'feature-extraction';
+    static task = 'feature-extraction' as const;
     static model = 'Xenova/all-MiniLM-L6-v2';
     static instance: FeatureExtractionPipeline | null = null;
 
     static async getInstance(progressCallback?: (data: unknown) => void) {
         if (this.instance === null) {
             const { pipeline } = await import('@xenova/transformers');
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            this.instance = (await pipeline(this.task as any, this.model, {
+            this.instance = (await pipeline(this.task, this.model, {
                 progress_callback: progressCallback,
             })) as FeatureExtractionPipeline;
         }
