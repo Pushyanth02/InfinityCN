@@ -47,6 +47,9 @@ const TENSION_CUES =
     /\b(suddenly|danger|threat|panic|fear|dread|blood|scream|gun|knife|fight|attack|urgent|run|now)\b/i;
 const DIALOGUE_LINE = /^\s*(?:["“']|[A-Z][A-Za-z]+:\s)/;
 const SENTENCE_BOUNDARY = /(?<=[.!?]["”']?)\s+/;
+const DENSE_PARAGRAPH_WORD_THRESHOLD = 55;
+const DENSE_SENTENCE_WORD_THRESHOLD = 22;
+const DRAMATIC_WORD_THRESHOLD = 5;
 const SPEECH_VERBS_PATTERN = 'said|asked|replied|whispered|shouted|muttered';
 const SPEECH_ATTRIBUTION_PATTERN = new RegExp(
     `(["”])\\s+([A-Z][a-z]+(?:\\s+(?:[A-Z][a-z]+|[a-z]+)){0,3}\\s+(?:${SPEECH_VERBS_PATTERN})\\b)`,
@@ -84,6 +87,46 @@ function breakSentenceIntoShortLines(sentence: string, maxWords = 8): string {
         lines.push(words.slice(i, i + maxWords).join(' '));
     }
     return lines.join('\n');
+}
+
+function isDramaticSentence(sentence: string): boolean {
+    const trimmed = sentence.trim();
+    if (!trimmed) return false;
+
+    const words = countWords(trimmed);
+    return (
+        words <= DRAMATIC_WORD_THRESHOLD ||
+        /[!?]$/.test(trimmed) ||
+        TENSION_CUES.test(trimmed) ||
+        /^[A-Z][A-Z\s,'".!?-]+$/.test(trimmed)
+    );
+}
+
+function chunkNarrativeSentences(sentences: string[]): string[] {
+    const chunks: string[] = [];
+    let currentChunk: string[] = [];
+    let currentWordCount = 0;
+
+    for (const sentence of sentences) {
+        const words = countWords(sentence);
+        const nextWouldBeDense =
+            currentChunk.length >= 2 || currentWordCount + words > DENSE_SENTENCE_WORD_THRESHOLD;
+
+        if (currentChunk.length > 0 && nextWouldBeDense) {
+            chunks.push(currentChunk.join(' '));
+            currentChunk = [];
+            currentWordCount = 0;
+        }
+
+        currentChunk.push(sentence);
+        currentWordCount += words;
+    }
+
+    if (currentChunk.length > 0) {
+        chunks.push(currentChunk.join(' '));
+    }
+
+    return chunks;
 }
 
 function separateDialogue(text: string): string {
@@ -156,21 +199,57 @@ export function cinematizeScene(scene: string): string {
     const analysis = analyzeScene(dialogueSeparated);
 
     const paragraphs = splitParagraphs(dialogueSeparated);
-    const pacedParagraphs = paragraphs.map(paragraph => {
-        if (DIALOGUE_LINE.test(paragraph)) return paragraph;
+    const cinematicUnits: string[] = [];
+    const shouldAddTensionSpacing = analysis.tensionScore >= 55;
+
+    for (const paragraph of paragraphs) {
+        if (DIALOGUE_LINE.test(paragraph)) {
+            const dialogueLines = paragraph
+                .split('\n')
+                .map(line => line.trim())
+                .filter(Boolean);
+            cinematicUnits.push(...dialogueLines);
+            continue;
+        }
 
         const sentences = splitSentencesPreservingText(paragraph);
-        if (sentences.length === 0) return paragraph;
+        if (sentences.length === 0) {
+            cinematicUnits.push(paragraph);
+            continue;
+        }
 
-        const shouldShorten = analysis.tensionScore >= 55;
-        if (!shouldShorten) return sentences.join(' ');
+        const narrativeBuffer: string[] = [];
 
-        return sentences
-            .map(sentence => breakSentenceIntoShortLines(sentence, 8))
-            .join('\n');
-    });
+        for (const sentence of sentences) {
+            const trimmed = sentence.trim();
+            if (!trimmed) continue;
 
-    return pacedParagraphs.join('\n\n').replace(/\n{3,}/g, '\n\n').trim();
+            if (isDramaticSentence(trimmed)) {
+                if (narrativeBuffer.length > 0) {
+                    cinematicUnits.push(...chunkNarrativeSentences(narrativeBuffer));
+                    narrativeBuffer.length = 0;
+                }
+
+                cinematicUnits.push(
+                    shouldAddTensionSpacing ? breakSentenceIntoShortLines(trimmed, 6) : trimmed,
+                );
+                continue;
+            }
+
+            narrativeBuffer.push(trimmed);
+        }
+
+        if (narrativeBuffer.length > 0) {
+            const denseParagraph = countWords(paragraph) >= DENSE_PARAGRAPH_WORD_THRESHOLD;
+            if (denseParagraph || shouldAddTensionSpacing) {
+                cinematicUnits.push(...chunkNarrativeSentences(narrativeBuffer));
+            } else {
+                cinematicUnits.push(narrativeBuffer.join(' '));
+            }
+        }
+    }
+
+    return cinematicUnits.join('\n\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
 export function validateOutput(text: string): OutputValidation {

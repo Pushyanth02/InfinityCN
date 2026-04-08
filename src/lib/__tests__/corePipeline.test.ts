@@ -42,6 +42,36 @@ describe('corePipeline (Prompt 2A)', () => {
         expect(out).toMatch(/\n\s*"Don't move\./);
     });
 
+    it('cinematizeScene breaks dense paragraphs into cinematic units', () => {
+        const scene =
+            'The train rolled through the valley while rain hammered the roof and distant thunder echoed across the cliffs. Mara kept reading the map while Eli watched the tracks disappear into fog. The lantern shook in his hand as the carriage leaned and every bolt groaned. Nobody spoke as the wind kept pressing harder against the windows.';
+
+        const out = cinematizeScene(scene);
+        expect(out.split('\n\n').length).toBeGreaterThan(2);
+    });
+
+    it('cinematizeScene isolates dramatic lines with tension spacing', () => {
+        const scene = 'The hallway went dark. Run now! Glass shattered. Hide!';
+        const out = cinematizeScene(scene);
+
+        expect(out).toMatch(/Run now!\n\n/);
+        expect(out).toMatch(/Hide!/);
+    });
+
+    it('cinematizeScene preserves story words without adding new narrative content', () => {
+        const scene = '"Stay here," Mara said. The door slammed shut. He heard footsteps.';
+        const out = cinematizeScene(scene);
+
+        const normalize = (text: string) =>
+            text
+                .toLowerCase()
+                .replace(/[^a-z0-9\s]/g, ' ')
+                .split(/\s+/)
+                .filter(Boolean);
+
+        expect(normalize(out)).toEqual(normalize(scene));
+    });
+
     it('validateOutput returns valid result for clean output', () => {
         const text = '"We wait."\n\nThe room stayed quiet.';
         const validation = validateOutput(text);
