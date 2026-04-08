@@ -302,17 +302,34 @@
     /* Reader: both sidebars converted to overlays */
     .cine-chapter-nav-sidebar { display: none; }
     .cine-insights-sidebar { display: none; }
+    .cine-reader-body { display: block; }
 
     /* Content area mobile padding */
     .cine-content-inner {
         padding: var(--spacing-6) var(--spacing-5) var(--spacing-16);
     }
+    .cine-content { padding-bottom: 86px; }
 
     .cine-chapter-title { font-size: 1.5rem; }
 
-    /* Footer */
-    .cine-footer { padding: var(--spacing-2) var(--spacing-4); }
-    .cine-footer-progress { font-size: 0.7rem; }
+    /* Footer / bottom navigation */
+    .cine-footer {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        padding: var(--spacing-2) var(--spacing-3);
+        gap: var(--spacing-2);
+    }
+    .cine-footer-progress-wrap {
+        margin: 0 var(--spacing-2);
+        gap: 6px;
+    }
+    .cine-footer-progress-row .typography-label { font-size: 0.7rem; }
+    .cine-footer-btn {
+        padding: 6px 10px;
+        font-size: 0.74rem;
+    }
 
     /* Processing */
     .proc-card {

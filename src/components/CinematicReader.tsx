@@ -34,6 +34,8 @@ import {
     OriginalTextView,
     EmotionHeatmap,
     ChapterNav,
+    ReaderChapterSidebar,
+    ReaderCharactersPanel,
     ReaderHeader,
     ReaderSettingsPanel,
     ReaderFooter,
@@ -77,6 +79,7 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
     const contentRef = useRef<HTMLDivElement>(null);
 
     const currentChapter = book?.chapters[currentChapterIndex];
+    const activeCharacters = currentChapter?.characters ?? book?.characters;
 
     // ─── Custom Hooks ──────────────────────────────────────────
     const { readingProgress, bookmarks, isBookmarked, toggleBookmark } = useReadingProgress();
@@ -227,6 +230,12 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
 
             {/* 3-Panel Reader Body */}
             <div className="cine-reader-body">
+                <ReaderChapterSidebar
+                    chapters={book.chapters}
+                    currentChapterIndex={currentChapterIndex}
+                    bookmarks={bookmarks}
+                    onSelectChapter={setCurrentChapter}
+                />
                 {/* Scrollable Content */}
                 <main
                     className="cine-content"
@@ -303,6 +312,7 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                         ) : null}
                     </div>
                 </main>
+                <ReaderCharactersPanel characters={activeCharacters} />
             </div>
 
             {/* Chapter Navigation Footer */}

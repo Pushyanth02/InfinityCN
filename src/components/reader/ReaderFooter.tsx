@@ -26,9 +26,10 @@ export const ReaderFooter: React.FC<ReaderFooterProps> = ({
     const progressPercent = ((readingProgress?.readChapters.length || 0) / book.chapters.length) * 100;
 
     return (
-        <footer className="glass-panel ghost-border-bottom" style={{ position: 'fixed', bottom: 0, left: 0, right: 0, padding: 'var(--spacing-4) var(--spacing-8)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 50 }}>
+        <footer className="cine-footer" aria-label="Chapter navigation">
             <Button
                 variant="ghost"
+                className="cine-footer-btn"
                 onClick={() => setCurrentChapter(currentChapterIndex - 1)}
                 disabled={!canGoPrev}
             >
@@ -36,13 +37,13 @@ export const ReaderFooter: React.FC<ReaderFooterProps> = ({
                 Previous
             </Button>
 
-            <div style={{ flexGrow: 1, maxWidth: '400px', margin: '0 var(--spacing-8)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span className="typography-label" style={{ color: 'var(--on-surface-variant)' }}>
+            <div className="cine-footer-progress-wrap">
+                <div className="cine-footer-progress-row">
+                    <span className="typography-label">
                         {currentChapterIndex + 1} / {book.chapters.length}
                     </span>
                     {readingProgress && readingProgress.readChapters.length > 0 && (
-                        <span className="typography-label" style={{ color: 'var(--secondary)' }}>
+                        <span className="typography-label cine-footer-read-count">
                             {readingProgress.readChapters.length} read
                         </span>
                     )}
@@ -52,6 +53,7 @@ export const ReaderFooter: React.FC<ReaderFooterProps> = ({
 
             <Button
                 variant="ghost"
+                className="cine-footer-btn"
                 onClick={() => setCurrentChapter(currentChapterIndex + 1)}
                 disabled={!canGoNext}
             >
@@ -61,4 +63,3 @@ export const ReaderFooter: React.FC<ReaderFooterProps> = ({
         </footer>
     );
 };
-

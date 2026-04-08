@@ -298,6 +298,9 @@
 }
 
 .cine-chapter-item-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     font-family: var(--font-label);
     font-size: 0.7rem;
     color: var(--on-surface-variant);
@@ -311,6 +314,7 @@
     overflow-y: auto;
     overflow-x: hidden;
     scroll-behavior: smooth;
+    min-width: 0;
 }
 
 .cine-content-inner {
@@ -453,6 +457,44 @@
     margin: 0 0 var(--spacing-3);
 }
 
+.cine-character-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-3);
+}
+
+.cine-character-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--spacing-3);
+    border-radius: var(--radius-sm);
+    background: var(--surface-container);
+}
+
+.cine-character-name {
+    font-family: var(--font-headline);
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--on-surface);
+}
+
+.cine-character-meta {
+    font-family: var(--font-label);
+    font-size: 0.72rem;
+    color: var(--on-surface-variant);
+}
+
+.cine-character-empty {
+    margin: 0;
+    font-family: var(--font-label);
+    font-size: 0.78rem;
+    color: var(--on-surface-variant);
+}
+
 /* ═══════════════════════════════════════════════════════════
    READER FOOTER — Chapter navigation bar
    ═══════════════════════════════════════════════════════════ */
@@ -471,6 +513,25 @@
     flex-shrink: 0;
     gap: var(--spacing-4);
     color: var(--on-surface);
+}
+
+.cine-footer-progress-wrap {
+    flex: 1;
+    max-width: 400px;
+    margin: 0 var(--spacing-8);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.cine-footer-progress-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.cine-footer-read-count {
+    color: var(--secondary);
 }
 
 .cine-footer-nav {
