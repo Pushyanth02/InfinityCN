@@ -49,7 +49,7 @@ const DIALOGUE_LINE = /^\s*(?:["“']|[A-Z][A-Za-z]+:\s)/;
 const SENTENCE_BOUNDARY = /(?<=[.!?]["”']?)\s+/;
 const SPEECH_VERBS_PATTERN = 'said|asked|replied|whispered|shouted|muttered';
 const SPEECH_ATTRIBUTION_PATTERN = new RegExp(
-    `(["”])\\s+([A-Z][a-z]+(?:\\s+[a-z]+){0,3}\\s+(?:${SPEECH_VERBS_PATTERN})\\b)`,
+    `(["”])\\s+([A-Z][a-z]+(?:\\s+(?:[A-Z][a-z]+|[a-z]+)){0,3}\\s+(?:${SPEECH_VERBS_PATTERN})\\b)`,
     'g',
 );
 
