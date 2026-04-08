@@ -9,7 +9,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useCinematifierStore, getCinematifierAIConfig } from '../store/cinematifierStore';
 import { cinematifyText, cinematifyOffline, CinematificationPipeline } from '../lib/cinematifier';
-import { saveBook } from '../lib/cinematifierDb';
+import { saveBook } from '../lib/runtime/cinematifierDb';
 import type { CinematicBlock, ReaderMode, Chapter } from '../types/cinematifier';
 
 export function useChapterProcessing(

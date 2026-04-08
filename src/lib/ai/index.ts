@@ -29,8 +29,6 @@ import { callAI, prepareAICall } from './providers';
 export { streamAI } from './streaming';
 import { getRateLimiter } from './streaming';
 export { getRateLimiter };
-export { enqueueRequest, processQueue, RequestQueueLimiter } from './rateLimiter';
-export type { QueueRateLimitConfig, QueueRequest, QueueSnapshot } from './rateLimiter';
 
 // ─── REQUEST DEDUPLICATION ─────────────────────────────────
 

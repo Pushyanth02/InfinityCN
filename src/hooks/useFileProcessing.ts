@@ -8,8 +8,8 @@
 
 import { useCallback } from 'react';
 import { useCinematifierStore, getCinematifierAIConfig } from '../store/cinematifierStore';
-import { extractText } from '../lib/pdfWorker';
-import { saveBook } from '../lib/cinematifierDb';
+import { extractText } from '../lib/processing/pdfWorker';
+import { saveBook } from '../lib/runtime/cinematifierDb';
 import {
     segmentChapters,
     createBookFromSegments,
@@ -21,6 +21,22 @@ import {
 } from '../lib/cinematifier';
 
 import type { Book, CharacterAppearance, ProcessingProgress } from '../types/cinematifier';
+
+function accumulateCharacters(
+    target: Record<string, CharacterAppearance>,
+    source: Record<string, CharacterAppearance>,
+) {
+    for (const [charName, charData] of Object.entries(source)) {
+        if (!target[charName]) {
+            target[charName] = {
+                appearances: [],
+                dialogueCount: 0,
+            };
+        }
+        target[charName].appearances.push(...charData.appearances);
+        target[charName].dialogueCount += charData.dialogueCount;
+    }
+}
 
 export function useFileProcessing(onComplete: () => void) {
     const setBook = useCinematifierStore(s => s.setBook);
@@ -175,16 +191,7 @@ async function processClientSide(
                 detectedGenre = metadata.genre;
             }
 
-            for (const [charName, charData] of Object.entries(metadata.characters)) {
-                if (!allCharacters[charName]) {
-                    allCharacters[charName] = {
-                        appearances: [],
-                        dialogueCount: 0,
-                    };
-                }
-                allCharacters[charName].appearances.push(...charData.appearances);
-                allCharacters[charName].dialogueCount += charData.dialogueCount;
-            }
+            accumulateCharacters(allCharacters, metadata.characters);
         } catch (chapterErr) {
             console.warn(`[Cinematifier] Chapter ${chapterNum} fallback:`, chapterErr);
             // Use offline fallback for this chapter
@@ -204,16 +211,7 @@ async function processClientSide(
                 });
 
                 // Accumulate characters from fallback
-                for (const [charName, charData] of Object.entries(metadata.characters)) {
-                    if (!allCharacters[charName]) {
-                        allCharacters[charName] = {
-                            appearances: [],
-                            dialogueCount: 0,
-                        };
-                    }
-                    allCharacters[charName].appearances.push(...charData.appearances);
-                    allCharacters[charName].dialogueCount += charData.dialogueCount;
-                }
+                accumulateCharacters(allCharacters, metadata.characters);
             } catch {
                 // Skip this chapter - user can retry later
             }

@@ -44,11 +44,6 @@ export function getCached(key: string): string | null {
     return entry.value;
 }
 
-// Backward-compatible alias for existing internal imports.
-export function getFromCache(key: string): string | null {
-    return getCached(key);
-}
-
 export function setCache(key: string, value: string, provider: string): void {
     if (apiCache.size >= AI_MAX_CACHE_SIZE) {
         // Evict the entry with the oldest timestamp

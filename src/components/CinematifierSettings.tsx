@@ -19,8 +19,8 @@ import {
     Search,
     Shield,
 } from 'lucide-react';
-import { useCinematifierStore, getCinematifierAIConfig } from '../store/cinematifierStore';
-import { testConnection } from '../lib/ai/index';
+import { useCinematifierStore } from '../store/cinematifierStore';
+import { useAIConnectionTest } from '../hooks';
 import type { AIConnectionStatus } from '../types/cinematifier';
 import type { AIProvider } from '../lib/ai/types';
 
@@ -116,6 +116,7 @@ function CinematifierSettings({ onClose }: CinematifierSettingsProps) {
 
     const [testStatus, setTestStatus] = useState<AIConnectionStatus | null>(null);
     const [isTesting, setIsTesting] = useState(false);
+    const runConnectionTest = useAIConnectionTest();
 
     const selectedProvider = PROVIDERS.find(p => p.id === aiProvider);
     const isProviderConfigured = aiProvider !== 'none' && aiProvider !== 'chrome';
@@ -124,8 +125,7 @@ function CinematifierSettings({ onClose }: CinematifierSettingsProps) {
         setIsTesting(true);
         setTestStatus(null);
         try {
-            const config = getCinematifierAIConfig();
-            const result = await testConnection(config);
+            const result = await runConnectionTest();
             setTestStatus(result);
         } catch (err) {
             setTestStatus({
@@ -136,7 +136,7 @@ function CinematifierSettings({ onClose }: CinematifierSettingsProps) {
         } finally {
             setIsTesting(false);
         }
-    }, [aiProvider]);
+    }, [aiProvider, runConnectionTest]);
 
     const renderProviderKeyInput = () => {
         switch (aiProvider) {

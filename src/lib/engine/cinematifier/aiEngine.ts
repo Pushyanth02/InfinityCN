@@ -147,15 +147,13 @@ export async function cinematifyText(
             prompt += `\n\nPREVIOUS CHUNK CONTEXT:\n"""\n${previousSummary}\n"""\n`;
         }
 
-        if (chunkEmbeddings.length > 0) {
-            // Find most similar past chunk summary to provide long-term continuity
-            if (abortSignal?.aborted) throw new Error('Processing aborted');
-            const currentEmbedding = await generateEmbedding(chunks[i]).catch(() => null);
-            if (abortSignal?.aborted) throw new Error('Processing aborted');
-            if (currentEmbedding) {
+        if (chunkEmbeddings.length > 1) {
+            // Use the latest summary embedding as query context (avoids extra per-chunk embedding calls)
+            const latestSummaryEmbedding = chunkEmbeddings[chunkEmbeddings.length - 1]?.embedding;
+            if (latestSummaryEmbedding) {
                 const relevantPastSummaries = retrieveRelevantContext(
-                    currentEmbedding,
-                    chunkEmbeddings,
+                    latestSummaryEmbedding,
+                    chunkEmbeddings.slice(0, -1),
                 );
                 if (relevantPastSummaries.length > 0) {
                     prompt += `\n\nRELEVANT PAST CONTEXT (from earlier in the book):\n"""\n${relevantPastSummaries.join('\n\n')}\n"""\n`;
