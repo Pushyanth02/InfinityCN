@@ -10,7 +10,7 @@ import { MODEL_PRESETS } from './presets';
 import { AIError } from './errors';
 import { AI_JSON_TIMEOUT_MS, AI_RAWTEXT_TIMEOUT_MS, AI_MAX_RETRY_DELAY_MS } from '../constants';
 import { buildTokenPlan, type TokenPlan } from './tokenFlow';
-import { assertSecureEndpoint, normalizeApiKey } from './security';
+import { assertSecureEndpoint, normalizeApiKey } from '../security/aiSecurity';
 
 // ─── UNIFIED SYSTEM PROMPT ────────────────────────────────────────────────────
 

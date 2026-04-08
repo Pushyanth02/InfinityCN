@@ -7,7 +7,7 @@
 
 import type { AIConfig } from './types';
 import { MODEL_PRESETS } from './presets';
-import { RateLimiter } from '../rateLimiter';
+import { RateLimiter } from './rateLimiter';
 import {
     API_PROXY_URL,
     handleHttpError,
@@ -17,7 +17,7 @@ import {
     getApiKeyCandidates,
     fetchWithKeyRotation,
 } from './providers';
-import { assertSecureEndpoint } from './security';
+import { assertSecureEndpoint } from '../security/aiSecurity';
 
 // ─── RATE LIMITER (shared with callAI via getRateLimiter) ──
 
