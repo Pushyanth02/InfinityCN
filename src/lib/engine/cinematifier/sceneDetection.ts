@@ -9,6 +9,8 @@
  * dream, memory), and improved scene-title derivation.
  */
 
+import { analyzeSentiment } from './sentimentTracker';
+
 /** Matches time shifts, location changes, whitespace dividers, and narrative jumps that typically indicate scene breaks */
 export const SCENE_BREAK_SIGNALS =
     /(later that night|meanwhile|hours later|at dawn|suddenly|in another place|elsewhere|the next (morning|day|evening|night)|days later|weeks later|months later|years later|across town|back at|far away|on the other side|that morning|at nightfall|before sunrise|after sunset|in a flash|without warning|in an instant|moments later|a while later|at the same time|at that moment|\*\*\*|---|###|\.{3,}|\s{3,})/i;
@@ -16,8 +18,8 @@ export const SCENE_BREAK_SIGNALS =
 /** Customizable scene break patterns (user/configurable) */
 export const CUSTOM_SCENE_BREAK_PATTERNS: RegExp[] = [
     /^\s*[*\-#=~_]{3,}\s*$/, // e.g., *** --- ###
-    /^\s*\.{3,}\s*$/,       // e.g., ...
-    /^\s*\s*$/               // blank/whitespace-only lines (optional, can be toggled)
+    /^\s*\.{3,}\s*$/, // e.g., ...
+    /^\s*\s*$/, // blank/whitespace-only lines (optional, can be toggled)
 ];
 
 /** Matches preposition + optional article + capitalized location name (e.g., "in the Forest", "at Castle Rock") */
@@ -27,6 +29,21 @@ export const LOCATION_PATTERN =
 /** Matches time-of-day or temporal phrases for scene title derivation */
 export const TIME_PATTERN =
     /\b(that night|that morning|the next day|at dawn|at dusk|hours later|days later|meanwhile)\b/i;
+
+const TIME_SHIFT_PATTERN =
+    /\b(later|earlier|meanwhile|the next (?:morning|day|night|evening)|at (?:dawn|dusk|sunrise|sunset)|that (?:night|morning|evening)|hours later|days later|weeks later|months later|years later)\b/i;
+const LOCATION_SHIFT_PATTERN =
+    /\b(?:in|at|on|inside|outside|near|across|back at|beyond)\s+(?:the\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/;
+const NARRATIVE_TRANSITION_PATTERN =
+    /\b(meanwhile|elsewhere|back in|back at|on the other side|later|earlier|in another place|at the same time|as for)\b/i;
+const EMOTIONAL_RESET_THRESHOLD = 0.55;
+const SCENE_BREAK_THRESHOLD = 2;
+const MAX_PARAGRAPHS_PER_SCENE = 8;
+
+export interface Scene {
+    id: string;
+    text: string;
+}
 
 /** Matches a capitalized character name at the start of a sentence followed by a verb */
 const POV_NAME_PATTERN =
@@ -50,35 +67,103 @@ const MOOD_PATTERNS: { pattern: RegExp; prefix: string }[] = [
     { pattern: /\b(calm|peace|quiet|gentle|serene|still|rest)\b/i, prefix: 'Quiet' },
 ];
 
+function extractLocationHint(paragraph: string): string | undefined {
+    const match = paragraph.match(LOCATION_SHIFT_PATTERN) || paragraph.match(LOCATION_PATTERN);
+    return match?.[1]?.trim().toLowerCase();
+}
+
+function hasEmotionalReset(previous: string, current: string): boolean {
+    const prevSentiment = analyzeSentiment(previous);
+    const currentSentiment = analyzeSentiment(current);
+
+    if (prevSentiment.confidence < 0.05 || currentSentiment.confidence < 0.05) return false;
+
+    const delta = Math.abs(prevSentiment.score - currentSentiment.score);
+    const polarityFlipped =
+        Math.sign(prevSentiment.score) !== Math.sign(currentSentiment.score) &&
+        Math.abs(prevSentiment.score) >= 0.2 &&
+        Math.abs(currentSentiment.score) >= 0.2;
+
+    return delta >= EMOTIONAL_RESET_THRESHOLD || polarityFlipped;
+}
+
+function shouldStartNewScene(previous: string, current: string, currentSceneLength: number): boolean {
+    const previousLocation = extractLocationHint(previous);
+    const currentLocation = extractLocationHint(current);
+    const locationChanged =
+        Boolean(previousLocation) && Boolean(currentLocation) && previousLocation !== currentLocation;
+
+    const timeShift = TIME_SHIFT_PATTERN.test(current);
+    const legacySignal = SCENE_BREAK_SIGNALS.test(current);
+    const narrativeTransition = NARRATIVE_TRANSITION_PATTERN.test(current);
+    const modeTransition = detectNarrativeMode(previous) !== detectNarrativeMode(current);
+    const emotionalReset = hasEmotionalReset(previous, current);
+
+    let score = 0;
+    if (timeShift) score += 1;
+    if (locationChanged) score += 1;
+    if (legacySignal || narrativeTransition || modeTransition) score += 1;
+    if (emotionalReset) score += 1;
+
+    if (currentSceneLength >= MAX_PARAGRAPHS_PER_SCENE && score >= 1) return true;
+    return score >= SCENE_BREAK_THRESHOLD;
+}
+
+function segmentParagraphsUniversal(paragraphs: string[]): string[][] {
+    const scenes: string[][] = [];
+    let currentScene: string[] = [];
+
+    for (const paragraph of paragraphs) {
+        const p = paragraph.trim();
+        if (!p) continue;
+
+        const isStructuralDivider = CUSTOM_SCENE_BREAK_PATTERNS.some(re => re.test(p));
+        if (isStructuralDivider) {
+            if (currentScene.length) {
+                scenes.push(currentScene);
+                currentScene = [];
+            }
+            continue;
+        }
+
+        if (
+            currentScene.length > 0 &&
+            shouldStartNewScene(currentScene[currentScene.length - 1], p, currentScene.length)
+        ) {
+            scenes.push(currentScene);
+            currentScene = [];
+        }
+
+        currentScene.push(p);
+    }
+
+    if (currentScene.length) scenes.push(currentScene);
+    return scenes;
+}
+
 /**
  * Detect scene breaks in paragraphs using heuristic patterns.
  * Used as fallback when AI scene segmentation is unavailable.
  */
 export function detectSceneBreaks(paragraphs: string[]): string[][] {
-    const scenes: string[][] = [];
-    let currentScene: string[] = [];
+    return segmentParagraphsUniversal(paragraphs);
+}
 
-    for (const p of paragraphs) {
-        // Normalize paragraph for break detection
-        const normalized = p.toLowerCase().replace(/[.,!?;:()"'-]/g, ''); // preserve spaces
-        // Check for built-in and custom scene break signals (substring match)
-        const isCustomBreak = CUSTOM_SCENE_BREAK_PATTERNS.some(re => re.test(p));
-        const isSignalBreak = normalized.match(SCENE_BREAK_SIGNALS) !== null;
-        
-        if ((isCustomBreak || isSignalBreak) && currentScene.length > 0) {
-            scenes.push(currentScene);
-            currentScene = [];
-        }
-        
-        // Drop the line entirely if it's just a structural divider
-        if (!isCustomBreak) {
-            currentScene.push(p);
-        }
-    }
+/**
+ * Universal scene segmentation for arbitrary novel text.
+ * Detects time shifts, location changes, narrative transitions, and emotional resets.
+ */
+export function segmentScenesUniversal(text: string): Scene[] {
+    const paragraphs = text
+        .split(/\n\n+/)
+        .map(p => p.trim())
+        .filter(Boolean);
 
-    if (currentScene.length) scenes.push(currentScene);
-
-    return scenes;
+    const groupedScenes = segmentParagraphsUniversal(paragraphs);
+    return groupedScenes.map((sceneParagraphs, index) => ({
+        id: `scene-${index + 1}`,
+        text: sceneParagraphs.join('\n\n'),
+    }));
 }
 
 /** Derive a scene title from the first paragraph of a scene group */
