@@ -49,6 +49,9 @@ export const ProcessingOverlay: React.FC<ProcessingOverlayProps> = ({ progress }
             case 'complete':
                 return 'finalize';
             case 'error':
+                // Error is terminal in this flow, so reuse the final step bucket.
+                return 'finalize';
+            default:
                 return 'finalize';
         }
     })();
