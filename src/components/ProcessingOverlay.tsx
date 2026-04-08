@@ -37,6 +37,10 @@ function getStepStatus(stepId: string, currentStage: string): 'done' | 'active' 
     return 'pending';
 }
 
+function assertUnreachable(value: never): never {
+    throw new Error(`Unhandled processing phase: ${String(value)}`);
+}
+
 export const ProcessingOverlay: React.FC<ProcessingOverlayProps> = ({ progress }) => {
     const stage = (() => {
         switch (progress.phase) {
@@ -53,9 +57,7 @@ export const ProcessingOverlay: React.FC<ProcessingOverlayProps> = ({ progress }
                 return 'finalize';
         }
 
-        const unreachablePhase: never = progress.phase;
-        console.warn('[ProcessingOverlay] Unhandled processing phase:', unreachablePhase);
-        return 'finalize';
+        return assertUnreachable(progress.phase);
     })();
     const percent = progress.percentComplete;
     const detail = progress.message;
