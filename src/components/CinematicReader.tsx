@@ -20,7 +20,7 @@
  *   - ReaderFooter       — Chapter navigation footer
  */
 
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, lazy, Suspense } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { Film, Sparkles } from 'lucide-react';
 import { useCinematifierStore } from '../store/cinematifierStore';
@@ -37,12 +37,16 @@ import {
     ReaderChapterSidebar,
     ReaderCharactersPanel,
     ReaderHeader,
-    ReaderSettingsPanel,
     ReaderFooter,
 } from './reader';
 
 // Hoisted constant to avoid recreating the threshold array on every render cycle
 const OBSERVER_THRESHOLDS: number[] = [0, 0.25, 0.5, 0.75, 1];
+const ReaderSettingsPanel = lazy(() =>
+    import('./reader/ReaderSettingsPanel').then(module => ({
+        default: module.ReaderSettingsPanel,
+    })),
+);
 
 interface CinematicReaderProps {
     onClose: () => void;
@@ -211,20 +215,22 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
             {/* Settings Panel */}
             <AnimatePresence>
                 {showSettings && (
-                    <ReaderSettingsPanel
-                        fontSize={fontSize}
-                        setFontSize={setFontSize}
-                        lineSpacing={lineSpacing}
-                        setLineSpacing={setLineSpacing}
-                        immersionLevel={immersionLevel}
-                        setImmersionLevel={setImmersionLevel}
-                        dyslexiaFont={dyslexiaFont}
-                        toggleDyslexiaFont={toggleDyslexiaFont}
-                        darkMode={darkMode}
-                        toggleDarkMode={toggleDarkMode}
-                        aiProvider={aiProvider}
-                        bookmarkCount={bookmarks.length}
-                    />
+                    <Suspense fallback={null}>
+                        <ReaderSettingsPanel
+                            fontSize={fontSize}
+                            setFontSize={setFontSize}
+                            lineSpacing={lineSpacing}
+                            setLineSpacing={setLineSpacing}
+                            immersionLevel={immersionLevel}
+                            setImmersionLevel={setImmersionLevel}
+                            dyslexiaFont={dyslexiaFont}
+                            toggleDyslexiaFont={toggleDyslexiaFont}
+                            darkMode={darkMode}
+                            toggleDarkMode={toggleDarkMode}
+                            aiProvider={aiProvider}
+                            bookmarkCount={bookmarks.length}
+                        />
+                    </Suspense>
                 )}
             </AnimatePresence>
 

@@ -17,17 +17,56 @@ import { cinematifyOffline } from './offlineEngine';
 
 // ─── Text Chunking ─────────────────────────────────────────
 
+const STREAM_PARSE_MIN_CHARS = 320;
+
+function splitOversizedParagraph(paragraph: string): string[] {
+    const trimmed = paragraph.trim();
+    if (!trimmed) return [];
+    if (trimmed.length <= MAX_CHUNK_CHARS) return [trimmed];
+
+    const parts: string[] = [];
+    let remaining = trimmed;
+
+    while (remaining.length > MAX_CHUNK_CHARS) {
+        const windowText = remaining.slice(0, MAX_CHUNK_CHARS);
+        const candidateBreaks = [
+            windowText.lastIndexOf('. '),
+            windowText.lastIndexOf('! '),
+            windowText.lastIndexOf('? '),
+            windowText.lastIndexOf('; '),
+            windowText.lastIndexOf(', '),
+            windowText.lastIndexOf(' '),
+        ];
+        let splitIndex = Math.max(...candidateBreaks);
+
+        // Avoid pathological tiny splits when punctuation appears too early.
+        if (splitIndex < Math.floor(MAX_CHUNK_CHARS * 0.4)) {
+            splitIndex = MAX_CHUNK_CHARS;
+        }
+
+        const part = remaining.slice(0, splitIndex).trim();
+        if (part) parts.push(part);
+        remaining = remaining.slice(splitIndex).trim();
+    }
+
+    if (remaining) parts.push(remaining);
+    return parts;
+}
+
 function chunkText(text: string): string[] {
     const chunks: string[] = [];
     const paragraphs = text.split(/\n\s*\n/);
     let current = '';
 
     for (const para of paragraphs) {
-        if ((current + '\n\n' + para).length > MAX_CHUNK_CHARS && current) {
-            chunks.push(current.trim());
-            current = para;
-        } else {
-            current = current ? current + '\n\n' + para : para;
+        const parts = splitOversizedParagraph(para);
+        for (const part of parts) {
+            if ((current + '\n\n' + part).length > MAX_CHUNK_CHARS && current) {
+                chunks.push(current.trim());
+                current = part;
+            } else {
+                current = current ? current + '\n\n' + part : part;
+            }
         }
     }
     if (current.trim()) {
@@ -187,7 +226,7 @@ export async function cinematifyText(
                     // Look for completed paragraphs to parse and flush block-by-block
                     const doubleNewlineIdx = rawBuffer.lastIndexOf('\n\n');
 
-                    if (doubleNewlineIdx > lastProcessedIndex) {
+                    if (doubleNewlineIdx > lastProcessedIndex + STREAM_PARSE_MIN_CHARS) {
                         const completableText = rawBuffer
                             .substring(lastProcessedIndex, doubleNewlineIdx)
                             .trim();

@@ -30,6 +30,8 @@ export function useChapterProcessing(
         setIsProcessingChapter(true);
         const controller = new AbortController();
         abortControllerRef.current = controller;
+        let streamingFlushFrame: number | null = null;
+        let pendingIsDone = false;
 
         try {
             const config = getCinematifierAIConfig();
@@ -41,19 +43,39 @@ export function useChapterProcessing(
                 result = await pipeline.execute(currentChapter.originalText);
             } else {
                 const accumulatedBlocks: CinematicBlock[] = [];
+
+                const flushStreamingBlocks = (isDone: boolean) => {
+                    updateChapter(currentChapterIndex, {
+                        cinematifiedBlocks: [...accumulatedBlocks],
+                        isProcessed: isDone,
+                    });
+                };
+
+                const scheduleStreamingFlush = (isDone: boolean) => {
+                    pendingIsDone = pendingIsDone || isDone;
+                    if (streamingFlushFrame !== null) return;
+                    streamingFlushFrame = window.requestAnimationFrame(() => {
+                        streamingFlushFrame = null;
+                        flushStreamingBlocks(pendingIsDone);
+                        pendingIsDone = false;
+                    });
+                };
+
                 result = await cinematifyText(
                     currentChapter.originalText,
                     config,
                     undefined,
                     (blocks, isDone) => {
                         accumulatedBlocks.push(...blocks);
-                        updateChapter(currentChapterIndex, {
-                            cinematifiedBlocks: [...accumulatedBlocks],
-                            isProcessed: isDone,
-                        });
+                        scheduleStreamingFlush(isDone);
                     },
                     controller.signal
                 );
+
+                if (streamingFlushFrame !== null) {
+                    window.cancelAnimationFrame(streamingFlushFrame);
+                    streamingFlushFrame = null;
+                }
             }
 
             updateChapter(currentChapterIndex, {
@@ -67,6 +89,10 @@ export function useChapterProcessing(
                     console.warn('[CinematicReader] Failed to persist book:', e);
                 });
         } catch (err) {
+            if (streamingFlushFrame !== null) {
+                window.cancelAnimationFrame(streamingFlushFrame);
+                streamingFlushFrame = null;
+            }
             if (controller.signal.aborted) {
                 // Cancelled by user, do not update chapter
                 return;
@@ -85,6 +111,9 @@ export function useChapterProcessing(
                     console.warn('[CinematicReader] Failed to persist book:', e);
                 });
         } finally {
+            if (streamingFlushFrame !== null) {
+                window.cancelAnimationFrame(streamingFlushFrame);
+            }
             setIsProcessingChapter(false);
             abortControllerRef.current = null;
         }

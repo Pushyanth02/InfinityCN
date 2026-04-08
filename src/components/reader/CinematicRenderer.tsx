@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import type { CinematicBlock } from '../../types/cinematifier';
 import { CinematicBlockView } from './CinematicBlockView';
 
@@ -6,6 +6,9 @@ interface CinematicRendererProps {
     blocks: CinematicBlock[];
     immersionLevel: 'minimal' | 'balanced' | 'cinematic';
 }
+
+const INITIAL_RENDER_BLOCKS = 120;
+const RENDER_BATCH_SIZE = 80;
 
 function getParagraphType(block: CinematicBlock): 'scene' | 'dialogue' | 'reflection' | 'tension' | 'action' {
     if (block.type === 'title_card') return 'scene';
@@ -23,10 +26,36 @@ function getBlockSpacing(block: CinematicBlock): string {
     return '1rem';
 }
 
-export const CinematicRenderer: React.FC<CinematicRendererProps> = ({ blocks, immersionLevel }) => {
+export const CinematicRenderer: React.FC<CinematicRendererProps> = React.memo(function CinematicRenderer({
+    blocks,
+    immersionLevel,
+}) {
+    const [visibleCount, setVisibleCount] = useState(() =>
+        Math.min(blocks.length, INITIAL_RENDER_BLOCKS),
+    );
+
+    useEffect(() => {
+        setVisibleCount(prev => {
+            if (blocks.length <= INITIAL_RENDER_BLOCKS) return blocks.length;
+            return Math.min(blocks.length, Math.max(prev, INITIAL_RENDER_BLOCKS));
+        });
+    }, [blocks.length]);
+
+    useEffect(() => {
+        if (visibleCount >= blocks.length) return;
+
+        const timer = window.setTimeout(() => {
+            setVisibleCount(prev => Math.min(blocks.length, prev + RENDER_BATCH_SIZE));
+        }, 16);
+
+        return () => window.clearTimeout(timer);
+    }, [visibleCount, blocks.length]);
+
+    const visibleBlocks = useMemo(() => blocks.slice(0, visibleCount), [blocks, visibleCount]);
+
     return (
         <>
-            {blocks.map((block, i) => {
+            {visibleBlocks.map((block, i) => {
                 const paragraphType = getParagraphType(block);
                 return (
                     <div
@@ -41,4 +70,4 @@ export const CinematicRenderer: React.FC<CinematicRendererProps> = ({ blocks, im
             })}
         </>
     );
-};
+});
