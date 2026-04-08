@@ -22,6 +22,71 @@ import {
 
 import type { Book, CharacterAppearance, ProcessingProgress } from '../types/cinematifier';
 
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+const SUPPORTED_EXTENSIONS = ['.pdf', '.txt', '.epub'];
+
+function isSupportedFile(file: File): boolean {
+    const loweredName = file.name.toLowerCase();
+    return SUPPORTED_EXTENSIONS.some(ext => loweredName.endsWith(ext));
+}
+
+function validateInputFile(file: File): void {
+    if (!file.name.trim()) {
+        throw new Error('Invalid file: missing filename.');
+    }
+    if (!isSupportedFile(file)) {
+        throw new Error('Unsupported file format. Please upload PDF, TXT, or EPUB.');
+    }
+    if (file.size <= 0) {
+        throw new Error('The selected file is empty.');
+    }
+    if (file.size > MAX_UPLOAD_BYTES) {
+        throw new Error('File exceeds the 50 MB upload limit.');
+    }
+}
+
+function isRetryableError(error: unknown): boolean {
+    const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+    return (
+        message.includes('network') ||
+        message.includes('timeout') ||
+        message.includes('503') ||
+        message.includes('429') ||
+        message.includes('rate limit') ||
+        message.includes('failed to fetch')
+    );
+}
+
+function toUserFacingError(error: unknown): string {
+    const message = error instanceof Error ? error.message : String(error);
+    const lower = message.toLowerCase();
+    if (lower.includes('429') || lower.includes('rate limit')) {
+        return 'AI rate limit reached. Please retry in a moment or switch provider.';
+    }
+    if (lower.includes('api key') || lower.includes('401') || lower.includes('403')) {
+        return 'AI authentication failed. Please verify your provider key in settings.';
+    }
+    if (lower.includes('network') || lower.includes('failed to fetch') || lower.includes('timeout')) {
+        return 'Network issue while processing. Please retry.';
+    }
+    return message || 'Failed to process file';
+}
+
+async function retryAsync<T>(operation: () => Promise<T>, retries = 2, baseDelayMs = 800): Promise<T> {
+    let lastError: unknown;
+    for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+            return await operation();
+        } catch (error) {
+            lastError = error;
+            if (attempt >= retries || !isRetryableError(error)) break;
+            const delayMs = Math.min(baseDelayMs * 2 ** attempt, 4000);
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+    }
+    throw lastError instanceof Error ? lastError : new Error(String(lastError));
+}
+
 function accumulateCharacters(
     target: Record<string, CharacterAppearance>,
     source: Record<string, CharacterAppearance>,
@@ -52,6 +117,8 @@ export function useFileProcessing(onComplete: () => void) {
             setError(null);
 
             try {
+                validateInputFile(file);
+
                 // Phase 1: Extract text from file
                 setProgress({
                     phase: 'extracting',
@@ -61,7 +128,7 @@ export function useFileProcessing(onComplete: () => void) {
                     message: 'Extracting text...',
                 });
 
-                let text = await extractText(file);
+                let text = await retryAsync(() => extractText(file));
                 const isPDF = file.name.toLowerCase().endsWith('.pdf');
                 if (isPDF) {
                     text = cleanExtractedText(text);
@@ -86,6 +153,9 @@ export function useFileProcessing(onComplete: () => void) {
                 });
 
                 const segments = segmentChapters(text);
+                if (segments.length === 0) {
+                    throw new Error('Could not detect readable chapters from the uploaded text.');
+                }
                 const bookTitle = file.name.replace(/\.(pdf|epub|docx|pptx|txt)$/i, '');
                 const bookData = createBookFromSegments(segments, bookTitle);
 
@@ -100,7 +170,7 @@ export function useFileProcessing(onComplete: () => void) {
                 const totalChapters = bookWithId.chapters.length;
 
                 // ── Client-side processing path ───────────────────────
-                await processClientSide(
+                const summary = await processClientSide(
                     bookWithId,
                     totalChapters,
                     config,
@@ -108,11 +178,30 @@ export function useFileProcessing(onComplete: () => void) {
                     updateChapter,
                     updateBook,
                     setProcessing,
-                    onComplete,
                 );
+
+                if (summary.failedChapters > 0) {
+                    const chapterLabel = summary.failedChapters === 1 ? 'chapter' : 'chapters';
+                    setError(
+                        summary.failedChapters === totalChapters
+                            ? `Processing failed for all chapters. Please retry with another provider or run offline.`
+                            : `Processed with warnings: ${summary.failedChapters} ${chapterLabel} failed and were marked for retry.`,
+                    );
+                }
+
+                if (summary.failedChapters < totalChapters) {
+                    onComplete();
+                }
             } catch (err) {
                 console.error('[Cinematifier] Processing error:', err);
-                setError(err instanceof Error ? err.message : 'Failed to process file');
+                setProgress({
+                    phase: 'error',
+                    currentChapter: 0,
+                    totalChapters: 0,
+                    percentComplete: 0,
+                    message: 'Processing failed. Please retry.',
+                });
+                setError(toUserFacingError(err));
                 setProcessing(false);
             }
         },
@@ -135,17 +224,18 @@ async function processClientSide(
     ) => void,
     updateBook: (updates: Partial<Book>) => void,
     setProcessing: (v: boolean) => void,
-    onComplete: () => void,
-) {
+): Promise<{ failedChapters: number }> {
     const progressPerChapter = 45 / totalChapters;
 
     // Accumulate book-level metadata without mutating bookWithId
     let detectedGenre: Book['genre'] | undefined;
     const allCharacters: Record<string, CharacterAppearance> = {};
+    let failedChapters = 0;
 
     for (let i = 0; i < totalChapters; i++) {
         const chapterNum = i + 1;
         const baseProgress = 50 + i * progressPerChapter;
+        updateChapter(i, { status: 'processing', errorMessage: undefined });
 
         setProgress({
             phase: 'cinematifying',
@@ -182,6 +272,8 @@ async function processClientSide(
                 cinematifiedBlocks: result.blocks,
                 cinematifiedText: result.rawText,
                 isProcessed: true,
+                status: 'ready',
+                errorMessage: undefined,
                 toneTags: metadata.toneTags,
                 characters: metadata.characters,
             });
@@ -206,32 +298,60 @@ async function processClientSide(
                     cinematifiedBlocks: fallbackResult.blocks,
                     cinematifiedText: fallbackResult.rawText,
                     isProcessed: true,
+                    status: 'ready',
+                    errorMessage: 'AI provider failed; offline fallback applied for this chapter.',
                     toneTags: metadata.toneTags,
                     characters: metadata.characters,
                 });
 
                 // Accumulate characters from fallback
                 accumulateCharacters(allCharacters, metadata.characters);
-            } catch {
-                // Skip this chapter - user can retry later
+            } catch (fallbackErr) {
+                failedChapters += 1;
+                updateChapter(i, {
+                    status: 'error',
+                    isProcessed: false,
+                    errorMessage:
+                        fallbackErr instanceof Error
+                            ? fallbackErr.message
+                            : 'Failed to process chapter. You can retry later.',
+                });
             }
         }
     }
 
     // Push accumulated book-level metadata to the store
-    const bookUpdates: Partial<Book> = { status: 'ready' as const };
+    const bookUpdates: Partial<Book> = {
+        status: failedChapters === totalChapters ? 'error' : ('ready' as const),
+    };
     if (detectedGenre) bookUpdates.genre = detectedGenre;
     if (Object.keys(allCharacters).length > 0) bookUpdates.characters = allCharacters;
+    if (failedChapters > 0) {
+        bookUpdates.errorMessage = `${failedChapters} chapter${failedChapters === 1 ? '' : 's'} failed to process.`;
+    }
     updateBook(bookUpdates);
 
-    // Complete
-    setProgress({
-        phase: 'complete',
-        currentChapter: totalChapters,
-        totalChapters,
-        percentComplete: 100,
-        message: 'Ready to read!',
-    });
+    if (failedChapters === totalChapters) {
+        setProgress({
+            phase: 'error',
+            currentChapter: totalChapters,
+            totalChapters,
+            percentComplete: 100,
+            message: 'Unable to process chapters. Please retry with another provider or offline mode.',
+        });
+    } else {
+        // Complete
+        setProgress({
+            phase: 'complete',
+            currentChapter: totalChapters,
+            totalChapters,
+            percentComplete: 100,
+            message:
+                failedChapters > 0
+                    ? 'Processing complete with some chapter failures.'
+                    : 'Ready to read!',
+        });
+    }
 
     // Persist processed book to IndexedDB
     const finalBook = useCinematifierStore.getState().book;
@@ -244,5 +364,5 @@ async function processClientSide(
     // Short delay then show reader
     await new Promise(r => setTimeout(r, 500));
     setProcessing(false);
-    onComplete();
+    return { failedChapters };
 }

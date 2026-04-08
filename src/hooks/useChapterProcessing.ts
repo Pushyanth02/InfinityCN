@@ -12,6 +12,21 @@ import { cinematifyText, cinematifyOffline, CinematificationPipeline } from '../
 import { saveBook } from '../lib/runtime/cinematifierDb';
 import type { CinematicBlock, ReaderMode, Chapter } from '../types/cinematifier';
 
+function toChapterErrorMessage(error: unknown): string {
+    const message = error instanceof Error ? error.message : String(error);
+    const lower = message.toLowerCase();
+    if (lower.includes('429') || lower.includes('rate limit')) {
+        return 'AI rate limit reached while processing this chapter.';
+    }
+    if (lower.includes('api key') || lower.includes('401') || lower.includes('403')) {
+        return 'AI authentication failed for this chapter.';
+    }
+    if (lower.includes('network') || lower.includes('failed to fetch') || lower.includes('timeout')) {
+        return 'Network issue while processing this chapter.';
+    }
+    return message || 'Failed to process chapter.';
+}
+
 export function useChapterProcessing(
     currentChapter: Chapter | undefined,
     currentChapterIndex: number,
@@ -19,8 +34,32 @@ export function useChapterProcessing(
 ) {
 
     const updateChapter = useCinematifierStore(s => s.updateChapter);
+    const setError = useCinematifierStore(s => s.setError);
     const [isProcessingChapter, setIsProcessingChapter] = useState(false);
     const abortControllerRef = useRef<AbortController | null>(null);
+
+    const retryCinematifyText = useCallback(
+        async (
+            text: string,
+            config: ReturnType<typeof getCinematifierAIConfig>,
+            onChunk: (blocks: CinematicBlock[], isDone: boolean) => void,
+            signal: AbortSignal,
+        ) => {
+            let lastError: unknown;
+            for (let attempt = 0; attempt < 2; attempt++) {
+                try {
+                    return await cinematifyText(text, config, undefined, onChunk, signal);
+                } catch (error) {
+                    lastError = error;
+                    if (signal.aborted) throw error;
+                    if (attempt >= 1) break;
+                    await new Promise(resolve => setTimeout(resolve, 800));
+                }
+            }
+            throw lastError instanceof Error ? lastError : new Error(String(lastError));
+        },
+        [],
+    );
 
 
     const processCurrentChapter = useCallback(async () => {
@@ -32,6 +71,7 @@ export function useChapterProcessing(
         abortControllerRef.current = controller;
         let streamingFlushFrame: number | null = null;
         let pendingIsDone = false;
+        updateChapter(currentChapterIndex, { status: 'processing', errorMessage: undefined });
 
         try {
             const config = getCinematifierAIConfig();
@@ -61,15 +101,14 @@ export function useChapterProcessing(
                     });
                 };
 
-                result = await cinematifyText(
+                result = await retryCinematifyText(
                     currentChapter.originalText,
                     config,
-                    undefined,
                     (blocks, isDone) => {
                         accumulatedBlocks.push(...blocks);
                         scheduleStreamingFlush(isDone);
                     },
-                    controller.signal
+                    controller.signal,
                 );
 
                 if (streamingFlushFrame !== null) {
@@ -82,6 +121,8 @@ export function useChapterProcessing(
                 cinematifiedBlocks: result.blocks,
                 cinematifiedText: result.rawText,
                 isProcessed: true,
+                status: 'ready',
+                errorMessage: undefined,
             });
             const updatedBook = useCinematifierStore.getState().book;
             if (updatedBook)
@@ -99,17 +140,30 @@ export function useChapterProcessing(
             }
             console.error('[CinematicReader] Process error:', err);
             if (!currentChapter) return;
-            const result = cinematifyOffline(currentChapter.originalText);
-            updateChapter(currentChapterIndex, {
-                cinematifiedBlocks: result.blocks,
-                cinematifiedText: result.rawText,
-                isProcessed: true,
-            });
-            const updatedBook = useCinematifierStore.getState().book;
-            if (updatedBook)
-                saveBook(updatedBook).catch(e => {
-                    console.warn('[CinematicReader] Failed to persist book:', e);
+            try {
+                const result = cinematifyOffline(currentChapter.originalText);
+                updateChapter(currentChapterIndex, {
+                    cinematifiedBlocks: result.blocks,
+                    cinematifiedText: result.rawText,
+                    isProcessed: true,
+                    status: 'ready',
+                    errorMessage: 'AI provider failed; offline fallback applied for this chapter.',
                 });
+                setError('AI processing failed for the chapter; offline fallback was applied.');
+                const updatedBook = useCinematifierStore.getState().book;
+                if (updatedBook)
+                    saveBook(updatedBook).catch(e => {
+                        console.warn('[CinematicReader] Failed to persist book:', e);
+                    });
+            } catch (fallbackError) {
+                const message = toChapterErrorMessage(fallbackError);
+                updateChapter(currentChapterIndex, {
+                    status: 'error',
+                    isProcessed: false,
+                    errorMessage: message,
+                });
+                setError(`Chapter processing failed: ${message}`);
+            }
         } finally {
             if (streamingFlushFrame !== null) {
                 window.cancelAnimationFrame(streamingFlushFrame);
@@ -117,7 +171,7 @@ export function useChapterProcessing(
             setIsProcessingChapter(false);
             abortControllerRef.current = null;
         }
-    }, [currentChapter, currentChapterIndex, isProcessingChapter, updateChapter]);
+    }, [currentChapter, currentChapterIndex, isProcessingChapter, updateChapter, setError, retryCinematifyText]);
 
     const cancelProcessing = useCallback(() => {
         if (abortControllerRef.current) {

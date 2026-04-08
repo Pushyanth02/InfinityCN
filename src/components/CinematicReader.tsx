@@ -305,7 +305,14 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                             <div className="cine-blocks-wrapper">
                                 <div className="cine-empty-state">
                                     <Film size={48} />
-                                    <p>Chapter not yet cinematified</p>
+                                    <p>
+                                        {currentChapter.status === 'error'
+                                            ? 'Chapter processing failed'
+                                            : 'Chapter not yet cinematified'}
+                                    </p>
+                                    {currentChapter.errorMessage && (
+                                        <p className="cine-error-message">{currentChapter.errorMessage}</p>
+                                    )}
                                     <button
                                         className="cine-btn cine-btn--primary"
                                         onClick={processCurrentChapter}
