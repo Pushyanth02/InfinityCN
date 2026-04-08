@@ -44,7 +44,6 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
-    "axe-cli": "^3.2.1",
     "axe-core": "^4.11.1",
     "eslint": "^10.0.3",
     "eslint-config-prettier": "^10.1.8",
