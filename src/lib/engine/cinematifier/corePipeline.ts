@@ -47,8 +47,11 @@ const TENSION_CUES =
     /\b(suddenly|danger|threat|panic|fear|dread|blood|scream|gun|knife|fight|attack|urgent|run|now)\b/i;
 const DIALOGUE_LINE = /^\s*(?:["“']|[A-Z][A-Za-z]+:\s)/;
 const SENTENCE_BOUNDARY = /(?<=[.!?]["”']?)\s+/;
+// Paragraphs above this size are split into smaller cinematic units for readability.
 const DENSE_PARAGRAPH_WORD_THRESHOLD = 55;
+// Narrative chunks are capped around this size to prevent dense walls of text.
 const DENSE_SENTENCE_WORD_THRESHOLD = 22;
+// Very short or emphatic lines are isolated as dramatic beats.
 const DRAMATIC_WORD_THRESHOLD = 5;
 const SPEECH_VERBS_PATTERN = 'said|asked|replied|whispered|shouted|muttered';
 const SPEECH_ATTRIBUTION_PATTERN = new RegExp(
@@ -78,7 +81,8 @@ function clamp(value: number, min: number, max: number): number {
     return Math.max(min, Math.min(max, value));
 }
 
-function breakSentenceIntoShortLines(sentence: string, maxWords = 8): string {
+function breakSentenceIntoShortLines(sentence: string): string {
+    const maxWords = 6;
     const words = sentence.split(/\s+/).filter(Boolean);
     if (words.length <= maxWords) return sentence.trim();
 
@@ -231,7 +235,7 @@ export function cinematizeScene(scene: string): string {
                 }
 
                 cinematicUnits.push(
-                    shouldAddTensionSpacing ? breakSentenceIntoShortLines(trimmed, 6) : trimmed,
+                    shouldAddTensionSpacing ? breakSentenceIntoShortLines(trimmed) : trimmed,
                 );
                 continue;
             }
