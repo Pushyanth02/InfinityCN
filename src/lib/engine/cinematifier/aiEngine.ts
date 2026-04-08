@@ -148,12 +148,14 @@ export async function cinematifyText(
         }
 
         if (chunkEmbeddings.length > 1) {
-            // Use the latest summary embedding as query context (avoids extra per-chunk embedding calls)
-            const latestSummaryEmbedding = chunkEmbeddings[chunkEmbeddings.length - 1]?.embedding;
-            if (latestSummaryEmbedding) {
+            // Query with the latest completed summary embedding (previous chunk),
+            // and search only earlier summaries to avoid self-matching.
+            const previousSummaryEmbedding = chunkEmbeddings[chunkEmbeddings.length - 1]?.embedding;
+            const earlierSummaryEmbeddings = chunkEmbeddings.slice(0, -1);
+            if (previousSummaryEmbedding && earlierSummaryEmbeddings.length > 0) {
                 const relevantPastSummaries = retrieveRelevantContext(
-                    latestSummaryEmbedding,
-                    chunkEmbeddings.slice(0, -1),
+                    previousSummaryEmbedding,
+                    earlierSummaryEmbeddings,
                 );
                 if (relevantPastSummaries.length > 0) {
                     prompt += `\n\nRELEVANT PAST CONTEXT (from earlier in the book):\n"""\n${relevantPastSummaries.join('\n\n')}\n"""\n`;
