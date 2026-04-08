@@ -20,6 +20,26 @@
     position: relative;
 }
 
+.cine-paragraph {
+    position: relative;
+}
+
+.cine-paragraph--dialogue {
+    margin-inline: clamp(0.25rem, 1.4vw, 0.8rem);
+}
+
+.cine-paragraph--reflection {
+    margin-inline: clamp(0.5rem, 2vw, 1rem);
+}
+
+.cine-paragraph--scene {
+    margin-block: var(--cine-space-2xl);
+}
+
+.cine-paragraph--tension {
+    margin-block: var(--cine-space-xl);
+}
+
 /* Action/Narration */
 .cine-block--action {
     padding: var(--cine-space-md) 0;

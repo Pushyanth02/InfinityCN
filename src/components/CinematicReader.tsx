@@ -30,7 +30,7 @@ import { useReadingProgress, useAmbientAudio, useAutoScroll, useChapterProcessin
 
 // Extracted sub-components
 import {
-    CinematicBlockView,
+    CinematicRenderer,
     OriginalTextView,
     EmotionHeatmap,
     ChapterNav,
@@ -274,14 +274,10 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                         ) : currentChapter.cinematifiedBlocks.length > 0 ? (
                             <div className="cine-blocks-wrapper">
                                 <div className="cine-blocks">
-                                    {currentChapter.cinematifiedBlocks.map((block, i) => (
-                                        <CinematicBlockView
-                                            key={block.id}
-                                            block={block}
-                                            index={i}
-                                            immersionLevel={immersionLevel}
-                                        />
-                                    ))}
+                                    <CinematicRenderer
+                                        blocks={currentChapter.cinematifiedBlocks}
+                                        immersionLevel={immersionLevel}
+                                    />
                                     {isProcessingChapter && (
                                         <div className="cine-processing cine-processing-inline">
                                             <Sparkles size={16} className="cine-processing-icon" />

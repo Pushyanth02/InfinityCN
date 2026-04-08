@@ -208,13 +208,14 @@ export function parseCinematifiedText(text: string): CinematicBlock[] {
             .filter(Boolean);
 
         for (const line of lines) {
-            // [SCENE: description] marker — scene title
-            const sceneMatch = line.match(/^\[SCENE:\s*(.+?)\]\s*$/i);
+            // [SCENE: description] or [SCENE] description marker — scene title
+            const sceneMatch = line.match(/^\[SCENE(?::\s*(.+?))?\]\s*(.*)$/i);
             if (sceneMatch) {
+                const sceneTitle = (sceneMatch[1] || sceneMatch[2] || 'SCENE').trim();
                 blocks.push({
                     id: generateBlockId(),
                     type: 'title_card',
-                    content: sceneMatch[1].trim(),
+                    content: sceneTitle,
                     intensity: 'normal',
                 });
                 continue;
@@ -286,6 +287,22 @@ export function parseCinematifiedText(text: string): CinematicBlock[] {
                 continue;
             }
 
+            // [SFX: sound] or [SFX] sound
+            const bracketSfx = line.match(/^\[SFX(?::\s*(.+?))?\]\s*(.*)$/i);
+            if (bracketSfx) {
+                const sound = (bracketSfx[1] || bracketSfx[2]).trim();
+                if (sound) {
+                    blocks.push({
+                        id: generateBlockId(),
+                        type: 'sfx',
+                        content: `SFX: ${sound}`,
+                        intensity: 'emphasis',
+                        sfx: { sound, intensity: guessSFXIntensity(sound) },
+                    });
+                }
+                continue;
+            }
+
             // Standalone SFX line
             if (/^SFX:\s*/i.test(line)) {
                 const sound = line.replace(/^SFX:\s*/i, '').trim();
@@ -296,6 +313,23 @@ export function parseCinematifiedText(text: string): CinematicBlock[] {
                     intensity: 'emphasis',
                     sfx: { sound, intensity: guessSFXIntensity(sound) },
                 });
+                continue;
+            }
+
+            // Inline bracket SFX: text [SFX: sound]
+            const inlineBracketSfx = line.match(/^(.+?)\s+\[SFX(?::\s*(.+?))?\]\s*(.*)$/i);
+            if (inlineBracketSfx) {
+                blocks.push(...parseTextLine(inlineBracketSfx[1].trim()));
+                const sound = (inlineBracketSfx[2] || inlineBracketSfx[3]).trim();
+                if (sound) {
+                    blocks.push({
+                        id: generateBlockId(),
+                        type: 'sfx',
+                        content: `SFX: ${sound}`,
+                        intensity: 'emphasis',
+                        sfx: { sound, intensity: guessSFXIntensity(sound) },
+                    });
+                }
                 continue;
             }
 
