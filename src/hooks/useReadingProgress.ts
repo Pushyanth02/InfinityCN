@@ -7,7 +7,7 @@
 
 import { useEffect, useRef } from 'react';
 import { useCinematifierStore } from '../store/cinematifierStore';
-import { saveReadingProgress, loadReadingProgress } from '../lib/cinematifierDb';
+import { saveReadingProgress, loadReadingProgress } from '../lib/runtime/cinematifierDb';
 import { createReadingProgress } from '../lib/cinematifier';
 
 export function useReadingProgress() {

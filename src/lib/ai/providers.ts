@@ -10,7 +10,8 @@ import { MODEL_PRESETS } from './presets';
 import { AIError } from './errors';
 import { AI_JSON_TIMEOUT_MS, AI_RAWTEXT_TIMEOUT_MS, AI_MAX_RETRY_DELAY_MS } from '../constants';
 import { buildTokenPlan, type TokenPlan } from './tokenFlow';
-import { assertSecureEndpoint, normalizeApiKey } from './security';
+import { assertSecureEndpoint, normalizeApiKey } from '../security/aiSecurity';
+import { KeyManager, validateKey } from '../security/keyManager';
 
 // ─── UNIFIED SYSTEM PROMPT ────────────────────────────────────────────────────
 
@@ -89,7 +90,7 @@ export function getApiKeyCandidates(config: AIConfig, provider: AIProvider): str
 
     const push = (value?: string) => {
         const normalized = normalizeApiKey(value);
-        if (!normalized || candidates.includes(normalized)) return;
+        if (!normalized || !validateKey(normalized) || candidates.includes(normalized)) return;
         candidates.push(normalized);
     };
 
@@ -264,6 +265,8 @@ export async function callAI(
 ): Promise<string> {
     const prepared = preparedCall ?? prepareAICall(prompt, config);
     const provider = prepared.provider;
+    const keyManager = new KeyManager();
+    keyManager.assertBackendOnlyUsage(provider, API_PROXY_URL);
     let result = '';
 
     // ── CHROME NANO ──────────────────────────────────────────

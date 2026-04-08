@@ -19,8 +19,8 @@ import {
     Search,
     Shield,
 } from 'lucide-react';
-import { useCinematifierStore, getCinematifierAIConfig } from '../store/cinematifierStore';
-import { testConnection } from '../lib/ai/index';
+import { useCinematifierStore } from '../store/cinematifierStore';
+import { useAIConnectionTest } from '../hooks';
 import type { AIConnectionStatus } from '../types/cinematifier';
 import type { AIProvider } from '../lib/ai/types';
 
@@ -103,19 +103,20 @@ function CinematifierSettings({ onClose }: CinematifierSettingsProps) {
     const setAiConfig = useCinematifierStore(s => s.setAiConfig);
 
     // Preferences state
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const font = useCinematifierStore(s => (s as any).font || 'default');
+    const font = useCinematifierStore(s => s.font);
     const fontSize = useCinematifierStore(s => s.fontSize);
     const lineSpacing = useCinematifierStore(s => s.lineSpacing);
     const dyslexiaMode = useCinematifierStore(s => s.dyslexiaFont);
     const theme = useCinematifierStore(s => (s.darkMode ? 'dark' : 'light'));
     const setFontSize = useCinematifierStore(s => s.setFontSize);
+    const setFont = useCinematifierStore(s => s.setFont);
     const setLineSpacing = useCinematifierStore(s => s.setLineSpacing);
     const toggleDyslexiaFont = useCinematifierStore(s => s.toggleDyslexiaFont);
     const toggleDarkMode = useCinematifierStore(s => s.toggleDarkMode);
 
     const [testStatus, setTestStatus] = useState<AIConnectionStatus | null>(null);
     const [isTesting, setIsTesting] = useState(false);
+    const runConnectionTest = useAIConnectionTest();
 
     const selectedProvider = PROVIDERS.find(p => p.id === aiProvider);
     const isProviderConfigured = aiProvider !== 'none' && aiProvider !== 'chrome';
@@ -124,8 +125,7 @@ function CinematifierSettings({ onClose }: CinematifierSettingsProps) {
         setIsTesting(true);
         setTestStatus(null);
         try {
-            const config = getCinematifierAIConfig();
-            const result = await testConnection(config);
+            const result = await runConnectionTest();
             setTestStatus(result);
         } catch (err) {
             setTestStatus({
@@ -136,7 +136,7 @@ function CinematifierSettings({ onClose }: CinematifierSettingsProps) {
         } finally {
             setIsTesting(false);
         }
-    }, [aiProvider]);
+    }, [aiProvider, runConnectionTest]);
 
     const renderProviderKeyInput = () => {
         switch (aiProvider) {
@@ -315,6 +315,7 @@ function CinematifierSettings({ onClose }: CinematifierSettingsProps) {
     };
 
     const handlePreferencesChange = (updated: Partial<Preferences>) => {
+        if (updated.font !== undefined) setFont(updated.font);
         if (updated.fontSize !== undefined) setFontSize(updated.fontSize);
         if (updated.lineSpacing !== undefined) setLineSpacing(updated.lineSpacing);
         if (updated.dyslexiaMode !== undefined) toggleDyslexiaFont();

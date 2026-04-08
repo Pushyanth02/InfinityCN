@@ -11,8 +11,13 @@ export type { AIConfig, ModelPreset, AIErrorType } from './types';
 // ─── Presets ───────────────────────────────────────────────
 export { MODEL_PRESETS } from './presets';
 
+// ─── Orchestrator ──────────────────────────────────────────
+export { AIManager } from './manager';
+export type { Provider, AIManagerProvider, AIManagerOptions, AIManagerResult } from './manager';
+
 // ─── Cache ─────────────────────────────────────────────────
-import { getCacheKey, getFromCache, setCache } from './cache';
+import { getCacheKey, getCached, setCache } from './cache';
+export { getCacheKey, getCached, setCache } from './cache';
 
 // ─── Errors ────────────────────────────────────────────────
 import { withRetry } from './errors';
@@ -45,7 +50,7 @@ export async function callAIWithDedup(prompt: string, config: AIConfig): Promise
     const cacheKey = getCacheKey(prompt, config.provider, config.model ?? '');
 
     // Check cache first
-    const cached = getFromCache(cacheKey);
+    const cached = getCached(cacheKey);
     if (cached) return cached;
 
     // If an identical request is already in flight, share its promise.

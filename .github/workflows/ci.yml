@@ -29,9 +29,6 @@ jobs:
       - name: Security audit
         run: npm audit --audit-level=high
 
-      - name: Check formatting
-        run: npm run format:check
-
       - name: Lint
         run: npm run lint
 

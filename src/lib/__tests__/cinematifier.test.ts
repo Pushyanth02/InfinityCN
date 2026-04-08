@@ -86,6 +86,13 @@ describe('parseCinematifiedText', () => {
         expect(blocks[0].sfx?.intensity).toBe('loud');
     });
 
+    it('parses bracketed [SFX] tag lines', () => {
+        const blocks = parseCinematifiedText('[SFX] THUNDERCLAP');
+        expect(blocks).toHaveLength(1);
+        expect(blocks[0].type).toBe('sfx');
+        expect(blocks[0].sfx?.sound).toBe('THUNDERCLAP');
+    });
+
     it('parses a soft SFX', () => {
         const blocks = parseCinematifiedText('SFX: soft whisper');
         expect(blocks[0].sfx?.intensity).toBe('soft');
@@ -98,6 +105,14 @@ describe('parseCinematifiedText', () => {
 
     it('parses inline SFX attached to a text line', () => {
         const blocks = parseCinematifiedText('She slammed the door. SFX: SLAM');
+        expect(blocks.length).toBeGreaterThanOrEqual(2);
+        const sfxBlock = blocks.find(b => b.type === 'sfx');
+        expect(sfxBlock).toBeDefined();
+        expect(sfxBlock?.sfx?.sound).toBe('SLAM');
+    });
+
+    it('parses inline bracket SFX attached to a text line', () => {
+        const blocks = parseCinematifiedText('She slammed the door. [SFX: SLAM]');
         expect(blocks.length).toBeGreaterThanOrEqual(2);
         const sfxBlock = blocks.find(b => b.type === 'sfx');
         expect(sfxBlock).toBeDefined();
@@ -177,6 +192,13 @@ describe('parseCinematifiedText', () => {
 
     it('parses [SCENE: description] markers as title_card blocks', () => {
         const blocks = parseCinematifiedText('[SCENE: Abandoned Mountain Path]');
+        expect(blocks.length).toBe(1);
+        expect(blocks[0].type).toBe('title_card');
+        expect(blocks[0].content).toBe('Abandoned Mountain Path');
+    });
+
+    it('parses [SCENE] markers without colon', () => {
+        const blocks = parseCinematifiedText('[SCENE] Abandoned Mountain Path');
         expect(blocks.length).toBe(1);
         expect(blocks[0].type).toBe('title_card');
         expect(blocks[0].content).toBe('Abandoned Mountain Path');

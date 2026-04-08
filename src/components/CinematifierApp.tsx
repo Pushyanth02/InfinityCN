@@ -13,7 +13,6 @@ import { useBookHydration, useFileProcessing } from '../hooks';
 // Extracted sub-components
 import { UploadZone } from './UploadZone';
 import { ProcessingOverlay } from './ProcessingOverlay';
-import { Button } from './ui/Button';
 
 // Lazy load components
 const CinematicReader = lazy(() =>
@@ -210,7 +209,7 @@ export const CinematifierApp: React.FC = () => {
             )}
 
             {/* ── Processing Overlay ── */}
-            {isProcessing && <ProcessingOverlay progress={processingProgress} />}
+            {isProcessing && processingProgress && <ProcessingOverlay progress={processingProgress} />}
 
             {/* ── Settings Modal ── */}
             {showSettings && (

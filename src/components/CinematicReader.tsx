@@ -20,7 +20,7 @@
  *   - ReaderFooter       — Chapter navigation footer
  */
 
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, lazy, Suspense } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { Film, Sparkles } from 'lucide-react';
 import { useCinematifierStore } from '../store/cinematifierStore';
@@ -30,17 +30,23 @@ import { useReadingProgress, useAmbientAudio, useAutoScroll, useChapterProcessin
 
 // Extracted sub-components
 import {
-    CinematicBlockView,
+    CinematicRenderer,
     OriginalTextView,
     EmotionHeatmap,
     ChapterNav,
+    ReaderChapterSidebar,
+    ReaderCharactersPanel,
     ReaderHeader,
-    ReaderSettingsPanel,
     ReaderFooter,
 } from './reader';
 
 // Hoisted constant to avoid recreating the threshold array on every render cycle
 const OBSERVER_THRESHOLDS: number[] = [0, 0.25, 0.5, 0.75, 1];
+const ReaderSettingsPanel = lazy(() =>
+    import('./reader/ReaderSettingsPanel').then(module => ({
+        default: module.ReaderSettingsPanel,
+    })),
+);
 
 interface CinematicReaderProps {
     onClose: () => void;
@@ -77,6 +83,7 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
     const contentRef = useRef<HTMLDivElement>(null);
 
     const currentChapter = book?.chapters[currentChapterIndex];
+    const activeCharacters = currentChapter?.characters ?? book?.characters;
 
     // ─── Custom Hooks ──────────────────────────────────────────
     const { readingProgress, bookmarks, isBookmarked, toggleBookmark } = useReadingProgress();
@@ -208,25 +215,33 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
             {/* Settings Panel */}
             <AnimatePresence>
                 {showSettings && (
-                    <ReaderSettingsPanel
-                        fontSize={fontSize}
-                        setFontSize={setFontSize}
-                        lineSpacing={lineSpacing}
-                        setLineSpacing={setLineSpacing}
-                        immersionLevel={immersionLevel}
-                        setImmersionLevel={setImmersionLevel}
-                        dyslexiaFont={dyslexiaFont}
-                        toggleDyslexiaFont={toggleDyslexiaFont}
-                        darkMode={darkMode}
-                        toggleDarkMode={toggleDarkMode}
-                        aiProvider={aiProvider}
-                        bookmarkCount={bookmarks.length}
-                    />
+                    <Suspense fallback={null}>
+                        <ReaderSettingsPanel
+                            fontSize={fontSize}
+                            setFontSize={setFontSize}
+                            lineSpacing={lineSpacing}
+                            setLineSpacing={setLineSpacing}
+                            immersionLevel={immersionLevel}
+                            setImmersionLevel={setImmersionLevel}
+                            dyslexiaFont={dyslexiaFont}
+                            toggleDyslexiaFont={toggleDyslexiaFont}
+                            darkMode={darkMode}
+                            toggleDarkMode={toggleDarkMode}
+                            aiProvider={aiProvider}
+                            bookmarkCount={bookmarks.length}
+                        />
+                    </Suspense>
                 )}
             </AnimatePresence>
 
             {/* 3-Panel Reader Body */}
             <div className="cine-reader-body">
+                <ReaderChapterSidebar
+                    chapters={book.chapters}
+                    currentChapterIndex={currentChapterIndex}
+                    bookmarks={bookmarks}
+                    onSelectChapter={setCurrentChapter}
+                />
                 {/* Scrollable Content */}
                 <main
                     className="cine-content"
@@ -274,14 +289,10 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                         ) : currentChapter.cinematifiedBlocks.length > 0 ? (
                             <div className="cine-blocks-wrapper">
                                 <div className="cine-blocks">
-                                    {currentChapter.cinematifiedBlocks.map((block, i) => (
-                                        <CinematicBlockView
-                                            key={block.id}
-                                            block={block}
-                                            index={i}
-                                            immersionLevel={immersionLevel}
-                                        />
-                                    ))}
+                                    <CinematicRenderer
+                                        blocks={currentChapter.cinematifiedBlocks}
+                                        immersionLevel={immersionLevel}
+                                    />
                                     {isProcessingChapter && (
                                         <div className="cine-processing cine-processing-inline">
                                             <Sparkles size={16} className="cine-processing-icon" />
@@ -294,7 +305,14 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                             <div className="cine-blocks-wrapper">
                                 <div className="cine-empty-state">
                                     <Film size={48} />
-                                    <p>Chapter not yet cinematified</p>
+                                    <p>
+                                        {currentChapter.status === 'error'
+                                            ? 'Chapter processing failed'
+                                            : 'Chapter not yet cinematified'}
+                                    </p>
+                                    {currentChapter.errorMessage && (
+                                        <p className="cine-error-message">{currentChapter.errorMessage}</p>
+                                    )}
                                     <button
                                         className="cine-btn cine-btn--primary"
                                         onClick={processCurrentChapter}
@@ -307,6 +325,7 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                         ) : null}
                     </div>
                 </main>
+                <ReaderCharactersPanel characters={activeCharacters} />
             </div>
 
             {/* Chapter Navigation Footer */}

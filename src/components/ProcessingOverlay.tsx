@@ -8,6 +8,7 @@
 
 import React from 'react';
 import { Film, Sparkles, BookOpen, Zap, FileText, CheckCircle } from 'lucide-react';
+import type { ProcessingProgress } from '../types/cinematifier';
 
 interface ProcessingStep {
     id: string;
@@ -16,11 +17,7 @@ interface ProcessingStep {
 }
 
 interface ProcessingOverlayProps {
-    progress: {
-        stage: string;
-        percent: number;
-        detail?: string;
-    };
+    progress: ProcessingProgress;
 }
 
 const STEPS: ProcessingStep[] = [
@@ -40,8 +37,30 @@ function getStepStatus(stepId: string, currentStage: string): 'done' | 'active' 
     return 'pending';
 }
 
+function assertUnreachable(value: never): never {
+    throw new Error(`Unhandled processing phase: ${String(value)}`);
+}
+
 export const ProcessingOverlay: React.FC<ProcessingOverlayProps> = ({ progress }) => {
-    const { stage, percent, detail } = progress;
+    const stage = (() => {
+        switch (progress.phase) {
+            case 'extracting':
+                return 'extract';
+            case 'segmenting':
+                return 'segment';
+            case 'cinematifying':
+                return 'cinematify';
+            case 'complete':
+                return 'finalize';
+            case 'error':
+                // Error is terminal in this flow, so reuse the final step bucket.
+                return 'finalize';
+        }
+
+        return assertUnreachable(progress.phase);
+    })();
+    const percent = progress.percentComplete;
+    const detail = progress.message;
 
     return (
         <div className="proc-backdrop" role="dialog" aria-modal="true" aria-label="Processing your manuscript" aria-live="polite">

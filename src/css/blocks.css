@@ -20,6 +20,26 @@
     position: relative;
 }
 
+.cine-paragraph {
+    position: relative;
+}
+
+.cine-paragraph--dialogue {
+    margin-inline: clamp(0.25rem, 1.4vw, 0.8rem);
+}
+
+.cine-paragraph--reflection {
+    margin-inline: clamp(0.5rem, 2vw, 1rem);
+}
+
+.cine-paragraph--scene {
+    margin-block: var(--cine-space-2xl);
+}
+
+.cine-paragraph--tension {
+    margin-block: var(--cine-space-xl);
+}
+
 /* Action/Narration */
 .cine-block--action {
     padding: var(--cine-space-md) 0;
@@ -49,7 +69,7 @@
 /* Dialogue */
 .cine-block--dialogue {
     padding: var(--cine-space-md) var(--cine-space-lg);
-    margin: var(--cine-space-md) 0;
+    margin: calc(var(--cine-space-md) + 0.1rem) 0;
     background: linear-gradient(135deg, var(--cine-bg-tertiary) 0%, transparent 100%);
     border-left: 3px solid var(--cine-dialogue);
     border-radius: 0 8px 8px 0;
@@ -66,7 +86,8 @@
 }
 
 .cine-dialogue {
-    font-size: 1.125em;
+    font-size: clamp(1.1rem, 1.02rem + 0.35vw, 1.24rem);
+    line-height: 1.72;
     color: var(--cine-text-primary);
 }
 

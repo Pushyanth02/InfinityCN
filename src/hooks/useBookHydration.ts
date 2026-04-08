@@ -7,7 +7,7 @@
 
 import { useEffect } from 'react';
 import { useCinematifierStore } from '../store/cinematifierStore';
-import { loadLatestBook } from '../lib/cinematifierDb';
+import { loadLatestBook } from '../lib/runtime/cinematifierDb';
 
 export function useBookHydration() {
     const book = useCinematifierStore(s => s.book);

@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { AmbientAudioSynth } from '../lib/audioSynth';
+import { AmbientAudioSynth } from '../lib/runtime/audioSynth';
 import type { ReaderMode } from '../types/cinematifier';
 
 export function useAmbientAudio(activeEmotion: string, readerMode: ReaderMode) {

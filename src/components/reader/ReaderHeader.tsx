@@ -102,7 +102,7 @@ export const ReaderHeader: React.FC<ReaderHeaderWithRefProps> = ({
                         onClick={() => setReaderMode('cinematified')}
                     >
                         <Film size={16} />
-                        <span>Cinematic</span>
+                        <span>Cinematized</span>
                     </button>
                 </div>
             </div>

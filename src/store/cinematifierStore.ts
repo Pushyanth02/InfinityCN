@@ -122,6 +122,7 @@ export interface CinematifierState {
     // Reader state
     readerMode: ReaderMode;
     currentChapterIndex: number;
+    font: string;
     fontSize: number;
     lineSpacing: number;
     immersionLevel: ImmersionLevel;
@@ -162,6 +163,7 @@ export interface CinematifierState {
     // Reader actions
     setReaderMode: (mode: ReaderMode) => void;
     setCurrentChapter: (index: number) => void;
+    setFont: (font: string) => void;
     setFontSize: (size: number) => void;
     setLineSpacing: (spacing: number) => void;
     setImmersionLevel: (level: ImmersionLevel) => void;
@@ -216,6 +218,7 @@ export const useCinematifierStore = create<CinematifierState>()(
             // Reader state
             readerMode: 'cinematified' as ReaderMode,
             currentChapterIndex: 0,
+            font: 'default',
             fontSize: 18,
             lineSpacing: 1.8,
             immersionLevel: 'balanced' as ImmersionLevel,
@@ -297,6 +300,8 @@ export const useCinematifierStore = create<CinematifierState>()(
                     set({ currentChapterIndex: index });
                 }
             },
+
+            setFont: (font: string) => set({ font }),
 
             setFontSize: (size: number) => set({ fontSize: Math.max(12, Math.min(32, size)) }),
 
@@ -422,6 +427,7 @@ export const useCinematifierStore = create<CinematifierState>()(
                 // persisting plaintext keys — they'll be encrypted on the next cycle.
                 return {
                     readerMode: state.readerMode,
+                    font: state.font,
                     fontSize: state.fontSize,
                     lineSpacing: state.lineSpacing,
                     immersionLevel: state.immersionLevel,
