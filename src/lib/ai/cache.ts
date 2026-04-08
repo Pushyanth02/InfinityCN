@@ -15,18 +15,24 @@ interface CacheEntry {
 
 const apiCache = new Map<string, CacheEntry>();
 
-export function getCacheKey(prompt: string, provider: string, model = ''): string {
-    // DJB2 hash + length + head/tail substring for collision resistance
+function hashText(text: string): number {
+    // DJB2 hash
     let hash = 5381;
-    for (let i = 0; i < prompt.length; i++) {
-        hash = ((hash << 5) + hash + prompt.charCodeAt(i)) | 0;
+    for (let i = 0; i < text.length; i++) {
+        hash = ((hash << 5) + hash + text.charCodeAt(i)) | 0;
     }
-    const head = prompt.slice(0, 32);
-    const tail = prompt.length > 64 ? prompt.slice(-32) : '';
-    return `${provider}:${model}:${hash >>> 0}:${prompt.length}:${head}${tail}`;
+    return hash >>> 0;
 }
 
-export function getFromCache(key: string): string | null {
+export function getCacheKey(prompt: string, provider: string, model = ''): string {
+    // Hash + length + head/tail substring for collision resistance
+    const hash = hashText(prompt);
+    const head = prompt.slice(0, 32);
+    const tail = prompt.length > 64 ? prompt.slice(-32) : '';
+    return `${provider}:${model}:${hash}:${prompt.length}:${head}${tail}`;
+}
+
+export function getCached(key: string): string | null {
     const entry = apiCache.get(key);
     if (!entry) return null;
     if (Date.now() - entry.timestamp > AI_CACHE_TTL_MS) {
@@ -36,6 +42,11 @@ export function getFromCache(key: string): string | null {
     // LRU touch: just refresh timestamp (avoids Map reordering overhead)
     entry.timestamp = Date.now();
     return entry.value;
+}
+
+// Backward-compatible alias for existing internal imports.
+export function getFromCache(key: string): string | null {
+    return getCached(key);
 }
 
 export function setCache(key: string, value: string, provider: string): void {
