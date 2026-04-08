@@ -35,10 +35,14 @@ export const CinematicRenderer: React.FC<CinematicRendererProps> = React.memo(fu
     );
 
     useEffect(() => {
-        setVisibleCount(prev => {
-            if (blocks.length <= INITIAL_RENDER_BLOCKS) return blocks.length;
-            return Math.min(blocks.length, Math.max(prev, INITIAL_RENDER_BLOCKS));
-        });
+        const timer = window.setTimeout(() => {
+            setVisibleCount(prev => {
+                if (blocks.length <= INITIAL_RENDER_BLOCKS) return blocks.length;
+                return Math.min(blocks.length, Math.max(prev, INITIAL_RENDER_BLOCKS));
+            });
+        }, 0);
+
+        return () => window.clearTimeout(timer);
     }, [blocks.length]);
 
     useEffect(() => {
