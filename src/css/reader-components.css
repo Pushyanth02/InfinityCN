@@ -82,13 +82,13 @@
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    padding: 5px 13px;
+    padding: 6px 14px;
     border-radius: var(--radius-full);
     border: none;
     background: transparent;
     color: var(--on-surface-variant);
     font-family: var(--font-label);
-    font-size: 0.75rem;
+    font-size: 0.78rem;
     font-weight: 500;
     cursor: pointer;
     transition: all var(--transition-fast);
@@ -340,34 +340,21 @@
     text-align: right;
 }
 
-/* Immersion Level Segment */
-.cine-immersion-segment {
+/* Immersion slider */
+.cine-immersion-slider-group {
     display: flex;
-    background: var(--surface-container);
-    border-radius: var(--radius-full);
-    padding: 3px;
-    gap: 2px;
+    flex-direction: column;
+    gap: var(--spacing-2);
 }
 
-.cine-immersion-btn {
-    flex: 1;
-    padding: 5px 8px;
-    border-radius: var(--radius-full);
-    border: none;
-    background: transparent;
-    color: var(--on-surface-variant);
+.cine-immersion-labels {
+    display: flex;
+    justify-content: space-between;
     font-family: var(--font-label);
-    font-size: 0.7rem;
-    font-weight: 500;
-    cursor: pointer;
-    text-align: center;
-    transition: all var(--transition-fast);
-}
-
-.cine-immersion-btn.active {
-    background: var(--surface-container-high);
-    color: var(--on-surface);
-    font-weight: 600;
+    font-size: 0.68rem;
+    color: var(--on-surface-variant);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
 }
 
 /* Bookmark count badge */
@@ -398,16 +385,23 @@
 .original-text-view {
     display: flex;
     flex-direction: column;
-    gap: var(--spacing-5);
+    gap: var(--spacing-7);
 }
 
 .original-paragraph {
     font-family: var(--font-body);
-    font-size: var(--cine-reader-font-size, 17px);
-    line-height: var(--cine-reader-line-height, 1.8);
+    font-size: clamp(1.05rem, 1rem + 0.2vw, 1.16rem);
+    line-height: max(1.75, var(--cine-reader-line-height, 1.8));
+    letter-spacing: 0.01em;
     color: var(--on-surface);
-    text-align: justify;
+    text-align: left;
     margin: 0;
+}
+
+.original-paragraph.original-paragraph--dialogue {
+    padding: 0.1rem 0 0.1rem 0.85rem;
+    border-left: 3px solid color-mix(in srgb, var(--primary) 45%, transparent);
+    font-style: italic;
 }
 
 /* Drop cap on first paragraph */

@@ -315,6 +315,7 @@
 
 .cine-content-inner {
     max-width: 720px;
+    width: min(100%, 720px);
     margin: 0 auto;
     padding: var(--spacing-16) var(--spacing-8) var(--spacing-24);
 }

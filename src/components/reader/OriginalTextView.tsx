@@ -9,13 +9,14 @@ import { motion } from 'framer-motion';
 
 export const OriginalTextView = React.memo(function OriginalTextView({ text }: { text: string }) {
     const paragraphs = useMemo(() => text.split(/\n\s*\n/).filter(p => p.trim()), [text]);
+    const dialogueStart = /^[“"]|^[A-Z][A-Z\s]{1,30}:/;
 
     return (
         <div className="original-text-view">
             {paragraphs.map((para, i) => (
                 <motion.p
                     key={`p-${i}-${para.slice(0, 32)}`}
-                    className="original-paragraph"
+                    className={`original-paragraph ${dialogueStart.test(para.trim()) ? 'original-paragraph--dialogue' : ''}`.trim()}
                     initial={{ opacity: 0, y: 20 }}
                     whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true, margin: '-5% 0px' }}

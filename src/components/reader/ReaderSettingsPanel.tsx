@@ -40,6 +40,18 @@ export const ReaderSettingsPanel: React.FC<ReaderSettingsPanelProps> = ({
     aiProvider,
     bookmarkCount,
 }) => {
+    const immersionToValue: Record<ImmersionLevel, number> = {
+        minimal: 0,
+        balanced: 1,
+        cinematic: 2,
+    };
+
+    const valueToImmersion = (value: number): ImmersionLevel => {
+        if (value <= 0) return 'minimal';
+        if (value >= 2) return 'cinematic';
+        return 'balanced';
+    };
+
     return (
         <motion.div
             className="cine-settings-overlay"
@@ -98,16 +110,22 @@ export const ReaderSettingsPanel: React.FC<ReaderSettingsPanelProps> = ({
             {/* Immersion Section */}
             <div className="cine-settings-section">
                 <h4 className="cine-settings-section-title">Immersion</h4>
-                <div className="cine-immersion-segment">
-                    {(['minimal', 'balanced', 'cinematic'] as const).map(level => (
-                        <button
-                            key={level}
-                            className={`cine-immersion-btn ${immersionLevel === level ? 'active' : ''}`}
-                            onClick={() => setImmersionLevel(level)}
-                        >
-                            {level.charAt(0).toUpperCase() + level.slice(1)}
-                        </button>
-                    ))}
+                <div className="cine-immersion-slider-group">
+                    <input
+                        type="range"
+                        className="cine-slider"
+                        min={0}
+                        max={2}
+                        step={1}
+                        value={immersionToValue[immersionLevel]}
+                        onChange={e => setImmersionLevel(valueToImmersion(Number(e.target.value)))}
+                        aria-label="Immersion level"
+                    />
+                    <div className="cine-immersion-labels" aria-hidden="true">
+                        <span>Minimal</span>
+                        <span>Balanced</span>
+                        <span>Cinematic</span>
+                    </div>
                 </div>
             </div>
 
