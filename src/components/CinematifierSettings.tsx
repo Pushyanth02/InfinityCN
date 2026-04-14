@@ -156,7 +156,9 @@ function CinematifierSettings({ onClose }: CinematifierSettingsProps) {
                                 type="checkbox"
                                 id="search-grounding"
                                 checked={useSearchGrounding}
-                                onChange={e => setAiConfig({ useSearchGrounding: e.target.checked })}
+                                onChange={e =>
+                                    setAiConfig({ useSearchGrounding: e.target.checked })
+                                }
                             />
                             <label htmlFor="search-grounding">
                                 <Search size={14} /> Enable Search Grounding
@@ -180,7 +182,9 @@ function CinematifierSettings({ onClose }: CinematifierSettingsProps) {
             case 'anthropic':
                 return (
                     <div className="cine-input-group">
-                        <label htmlFor="anthropic-key">Anthropic Key (Optional Provider Override)</label>
+                        <label htmlFor="anthropic-key">
+                            Anthropic Key (Optional Provider Override)
+                        </label>
                         <input
                             id="anthropic-key"
                             type="password"
@@ -206,7 +210,9 @@ function CinematifierSettings({ onClose }: CinematifierSettingsProps) {
             case 'deepseek':
                 return (
                     <div className="cine-input-group">
-                        <label htmlFor="deepseek-key">DeepSeek Key (Optional Provider Override)</label>
+                        <label htmlFor="deepseek-key">
+                            DeepSeek Key (Optional Provider Override)
+                        </label>
                         <input
                             id="deepseek-key"
                             type="password"
@@ -340,8 +346,8 @@ function CinematifierSettings({ onClose }: CinematifierSettingsProps) {
                         HTTPS endpoints.
                     </div>
                     <div className="cine-flow-note">
-                        <Zap size={15} /> Request and token flow limits are automatically applied for
-                        stable AI processing.
+                        <Zap size={15} /> Request and token flow limits are automatically applied
+                        for stable AI processing.
                     </div>
                 </div>
             )}

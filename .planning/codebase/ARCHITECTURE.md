@@ -1,48 +1,64 @@
 # System Architecture: InfinityCN
-## The Cinematifier Engine Flow
 
-**Analysis Date:** 2026-03-30
-**Pattern:** Input → Pipeline → Structured Data → Runtime → UI
+## Cinematifier Engine Flow
 
----
-
-## 🏗️ 1. Input Layer
-The system accepts raw story text (TXT, MD, PDF, OCR scan).
-- **Parsers:** `src/lib/cinematifier/parser.ts` handles multiformat extraction.
-- **Scanning:** `tesseract.js` for physical document intake.
-
-## ⚙️ 2. Processing Pipeline
-The heart of the engine, breaking the story into cinematic beats.
-1. **Structural Scan:** Analyzes chapter markings.
-2. **Scene Segmentation:** Identifies scene boundaries using `sceneDetection.ts`.
-3. **Narrative Analysis:** Tracks entities using `entities.ts` and `metadata.ts`.
-4. **Emotion + Tension Mapping:** Map emotional peaks and troughs via `sentimentTracker.ts`.
-5. **Pacing Analysis:** Evaluates reading speed and flow via `pacingAnalyzer.ts`.
-
-## 📦 3. Structured Data Output
-All processing results in a strictly defined JSON structure.
-- **Validation:** `src/lib/cinematifier/aiEngine.ts` ensures the AI output matches the schema.
-- **Persistence:** Syncs to IndexedDB (Dexie) immediately, ensuring the data is available offline.
-
-## 🎬 4. Runtime Rendering
-The runtime engine transforms the structured JSON into an immersive experience.
-- **Scene-Based Rendering:** Only the current, previous, and next scenes are rendered at any time for performance.
-- **Dynamic Adjustments:** The runtime modifies typography and spacing based on the narrative tension.
-- **Ambient Orchestration:** `useAmbientAudio.ts` syncs SFX and music to the narrative flow.
-
-## 🎨 5. UI Layer
-The "invisible" UI that keeps the focus entirely on the story.
-- **Typography:** Optimized for readability with a max width of ~720px.
-- **Transitions:** Fluid, framer-motion powered transitions between narrative beats.
-- **Dark Mode:** A sleek, minimal design system using glassmorphism.
+**Analysis Date:** 2026-04-13
+**Pattern:** Input -> Pipeline -> Structured Data -> Runtime -> UI
 
 ---
 
-## 🏗️ Hybrid Service Architecture
-- **API Gateway (Node.js):** Handles user sessions, lightweight jobs, and AI orchestration.
-- **Core Engine (.NET):** Handles high-performance document serialization and legacy logic.
-- **Message Bus (RabbitMQ):** Manages asynchronous cinematification jobs between Node and .NET workers.
-- **State Sync (Redis):** Ensures real-time state consistency across distributed instances.
+## 1. Input Layer
+
+The system accepts PDF/EPUB/DOCX/PPTX/TXT and extracts normalized text.
+
+- `src/lib/processing/pdfWorker.ts` handles extraction and OCR fallback.
+- `src/lib/processing/bookAsyncProcessor.ts` handles chunked processing for long documents.
+
+## 2. Canonical Processing Pipeline
+
+The chapter pipeline order is strict and must not be bypassed:
+
+1. **Text Input**
+2. **Paragraph Rebuilder**
+3. **Scene Segmentation**
+4. **Narrative Analysis**
+5. **Cinematization**
+6. **Renderer**
+
+Implementation anchors:
+
+- `src/lib/engine/cinematifier/chapterEngine.ts`
+- `src/lib/engine/cinematifier/fullSystemPipeline.ts`
+- `src/lib/engine/cinematifier/pipeline.ts`
+
+## 3. Structured Output Layer
+
+Pipeline output is normalized into typed entities:
+
+- Cinematic blocks
+- Scene groups
+- Narrative metadata
+- Render plan cues/scenes
+- Stage trace timing
+
+Primary types live in `src/types/cinematifier.ts`.
+
+## 4. Runtime Layer
+
+Runtime modules expose app-facing service APIs:
+
+- `src/lib/runtime/renderer.ts` for render-plan building.
+- `src/lib/runtime/readerBackend.ts` for telemetry and cinematic depth analytics.
+- `src/lib/runtime/readerApis.ts` for lexical and story discovery APIs.
+
+## 5. UI Layer
+
+React components remain presentation-first:
+
+- Components render state and callbacks only.
+- Hooks orchestrate runtime/engine interactions.
+- Business logic remains outside component files.
 
 ---
-*Architecture audit: 2026-03-30*
+
+_Architecture audit: 2026-04-13_

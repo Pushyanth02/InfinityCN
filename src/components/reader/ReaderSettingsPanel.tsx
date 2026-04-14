@@ -90,7 +90,9 @@ export const ReaderSettingsPanel: React.FC<ReaderSettingsPanelProps> = ({
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <button
                             className="cine-btn--icon"
-                            onClick={() => setLineSpacing(Math.max(1, +(lineSpacing - 0.1).toFixed(1)))}
+                            onClick={() =>
+                                setLineSpacing(Math.max(1, +(lineSpacing - 0.1).toFixed(1)))
+                            }
                             aria-label="Decrease line spacing"
                         >
                             <Minus size={14} />
@@ -98,7 +100,9 @@ export const ReaderSettingsPanel: React.FC<ReaderSettingsPanelProps> = ({
                         <span className="cine-setting-value">{lineSpacing.toFixed(1)}</span>
                         <button
                             className="cine-btn--icon"
-                            onClick={() => setLineSpacing(Math.min(3, +(lineSpacing + 0.1).toFixed(1)))}
+                            onClick={() =>
+                                setLineSpacing(Math.min(3, +(lineSpacing + 0.1).toFixed(1)))
+                            }
                             aria-label="Increase line spacing"
                         >
                             <Plus size={14} />

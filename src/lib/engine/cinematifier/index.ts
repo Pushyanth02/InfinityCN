@@ -10,16 +10,32 @@
 export {
     cleanExtractedText,
     reconstructParagraphs,
+    formatOriginalText,
+    structureDialogue,
     normalizeQuotes,
     normalizeUnicode,
 } from './textProcessing';
 
+// ─── Paragraph Breaker APIs ───────────────────────────────
+export {
+    runParagraphBreakerApis,
+    chooseParagraphBreakerResult,
+    rebuildParagraphsWithBreakerApis,
+} from './paragraphBreakers';
+export type {
+    ParagraphBreakerOptions,
+    ParagraphBreakerResult,
+    ParagraphBreakerStrategy,
+} from './paragraphBreakers';
+
 // ─── Chapter Segmentation ──────────────────────────────────
-export { segmentChapters } from './chapterSegmentation';
+export { segmentChapters, extractTitle, splitBookIntoChapters } from './chapterSegmentation';
+export type { ChapterContent } from './chapterSegmentation';
 
 // ─── Scene Detection ───────────────────────────────────────
 export {
     detectSceneBreaks,
+    detectOriginalModeScenes,
     segmentScenesUniversal,
     detectPOVShift,
     detectNarrativeMode,
@@ -68,6 +84,7 @@ export {
     TextStatisticsStage,
     NarrativeAnalysisStage,
     SceneSegmentationStage,
+    RendererStage,
 } from './pipeline';
 export type { PipelineStage, PipelineContext } from './pipeline';
 
@@ -76,6 +93,7 @@ export {
     rebuildParagraphs,
     segmentScenes,
     analyzeScene,
+    applyTensionFormatting,
     cinematizeScene,
     validateOutput,
     runCorePipeline,
@@ -87,3 +105,23 @@ export type {
     CorePipelineSceneResult,
     CorePipelineResult,
 } from './corePipeline';
+
+// ─── Unified Chapter Engine ───────────────────────────────
+export {
+    createChapterPipeline,
+    createPreprocessedChapterPipeline,
+    runChapterEngine,
+} from './chapterEngine';
+export type { ChapterEngineOptions } from './chapterEngine';
+
+// ─── Full System Pipeline ──────────────────────────────────
+export {
+    runFullSystemPipeline,
+    clearFullSystemPipelineCache,
+    getFullSystemPipelineCacheSize,
+} from './fullSystemPipeline';
+export type {
+    FullSystemPipelineOptions,
+    FullSystemPipelineResult,
+    OriginalModeResult,
+} from './fullSystemPipeline';

@@ -24,9 +24,17 @@ import React, { useRef, useEffect, useState, lazy, Suspense } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { Film, Sparkles } from 'lucide-react';
 import { useCinematifierStore } from '../store/cinematifierStore';
+import type { ReaderMode } from '../types/cinematifier';
 
 // Extracted custom hooks
-import { useReadingProgress, useAmbientAudio, useAutoScroll, useChapterProcessing } from '../hooks';
+import {
+    useReadingProgress,
+    useAmbientAudio,
+    useAutoScroll,
+    useChapterProcessing,
+    useReaderAnalytics,
+    useReaderDiscovery,
+} from '../hooks';
 
 // Extracted sub-components
 import {
@@ -42,6 +50,18 @@ import {
 
 // Hoisted constant to avoid recreating the threshold array on every render cycle
 const OBSERVER_THRESHOLDS: number[] = [0, 0.25, 0.5, 0.75, 1];
+
+function computeScrollRatio(node: HTMLElement): number {
+    const maxScroll = Math.max(0, node.scrollHeight - node.clientHeight);
+    if (maxScroll <= 0) return 0;
+    return Math.min(1, Math.max(0, node.scrollTop / maxScroll));
+}
+
+function scrollToRatio(node: HTMLElement, ratio: number): void {
+    const maxScroll = Math.max(0, node.scrollHeight - node.clientHeight);
+    node.scrollTop = maxScroll * Math.min(1, Math.max(0, ratio));
+}
+
 const ReaderSettingsPanel = lazy(() =>
     import('./reader/ReaderSettingsPanel').then(module => ({
         default: module.ReaderSettingsPanel,
@@ -81,6 +101,11 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
     const [activeTension, setActiveTension] = useState<number>(0);
 
     const contentRef = useRef<HTMLDivElement>(null);
+    const modeScrollRatioRef = useRef<Record<ReaderMode, number>>({
+        original: 0,
+        cinematified: 0,
+    });
+    const previousModeRef = useRef<ReaderMode>(readerMode);
 
     const currentChapter = book?.chapters[currentChapterIndex];
     const activeCharacters = currentChapter?.characters ?? book?.characters;
@@ -96,11 +121,41 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
         activeTension,
         readerMode,
     );
-    const { isProcessingChapter, processCurrentChapter, cancelProcessing } = useChapterProcessing(
-        currentChapter,
+    const { isProcessingChapter, processCurrentChapter, cancelProcessing, sceneState } =
+        useChapterProcessing(currentChapter, currentChapterIndex, readerMode);
+    const readerInsights = useReaderAnalytics({
+        book,
+        readingProgress,
         currentChapterIndex,
         readerMode,
-    );
+        contentRef,
+    });
+    const {
+        wordQuery,
+        setWordQuery,
+        lookupWord,
+        isWordLookupLoading,
+        wordLookupError,
+        wordInsight,
+        bookSuggestions,
+        isSuggestionsLoading,
+        suggestionFilter,
+        setSuggestionFilter,
+    } = useReaderDiscovery(book?.title);
+
+    const activeStreamBlocks = currentChapter
+        ? sceneState?.(currentChapter.id)?.accumulatedBlocks
+        : undefined;
+
+    // During active processing, use whichever array is larger (store might have pre-existing blocks)
+    let blocksToRender = currentChapter?.cinematifiedBlocks ?? [];
+    if (
+        isProcessingChapter &&
+        activeStreamBlocks &&
+        activeStreamBlocks.length >= blocksToRender.length
+    ) {
+        blocksToRender = activeStreamBlocks;
+    }
 
     // Active block tracking for dynamic themes and tension
     useEffect(() => {
@@ -144,8 +199,51 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
 
     // Scroll to top on chapter change
     useEffect(() => {
+        modeScrollRatioRef.current.original = 0;
+        modeScrollRatioRef.current.cinematified = 0;
         contentRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
-    }, [currentChapterIndex, readerMode]);
+    }, [currentChapterIndex]);
+
+    // Keep per-mode reading positions and restore when toggling mode.
+    useEffect(() => {
+        const node = contentRef.current;
+        if (!node) return;
+
+        const previousMode = previousModeRef.current;
+        if (previousMode !== readerMode) {
+            modeScrollRatioRef.current[previousMode] = computeScrollRatio(node);
+        }
+
+        let frameA: number | null = null;
+        let frameB: number | null = null;
+        frameA = window.requestAnimationFrame(() => {
+            frameB = window.requestAnimationFrame(() => {
+                if (!contentRef.current) return;
+                scrollToRatio(contentRef.current, modeScrollRatioRef.current[readerMode] ?? 0);
+            });
+        });
+
+        previousModeRef.current = readerMode;
+
+        return () => {
+            if (frameA !== null) window.cancelAnimationFrame(frameA);
+            if (frameB !== null) window.cancelAnimationFrame(frameB);
+        };
+    }, [readerMode]);
+
+    // Continuously track the current mode's scroll ratio.
+    useEffect(() => {
+        const node = contentRef.current;
+        if (!node) return;
+
+        const onScroll = () => {
+            modeScrollRatioRef.current[readerMode] = computeScrollRatio(node);
+        };
+
+        onScroll();
+        node.addEventListener('scroll', onScroll, { passive: true });
+        return () => node.removeEventListener('scroll', onScroll);
+    }, [readerMode]);
 
     // Keyboard navigation
     useEffect(() => {
@@ -246,15 +344,19 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                 <main
                     className="cine-content"
                     ref={contentRef}
-                    style={{
-                        '--cine-reader-font-size': `${fontSize}px`,
-                        '--cine-reader-line-height': lineSpacing
-                    } as React.CSSProperties}
+                    style={
+                        {
+                            '--cine-reader-font-size': `${fontSize}px`,
+                            '--cine-reader-line-height': lineSpacing,
+                        } as React.CSSProperties
+                    }
                 >
                     <div className="cine-content-inner">
                         {/* Chapter Title */}
                         <div className="cine-chapter-header">
-                            <span className="cine-chapter-number">Chapter {currentChapter.number}</span>
+                            <span className="cine-chapter-number">
+                                Chapter {currentChapter.number}
+                            </span>
                             <h2 className="cine-chapter-title">{currentChapter.title}</h2>
                             <div className="cine-chapter-meta">
                                 <span>{currentChapter.wordCount.toLocaleString()} words</span>
@@ -284,13 +386,18 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
 
                         {readerMode === 'original' ? (
                             <div className="cine-blocks-wrapper">
-                                <OriginalTextView text={currentChapter.originalText} />
+                                <OriginalTextView
+                                    text={
+                                        currentChapter.originalModeText ??
+                                        currentChapter.originalText
+                                    }
+                                />
                             </div>
-                        ) : currentChapter.cinematifiedBlocks.length > 0 ? (
+                        ) : blocksToRender && blocksToRender.length > 0 ? (
                             <div className="cine-blocks-wrapper">
                                 <div className="cine-blocks">
                                     <CinematicRenderer
-                                        blocks={currentChapter.cinematifiedBlocks}
+                                        blocks={blocksToRender}
                                         immersionLevel={immersionLevel}
                                     />
                                     {isProcessingChapter && (
@@ -311,7 +418,9 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                                             : 'Chapter not yet cinematified'}
                                     </p>
                                     {currentChapter.errorMessage && (
-                                        <p className="cine-error-message">{currentChapter.errorMessage}</p>
+                                        <p className="cine-error-message">
+                                            {currentChapter.errorMessage}
+                                        </p>
                                     )}
                                     <button
                                         className="cine-btn cine-btn--primary"
@@ -325,7 +434,20 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                         ) : null}
                     </div>
                 </main>
-                <ReaderCharactersPanel characters={activeCharacters} />
+                <ReaderCharactersPanel
+                    characters={activeCharacters}
+                    insights={readerInsights}
+                    wordQuery={wordQuery}
+                    onWordQueryChange={setWordQuery}
+                    onLookupWord={lookupWord}
+                    isWordLookupLoading={isWordLookupLoading}
+                    wordLookupError={wordLookupError}
+                    wordInsight={wordInsight}
+                    bookSuggestions={bookSuggestions}
+                    isSuggestionsLoading={isSuggestionsLoading}
+                    suggestionFilter={suggestionFilter}
+                    onSuggestionFilterChange={setSuggestionFilter}
+                />
             </div>
 
             {/* Chapter Navigation Footer */}
@@ -348,7 +470,6 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
             />
         </div>
     );
-
 };
 
 export default CinematicReader;

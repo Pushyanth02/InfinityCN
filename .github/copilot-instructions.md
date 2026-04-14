@@ -1,66 +1,28 @@
-# InfinityCN — Copilot System Instructions
+# InfinityCN — Global Copilot Rules
 
-You are working on the InfinityCN Cinematification system.
+You are working on the InfinityCN cinematic reading platform.
 
-## Core Rules
+Core rules:
 
-- Always prioritize system architecture over UI changes
-- Never mix business logic inside React components
-- All logic must be modular and reusable
-- Use strict TypeScript (no `any`)
-- Preserve original text meaning in all transformations
-- Never generate image/video logic
+- Preserve original text meaning.
+- Do not rewrite story content unless a cinematized transformation is explicitly requested.
+- Use strict TypeScript.
+- Keep UI, AI orchestration, runtime rendering, and storage separate.
+- Avoid duplicate logic.
+- Prefer small, testable modules.
+- Minimize AI calls and token usage.
+- Use caching, batching, and fallback providers.
+- Never expose API keys in frontend code.
 
-## Required Architecture
+Required architecture:
+Text/Input
+→ Cleanup
+→ Scene Segmentation
+→ Narrative Analysis
+→ Cinematization
+→ Streaming Renderer
+→ UI Update
 
-Follow this pipeline strictly:
-
-Text Input  
-→ Paragraph Rebuilder  
-→ Scene Segmentation  
-→ Narrative Analysis  
-→ Cinematization  
-→ Renderer  
-
-Do NOT bypass steps.
-
-## Code Structure Rules
-
-- `/lib/ai` → AI orchestration only  
-- `/lib/engine` → cinematification logic  
-- `/lib/runtime` → rendering logic  
-- `/components` → UI only  
-
-## AI Usage Rules
-
-- Minimize API calls
-- Always cache responses
-- Use chunk-based processing
-- Validate AI outputs before rendering
-
-## UI Rules
-
-- Keep UI minimal and readable
-- Typography > colors
-- Dark mode = cinematic (not flashy)
-- Light mode = paper-like
-
-## Performance Rules
-
-- Use lazy loading
-- Avoid reprocessing unchanged text
-- Process text in chunks (scene-level)
-
-## Error Handling
-
-- Never crash UI
-- Always provide fallback state
-- Add retry logic for AI calls
-
-## Output Expectations
-
-Always return:
-- clean code
-- modular structure
-- typed interfaces
-- no unnecessary complexity
+Do not bypass stages.
+Do not mix AI logic into UI components.
+Always add error handling, retry logic, and safe fallback states.

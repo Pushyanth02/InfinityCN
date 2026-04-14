@@ -1,1 +1,1 @@
-export * from './engine/cinematifier';
+export * from './engine/cinematifier/index';

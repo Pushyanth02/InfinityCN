@@ -52,7 +52,10 @@ export class RateLimiter {
         while (true) {
             this.refillBuckets();
 
-            if (this.requestBucket.tokens >= requestUnits && this.tokenBucket.tokens >= tokenUnits) {
+            if (
+                this.requestBucket.tokens >= requestUnits &&
+                this.tokenBucket.tokens >= tokenUnits
+            ) {
                 this.requestBucket.tokens -= requestUnits;
                 this.tokenBucket.tokens -= tokenUnits;
                 return;

@@ -6,8 +6,8 @@
  * block parsing → metadata accumulation → result assembly.
  */
 
-import { callAIWithDedup, streamAI, MODEL_PRESETS } from '../../ai';
-import type { AIConfig } from '../../ai';
+import { callAIManaged, streamAIManaged, MODEL_PRESETS } from '../../ai';
+import type { AIConfig, AIManagerOptions } from '../../ai';
 import type { CinematicBlock, CinematificationResult } from '../../../types/cinematifier';
 import { generateEmbedding, retrieveRelevantContext } from '../../ai/embeddings';
 import type { ChunkEmbedding } from '../../ai/embeddings';
@@ -93,25 +93,39 @@ RULES:
 4. Add SFX annotations: SFX: [sound description]
    Examples: SFX: CRASH!, SFX: distant thunder, SFX: silence...
 5. Add dramatic beats: BEAT, PAUSE
-6. Add scene transitions: CUT TO: [location], FADE IN, FADE TO BLACK
-7. Mark reflective/introspective passages with [REFLECTION] and [/REFLECTION]
-8. Mark high-tension sequences with [TENSION] and [/TENSION]
-9. Append inline narrative tags to lines:
+6. Add scene transitions with explicit markers when changing scenes:
+    - [TRANSITION: CUT TO], [TRANSITION: DISSOLVE TO], [TRANSITION: SMASH CUT], [TRANSITION: FADE TO BLACK]
+7. Add cinematic camera/atmosphere markers at scene starts when relevant:
+    - [CAMERA: WIDE ESTABLISHING|MEDIUM TRACKING|HANDHELD CLOSE|OVER THE SHOULDER|PUSH IN]
+    - [AMBIENCE: short atmospheric cue]
+8. Mark reflective/introspective passages with [REFLECTION] and [/REFLECTION]
+9. Mark high-tension sequences with [TENSION] and [/TENSION]
+10. Append inline narrative tags to lines:
    - [EMOTION: joy|fear|sadness|suspense|anger|surprise|neutral]
    - [TENSION: 0-100] (0 = calm, 100 = extreme stress/climax)
    Example: "I can't believe it." [EMOTION: surprise] [TENSION: 40]`;
 
     if (isFirstChunk) {
-        prompt += `\n10. At the end of the text, optionally append overall tags:
+        prompt += `\n11. At the end of the text, optionally append overall tags:
    - [GENRE: fantasy|romance|thriller|sci_fi|mystery|historical|literary_fiction|horror|adventure|other]
    - [TONE: dark, romantic, suspenseful, humorous, etc] (Comma separated)
    - [SUMMARY: Brief 1-2 sentence summary of current characters, location, and action to maintain context]`;
     } else {
-        prompt += `\n10. At the end of the text, optionally append overall tags:
+        prompt += `\n11. At the end of the text, optionally append overall tags:
    - [SUMMARY: Brief 1-2 sentence summary of current characters, location, and action to maintain context]`;
     }
 
     return prompt + '\n';
+}
+
+function buildManagerOptions(config: AIConfig): AIManagerOptions {
+    return {
+        providerOrder: config.fallbackProviders,
+        preferLowerCost: config.preferLowerCost ?? true,
+        maxCostUsd: config.maxCostUsd,
+        useCache: true,
+        maxRetries: 2,
+    };
 }
 
 export function validateAICinematification(
@@ -206,6 +220,7 @@ export async function cinematifyText(
 
         // Use rawTextMode so the AI engine skips JSON formatting and uses higher token limits
         const cinematifyConfig: AIConfig = { ...config, rawTextMode: true };
+        const managerOptions = buildManagerOptions(cinematifyConfig);
 
         let rawBuffer = '';
         let lastProcessedIndex = 0;
@@ -219,7 +234,11 @@ export async function cinematifyText(
             const canStream = preset?.supportsStreaming;
 
             if (canStream) {
-                for await (const delta of streamAI(prompt, cinematifyConfig)) {
+                for await (const delta of streamAIManaged(
+                    prompt,
+                    cinematifyConfig,
+                    managerOptions,
+                )) {
                     if (abortSignal?.aborted) throw new Error('Processing aborted');
                     rawBuffer += delta;
 
@@ -270,11 +289,11 @@ export async function cinematifyText(
             } else {
                 // Fallback to bulk for non-streaming providers
                 if (abortSignal?.aborted) throw new Error('Processing aborted');
-                const raw = await callAIWithDedup(prompt, cinematifyConfig);
+                const managedResult = await callAIManaged(prompt, cinematifyConfig, managerOptions);
                 if (abortSignal?.aborted) throw new Error('Processing aborted');
-                rawBuffer = raw;
-                allRawText.push(raw);
-                const blocks = parseCinematifiedText(raw);
+                rawBuffer = managedResult.text;
+                allRawText.push(managedResult.text);
+                const blocks = parseCinematifiedText(managedResult.text);
                 if (blocks.length > 0) {
                     allBlocks.push(...blocks);
                     chunkBlocks.push(...blocks);
@@ -310,16 +329,16 @@ export async function cinematifyText(
             }
         } catch (err) {
             console.warn(`[Cinematifier] Chunk ${i + 1} fallback:`, err);
-            
+
             // Revert any blocks uniquely pushed during this broken chunk to prevent dupe fragments.
-            // (Note: onChunk UI signal cannot be easily fully reverted without buffering, 
+            // (Note: onChunk UI signal cannot be easily fully reverted without buffering,
             // but the final returned blocks array will remain correct.)
             allBlocks.splice(chunkStartIndex);
-            
+
             const fallbackResult = cinematifyOffline(chunks[i]);
             allBlocks.push(...fallbackResult.blocks);
             if (onChunk) onChunk(fallbackResult.blocks, false);
-            
+
             // Re-calc counts since we reverted the AI ones and appended offline ones
             const offlineCounts = countBlockMetadata(fallbackResult.blocks);
             sfxCount += offlineCounts.sfxCount;

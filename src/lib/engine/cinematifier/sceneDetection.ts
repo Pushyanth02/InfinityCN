@@ -40,6 +40,13 @@ const EMOTIONAL_RESET_THRESHOLD = 0.55;
 const SCENE_BREAK_THRESHOLD = 2;
 const MAX_PARAGRAPHS_PER_SCENE = 8;
 
+const ORIGINAL_MODE_TIME_SHIFT_PATTERN =
+    /\b(later that night|later that day|hours later|days later|weeks later|months later|years later|meanwhile|the next morning|the next day|the following morning|at dawn|at dusk|at nightfall|before sunrise|after sunset|that night|that morning)\b/i;
+const ORIGINAL_MODE_LOCATION_PATTERN =
+    /\b(?:in|at|on|inside|outside|near|within|beneath|beyond|across)\s+(?:the\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3})/i;
+const ORIGINAL_MODE_SCENE_DIVIDER_PATTERN = /^\s*(?:\*{3,}|-{3,}|#{3,}|\.{3,}|—\s*✦\s*—)\s*$/;
+const ORIGINAL_MODE_STRONG_BREAK_NEWLINES = 3;
+
 export interface Scene {
     id: string;
     text: string;
@@ -87,11 +94,17 @@ function hasEmotionalReset(previous: string, current: string): boolean {
     return delta >= EMOTIONAL_RESET_THRESHOLD || polarityFlipped;
 }
 
-function shouldStartNewScene(previous: string, current: string, currentSceneLength: number): boolean {
+function shouldStartNewScene(
+    previous: string,
+    current: string,
+    currentSceneLength: number,
+): boolean {
     const previousLocation = extractLocationHint(previous);
     const currentLocation = extractLocationHint(current);
     const locationChanged =
-        Boolean(previousLocation) && Boolean(currentLocation) && previousLocation !== currentLocation;
+        Boolean(previousLocation) &&
+        Boolean(currentLocation) &&
+        previousLocation !== currentLocation;
 
     const timeShift = TIME_SHIFT_PATTERN.test(current);
     const legacySignal = SCENE_BREAK_SIGNALS.test(current);
@@ -139,6 +152,96 @@ function segmentParagraphsUniversal(paragraphs: string[]): string[][] {
 
     if (currentScene.length) scenes.push(currentScene);
     return scenes;
+}
+
+function extractOriginalModeLocation(paragraph: string): string | undefined {
+    const match = paragraph.match(ORIGINAL_MODE_LOCATION_PATTERN);
+    return match?.[1]?.trim().toLowerCase();
+}
+
+function splitParagraphsWithBreakStrength(
+    text: string,
+): Array<{ paragraph: string; breakNewlines: number }> {
+    const normalized = text.replace(/\r\n|\r/g, '\n').trim();
+    if (!normalized) return [];
+
+    const tokens = normalized.split(/(\n\s*\n+)/);
+    const units: Array<{ paragraph: string; breakNewlines: number }> = [];
+
+    for (let i = 0; i < tokens.length; i += 2) {
+        const paragraph = (tokens[i] ?? '').trim();
+        if (!paragraph) continue;
+
+        const separator = tokens[i + 1] ?? '';
+        const breakNewlines = (separator.match(/\n/g) || []).length;
+        units.push({ paragraph, breakNewlines });
+    }
+
+    return units;
+}
+
+/**
+ * Deterministic scene detection for original reader mode.
+ * Splits scenes on time shifts, location changes, explicit dividers, and strong paragraph breaks.
+ */
+export function detectOriginalModeScenes(text: string): Scene[] {
+    const units = splitParagraphsWithBreakStrength(text);
+    if (units.length === 0) return [];
+
+    const scenes: string[][] = [];
+    let currentScene: string[] = [];
+    let currentLocation: string | undefined;
+
+    for (let i = 0; i < units.length; i++) {
+        const { paragraph, breakNewlines } = units[i];
+
+        if (ORIGINAL_MODE_SCENE_DIVIDER_PATTERN.test(paragraph)) {
+            if (currentScene.length > 0) {
+                scenes.push(currentScene);
+                currentScene = [];
+                currentLocation = undefined;
+            }
+            continue;
+        }
+
+        const detectedLocation = extractOriginalModeLocation(paragraph);
+        const hasLocationShift =
+            Boolean(detectedLocation) &&
+            Boolean(currentLocation) &&
+            detectedLocation !== currentLocation;
+        const hasTimeShift = ORIGINAL_MODE_TIME_SHIFT_PATTERN.test(paragraph);
+        const hasStrongBreak =
+            i > 0 && units[i - 1].breakNewlines >= ORIGINAL_MODE_STRONG_BREAK_NEWLINES;
+
+        const shouldStartNewScene =
+            currentScene.length > 0 && (hasTimeShift || hasLocationShift || hasStrongBreak);
+
+        if (shouldStartNewScene) {
+            scenes.push(currentScene);
+            currentScene = [];
+            currentLocation = undefined;
+        }
+
+        currentScene.push(paragraph);
+        if (detectedLocation) {
+            currentLocation = detectedLocation;
+        }
+
+        if (breakNewlines >= ORIGINAL_MODE_STRONG_BREAK_NEWLINES && i < units.length - 1) {
+            scenes.push(currentScene);
+            currentScene = [];
+            currentLocation = undefined;
+        }
+    }
+
+    if (currentScene.length > 0) {
+        scenes.push(currentScene);
+    }
+
+    return scenes.map((sceneParagraphs, index) => ({
+        id: `scene-${index + 1}`,
+        text: sceneParagraphs.join('\n\n'),
+    }));
 }
 
 /**

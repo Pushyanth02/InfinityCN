@@ -15,7 +15,7 @@ import type {
     Book,
     ReadingProgress,
 } from '../types/cinematifier';
-import type { AIConfig } from '../lib/ai/index';
+import type { AIConfig, AIProviderName } from '../lib/ai/index';
 import { encrypt, decrypt, deobfuscateLegacy, isLegacyEncryption } from '../lib/crypto';
 
 // ─── API Key Encryption ──────────────────────────────────────────────────────
@@ -135,15 +135,7 @@ export interface CinematifierState {
     error: string | null;
 
     // AI Settings
-    aiProvider:
-        | 'none'
-        | 'chrome'
-        | 'gemini'
-        | 'ollama'
-        | 'openai'
-        | 'anthropic'
-        | 'groq'
-        | 'deepseek';
+    aiProvider: AIProviderName;
     universalApiKey: string;
     aiModel: string;
     geminiKey: string;

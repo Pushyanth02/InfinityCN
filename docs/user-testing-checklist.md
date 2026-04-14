@@ -1,12 +1,14 @@
 # User Testing Checklist — InfinityCN
 
 ## 1. General Usability
+
 - [ ] Can users upload a book and start reading without confusion?
 - [ ] Are all primary actions (upload, settings, navigation) discoverable?
 - [ ] Is the interface clear and free of jargon?
 - [ ] Are error and success messages clear and actionable?
 
 ## 2. Accessibility
+
 - [ ] Can all interactive elements be reached and operated via keyboard?
 - [ ] Are ARIA roles and labels present and correct?
 - [ ] Is there a visible focus indicator for all controls?
@@ -15,29 +17,43 @@
 - [ ] Are modals and overlays accessible to screen readers?
 
 ## 3. Navigation & Responsiveness
+
 - [ ] Can users navigate between Home, Reader, and Settings easily?
 - [ ] Does the UI adapt well to mobile and tablet screens?
 - [ ] Are navigation and content layouts clear at all breakpoints?
 
 ## 4. Reader Experience
+
 - [ ] Is the cinematic reading experience immersive and distraction-free?
 - [ ] Are chapter navigation and progress indicators intuitive?
 - [ ] Can users adjust preferences (font, size, theme) and see changes live?
 - [ ] Is dyslexia mode easy to find and effective?
+- [ ] Do cinematic depth metrics (scenes, cues, tension, mood) update correctly per chapter?
+- [ ] Are word lens lookups responsive and resilient to API failures?
 
 ## 5. Settings & Providers
+
 - [ ] Can users select and switch AI providers easily?
 - [ ] Are API key inputs secure and user-friendly?
 - [ ] Is feedback provided for connection tests?
 
-## 6. Error Handling
+## 6. Discovery APIs (Novel/Manga/Manhwa/Manhua)
+
+- [ ] Are related-title suggestions shown for all content types when filter is set to `All`?
+- [ ] Do content filters (`Novel`, `Manga`, `Manhwa`, `Manhua`) return matching results only?
+- [ ] Are recommendation source badges accurate (Open Library, Google Books, Gutendex, Jikan, Kitsu)?
+- [ ] Do empty-state and loading-state messages appear correctly when APIs are slow/unavailable?
+
+## 7. Error Handling
+
 - [ ] Are upload, parsing, and provider errors handled gracefully?
 - [ ] Are users guided to resolve issues?
 
-## 7. Feedback Collection
+## 8. Feedback Collection
+
 - [ ] Is there a way for users to submit feedback or report issues?
 - [ ] Are user suggestions tracked for future improvements?
 
 ---
 
-*Use this checklist during manual user testing sessions and to guide further UI/UX iteration.*
+_Use this checklist during manual user testing sessions and to guide further UI/UX iteration._

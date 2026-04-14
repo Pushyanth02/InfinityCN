@@ -6,11 +6,23 @@
  * - OpenAI / Gemini / Claude adapters
  * - fallback provider sequencing
  * - retry with exponential backoff
+ * - request caching and inflight deduplication
+ * - cost-aware routing and budget guardrails
+ * - streaming fallback between providers
  */
 
 import { AI_MAX_RETRY_DELAY_MS } from '../constants';
+import { getCacheKey, getCached, setCache } from './cache';
+import {
+    estimateProviderCallCostUsd,
+    isWithinCostBudget,
+    sortProvidersByEstimatedCost,
+} from './costControl';
+import { classifyError, withRetry } from './errors';
 import { callAI, prepareAICall } from './providers';
-import { getRateLimiter } from './streaming';
+import type { PreparedAICall } from './providers';
+import { getRateLimiter, streamAI } from './streaming';
+import { estimateTokens } from './tokenFlow';
 import type { AIConfig } from './types';
 
 export type AIManagerProvider = 'openai' | 'gemini' | 'claude';
@@ -24,12 +36,25 @@ export interface AIManagerOptions {
     providerOrder?: AIManagerProvider[];
     maxRetries?: number;
     baseDelayMs?: number;
+    useCache?: boolean;
+    /** Sort fallback providers by estimated cost while preserving primary provider priority. */
+    preferLowerCost?: boolean;
+    /** Skip provider attempts whose estimated call cost exceeds this USD budget. */
+    maxCostUsd?: number;
 }
 
 export interface AIManagerResult {
     text: string;
     providerUsed: AIManagerProvider;
     attemptedProviders: AIManagerProvider[];
+    cacheHit: boolean;
+    estimatedCostUsd: number;
+    actualCostUsd: number;
+}
+
+export interface AIManagerCostSummary {
+    estimatedUsd: number;
+    actualUsd: number;
 }
 
 const PROVIDER_MAP: Record<AIManagerProvider, AIConfig['provider']> = {
@@ -77,6 +102,9 @@ function dedupeProviders(providers: AIManagerProvider[]): AIManagerProvider[] {
 export class AIManager {
     private readonly providers = new Map<AIManagerProvider, Provider>();
     private readonly defaultProviderOrder: AIManagerProvider[];
+    private readonly inflightRequests = new Map<string, Promise<string>>();
+    private estimatedSpendUsd = 0;
+    private actualSpendUsd = 0;
 
     constructor(
         providers: Provider[] = [
@@ -98,7 +126,59 @@ export class AIManager {
         return null;
     }
 
-    private resolveProviderOrder(config: AIConfig, options?: AIManagerOptions): AIManagerProvider[] {
+    private createProviderConfig(config: AIConfig, providerName: AIManagerProvider): AIConfig {
+        return {
+            ...config,
+            provider: PROVIDER_MAP[providerName],
+        };
+    }
+
+    private prepareProviderCall(
+        prompt: string,
+        config: AIConfig,
+        providerName: AIManagerProvider,
+    ): { providerConfig: AIConfig; prepared: PreparedAICall; cacheKey: string } {
+        const providerConfig = this.createProviderConfig(config, providerName);
+        const prepared = prepareAICall(prompt, providerConfig);
+        const cacheKey = getCacheKey(prompt, prepared.provider, prepared.model);
+
+        return {
+            providerConfig,
+            prepared,
+            cacheKey,
+        };
+    }
+
+    private estimateCallCost(
+        providerName: AIManagerProvider,
+        prepared: PreparedAICall,
+        outputTokens: number,
+    ): number {
+        return estimateProviderCallCostUsd(
+            providerName,
+            prepared.tokenPlan.promptTokens,
+            outputTokens,
+        );
+    }
+
+    private estimateMaxCostSafe(
+        providerName: AIManagerProvider,
+        prompt: string,
+        config: AIConfig,
+    ): number {
+        try {
+            const { prepared } = this.prepareProviderCall(prompt, config, providerName);
+            return this.estimateCallCost(providerName, prepared, prepared.maxTokens);
+        } catch {
+            return Number.POSITIVE_INFINITY;
+        }
+    }
+
+    private resolveProviderOrder(
+        config: AIConfig,
+        prompt: string,
+        options?: AIManagerOptions,
+    ): AIManagerProvider[] {
         if (options?.providerOrder && options.providerOrder.length > 0) {
             return dedupeProviders(options.providerOrder).filter(provider =>
                 this.providers.has(provider),
@@ -110,31 +190,39 @@ export class AIManager {
             ? [primary, ...this.defaultProviderOrder.filter(provider => provider !== primary)]
             : this.defaultProviderOrder;
 
-        return baseOrder.filter(provider => this.providers.has(provider));
-    }
-
-    private async generateWithRetry(
-        provider: Provider,
-        prompt: string,
-        config: AIConfig,
-        maxRetries: number,
-        baseDelayMs: number,
-    ): Promise<string> {
-        let lastError: unknown;
-
-        for (let attempt = 0; attempt <= maxRetries; attempt++) {
-            try {
-                return await provider.generate(prompt, config);
-            } catch (error) {
-                lastError = error;
-                if (attempt >= maxRetries) break;
-
-                const delay = Math.min(baseDelayMs * Math.pow(2, attempt), AI_MAX_RETRY_DELAY_MS);
-                await sleep(delay);
-            }
+        const availableOrder = baseOrder.filter(provider => this.providers.has(provider));
+        if (!options?.preferLowerCost || availableOrder.length <= 1) {
+            return availableOrder;
         }
 
-        throw lastError instanceof Error ? lastError : new Error(String(lastError));
+        if (primary && availableOrder.includes(primary)) {
+            const fallbackProviders = availableOrder.filter(provider => provider !== primary);
+            const sortedFallback = sortProvidersByEstimatedCost(fallbackProviders, candidate =>
+                this.estimateMaxCostSafe(candidate, prompt, config),
+            );
+            return [primary, ...sortedFallback];
+        }
+
+        return sortProvidersByEstimatedCost(availableOrder, candidate =>
+            this.estimateMaxCostSafe(candidate, prompt, config),
+        );
+    }
+
+    private recordCost(estimatedCostUsd: number, actualCostUsd: number): void {
+        this.estimatedSpendUsd += estimatedCostUsd;
+        this.actualSpendUsd += actualCostUsd;
+    }
+
+    getCostSummary(): AIManagerCostSummary {
+        return {
+            estimatedUsd: this.estimatedSpendUsd,
+            actualUsd: this.actualSpendUsd,
+        };
+    }
+
+    resetCostSummary(): void {
+        this.estimatedSpendUsd = 0;
+        this.actualSpendUsd = 0;
     }
 
     async generate(
@@ -142,13 +230,14 @@ export class AIManager {
         config: AIConfig,
         options?: AIManagerOptions,
     ): Promise<AIManagerResult> {
-        const providerOrder = this.resolveProviderOrder(config, options);
+        const providerOrder = this.resolveProviderOrder(config, prompt, options);
         if (providerOrder.length === 0) {
             throw new Error('No AI providers are configured for AIManager.');
         }
 
         const maxRetries = options?.maxRetries ?? 2;
         const baseDelayMs = options?.baseDelayMs ?? 1500;
+        const useCache = options?.useCache ?? true;
         const attemptedProviders: AIManagerProvider[] = [];
         const providerErrors: string[] = [];
 
@@ -156,29 +245,109 @@ export class AIManager {
             const provider = this.providers.get(providerName);
             if (!provider) continue;
 
-            attemptedProviders.push(providerName);
-
+            let providerConfig: AIConfig;
+            let prepared: PreparedAICall;
+            let cacheKey: string;
             try {
-                const text = await this.generateWithRetry(
-                    provider,
+                ({ providerConfig, prepared, cacheKey } = this.prepareProviderCall(
                     prompt,
                     config,
-                    maxRetries,
-                    baseDelayMs,
+                    providerName,
+                ));
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                providerErrors.push(`${providerName}: ${message}`);
+                continue;
+            }
+
+            const estimatedCostUsd = this.estimateCallCost(
+                providerName,
+                prepared,
+                prepared.maxTokens,
+            );
+            if (!isWithinCostBudget(estimatedCostUsd, options?.maxCostUsd)) {
+                providerErrors.push(
+                    `${providerName}: estimated cost ${estimatedCostUsd.toFixed(6)} exceeds maxCostUsd ${
+                        options?.maxCostUsd?.toFixed(6) ?? '0.000000'
+                    }`,
                 );
+                continue;
+            }
+
+            if (useCache) {
+                const cached = getCached(cacheKey);
+                if (cached !== null) {
+                    return {
+                        text: cached,
+                        providerUsed: providerName,
+                        attemptedProviders: [...attemptedProviders, providerName],
+                        cacheHit: true,
+                        estimatedCostUsd: 0,
+                        actualCostUsd: 0,
+                    };
+                }
+
+                const inflight = this.inflightRequests.get(cacheKey);
+                if (inflight) {
+                    const text = await inflight;
+                    return {
+                        text,
+                        providerUsed: providerName,
+                        attemptedProviders: [...attemptedProviders, providerName],
+                        cacheHit: true,
+                        estimatedCostUsd: 0,
+                        actualCostUsd: 0,
+                    };
+                }
+            }
+
+            attemptedProviders.push(providerName);
+
+            const requestPromise = withRetry(
+                () => provider.generate(prompt, providerConfig),
+                providerName,
+                maxRetries,
+                baseDelayMs,
+            );
+
+            if (useCache) {
+                this.inflightRequests.set(cacheKey, requestPromise);
+            }
+
+            try {
+                const text = await requestPromise;
 
                 if (!text.trim()) {
                     throw new Error(`Empty response from provider: ${providerName}`);
+                }
+
+                const actualOutputTokens = estimateTokens(text);
+                const actualCostUsd = this.estimateCallCost(
+                    providerName,
+                    prepared,
+                    actualOutputTokens,
+                );
+                this.recordCost(estimatedCostUsd, actualCostUsd);
+
+                if (useCache) {
+                    setCache(cacheKey, text, prepared.provider);
                 }
 
                 return {
                     text,
                     providerUsed: providerName,
                     attemptedProviders,
+                    cacheHit: false,
+                    estimatedCostUsd,
+                    actualCostUsd,
                 };
             } catch (error) {
                 const message = error instanceof Error ? error.message : String(error);
                 providerErrors.push(`${providerName}: ${message}`);
+            } finally {
+                if (useCache) {
+                    this.inflightRequests.delete(cacheKey);
+                }
             }
         }
 
@@ -186,5 +355,125 @@ export class AIManager {
             `AIManager failed across providers (${attemptedProviders.join(' -> ')}). ${providerErrors.join(' | ')}`,
         );
     }
-}
 
+    async *stream(
+        prompt: string,
+        config: AIConfig,
+        options?: AIManagerOptions,
+    ): AsyncGenerator<string> {
+        const providerOrder = this.resolveProviderOrder(config, prompt, options);
+        if (providerOrder.length === 0) {
+            throw new Error('No AI providers are configured for AIManager streaming.');
+        }
+
+        const maxRetries = options?.maxRetries ?? 2;
+        const baseDelayMs = options?.baseDelayMs ?? 1500;
+        const useCache = options?.useCache ?? true;
+        const attemptedProviders: AIManagerProvider[] = [];
+        const providerErrors: string[] = [];
+
+        for (const providerName of providerOrder) {
+            let providerConfig: AIConfig;
+            let prepared: PreparedAICall;
+            let cacheKey: string;
+
+            try {
+                ({ providerConfig, prepared, cacheKey } = this.prepareProviderCall(
+                    prompt,
+                    config,
+                    providerName,
+                ));
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                providerErrors.push(`${providerName}: ${message}`);
+                continue;
+            }
+
+            const estimatedCostUsd = this.estimateCallCost(
+                providerName,
+                prepared,
+                prepared.maxTokens,
+            );
+            if (!isWithinCostBudget(estimatedCostUsd, options?.maxCostUsd)) {
+                providerErrors.push(
+                    `${providerName}: estimated cost ${estimatedCostUsd.toFixed(6)} exceeds maxCostUsd ${
+                        options?.maxCostUsd?.toFixed(6) ?? '0.000000'
+                    }`,
+                );
+                continue;
+            }
+
+            if (useCache) {
+                const cached = getCached(cacheKey);
+                if (cached !== null) {
+                    yield cached;
+                    return;
+                }
+            }
+
+            attemptedProviders.push(providerName);
+
+            let lastError: unknown;
+
+            for (let attempt = 0; attempt <= maxRetries; attempt++) {
+                let output = '';
+                let emittedAnyChunk = false;
+
+                try {
+                    for await (const chunk of streamAI(prompt, providerConfig)) {
+                        emittedAnyChunk = true;
+                        output += chunk;
+                        yield chunk;
+                    }
+
+                    if (!output.trim()) {
+                        throw new Error(`Empty response from provider: ${providerName}`);
+                    }
+
+                    const actualOutputTokens = estimateTokens(output);
+                    const actualCostUsd = this.estimateCallCost(
+                        providerName,
+                        prepared,
+                        actualOutputTokens,
+                    );
+                    this.recordCost(estimatedCostUsd, actualCostUsd);
+
+                    if (useCache) {
+                        setCache(cacheKey, output, prepared.provider);
+                    }
+
+                    return;
+                } catch (error) {
+                    if (emittedAnyChunk) {
+                        const message = error instanceof Error ? error.message : String(error);
+                        throw new Error(
+                            `Streaming failed after partial output on ${providerName}: ${message}`,
+                            { cause: error },
+                        );
+                    }
+
+                    const classified = classifyError(error, providerName);
+                    lastError = classified;
+
+                    if (!classified.retryable || attempt >= maxRetries) {
+                        break;
+                    }
+
+                    const rawDelay = classified.retryAfterMs ?? baseDelayMs * Math.pow(2, attempt);
+                    const delay = Math.min(rawDelay, AI_MAX_RETRY_DELAY_MS);
+                    await sleep(delay);
+                }
+            }
+
+            const finalMessage =
+                lastError instanceof Error
+                    ? lastError.message
+                    : String(lastError ?? 'Unknown error');
+            providerErrors.push(`${providerName}: ${finalMessage}`);
+        }
+
+        throw new Error(
+            `AIManager streaming failed across providers (${attemptedProviders.join(' -> ')}). ${providerErrors.join(' | ')}`,
+        );
+    }
+}

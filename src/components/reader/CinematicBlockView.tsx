@@ -206,7 +206,12 @@ export const CinematicBlockView = React.memo(function CinematicBlockView({
             );
 
         case 'action':
-        default:
+        default: {
+            const hasActionText = block.content.trim().length > 0;
+            const showTensionMeter = block.tensionScore !== undefined && block.tensionScore > 0;
+            const hasActionMetadata = Boolean(block.ambience || block.emotion || showTensionMeter);
+            const tensionScore = block.tensionScore ?? 0;
+
             return (
                 <motion.div
                     className={blockClasses}
@@ -221,31 +226,39 @@ export const CinematicBlockView = React.memo(function CinematicBlockView({
                     {block.cameraDirection && (
                         <div className="cine-camera">({block.cameraDirection})</div>
                     )}
-                    <p className="cine-action">{block.content}</p>
+                    {hasActionText && <p className="cine-action">{block.content}</p>}
 
-                    {/* Emotion & Tension UI */}
-                    <div className="cine-action-metadata">
-                        {block.emotion && (
-                            <div className={`cine-emotion-tag cine-emotion--${block.emotion}`}>
-                                {block.emotion}
-                            </div>
-                        )}
-                        {block.tensionScore !== undefined && block.tensionScore > 0 && (
-                            <div
-                                className="cine-tension-meter"
-                                title={`Tension: ${block.tensionScore}`}
-                            >
+                    {/* Emotion, ambience, and tension metadata */}
+                    {hasActionMetadata && (
+                        <div className="cine-action-metadata">
+                            {block.ambience && (
+                                <div className="cine-ambience-tag">{block.ambience}</div>
+                            )}
+                            {block.emotion && (
+                                <div className={`cine-emotion-tag cine-emotion--${block.emotion}`}>
+                                    {block.emotion}
+                                </div>
+                            )}
+                            {showTensionMeter && (
                                 <div
-                                    className="cine-tension-bar cine-tension-bar-dynamic"
-                                    style={{
-                                        '--cine-tension-bar-width': `${block.tensionScore}%`,
-                                        '--cine-tension-bar-color': `hsl(${120 - block.tensionScore * 1.2}, 80%, 50%)`
-                                    } as React.CSSProperties}
-                                />
-                            </div>
-                        )}
-                    </div>
+                                    className="cine-tension-meter"
+                                    title={`Tension: ${block.tensionScore}`}
+                                >
+                                    <div
+                                        className="cine-tension-bar cine-tension-bar-dynamic"
+                                        style={
+                                            {
+                                                '--cine-tension-bar-width': `${tensionScore}%`,
+                                                '--cine-tension-bar-color': `hsl(${120 - tensionScore * 1.2}, 80%, 50%)`,
+                                            } as React.CSSProperties
+                                        }
+                                    />
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </motion.div>
             );
+        }
     }
 });

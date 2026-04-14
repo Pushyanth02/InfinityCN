@@ -29,11 +29,16 @@
 | [Back]  Book Title         [Chapter Nav]      [Settings] |
 +----------------------------------------------------------+
 |                                                          |
-|   [Chapter Header]                                        |
+|   [Left Sidebar: Chapters]  [Main Reader] [Right Panel]  |
 |   ----------------------------------------------------   |
 |   | Cinematic Content Area (blocks, dialogue, etc.)   |   |
 |   ----------------------------------------------------   |
-|   [Original Text Toggle]                                 |
+|                                                          |
+|   [Right Panel Sections]                                  |
+|   - Reading Pace + Cinematic Depth                        |
+|   - Word Lens                                              |
+|   - Related Titles (All/Novel/Manga/Manhwa/Manhua)       |
+|   - Recommendation Source + Type badges                   |
 |                                                          |
 |   [Progress Bar]                                         |
 |                                                          |
@@ -42,6 +47,7 @@
 ```
 
 - Focus on immersive reading, easy navigation, and quick access to settings/preferences.
+- Keep recommendation discovery contextual to the active book/chapter without distracting from reading flow.
 
 ---
 
@@ -66,10 +72,11 @@
 ---
 
 ## User Flows & Key Interactions
+
 - Upload → Reader → Settings/Preferences → Continue Reading
 - Quick switch between providers and preferences in modal
 - Responsive design for mobile and desktop
 
 ---
 
-*These wireframes serve as a foundation for high-fidelity prototypes and further UI/UX iteration.*
+_These wireframes serve as a foundation for high-fidelity prototypes and further UI/UX iteration._

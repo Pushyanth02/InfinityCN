@@ -8,9 +8,15 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useCinematifierStore, getCinematifierAIConfig } from '../store/cinematifierStore';
-import { cinematifyText, cinematifyOffline, CinematificationPipeline } from '../lib/cinematifier';
+import {
+    runFullSystemPipeline,
+    cinematifyOffline,
+    extractOverallMetadata,
+} from '../lib/cinematifier';
+import { CinematicStreamAdapter } from '../lib/rendering/cinematicStreamAdapter';
+import { useRenderBridge } from './useRenderBridge';
 import { saveBook } from '../lib/runtime/cinematifierDb';
-import type { CinematicBlock, ReaderMode, Chapter } from '../types/cinematifier';
+import type { ReaderMode, Chapter } from '../types/cinematifier';
 
 function toChapterErrorMessage(error: unknown): string {
     const message = error instanceof Error ? error.message : String(error);
@@ -21,7 +27,11 @@ function toChapterErrorMessage(error: unknown): string {
     if (lower.includes('api key') || lower.includes('401') || lower.includes('403')) {
         return 'AI authentication failed for this chapter.';
     }
-    if (lower.includes('network') || lower.includes('failed to fetch') || lower.includes('timeout')) {
+    if (
+        lower.includes('network') ||
+        lower.includes('failed to fetch') ||
+        lower.includes('timeout')
+    ) {
         return 'Network issue while processing this chapter.';
     }
     return message || 'Failed to process chapter.';
@@ -32,35 +42,13 @@ export function useChapterProcessing(
     currentChapterIndex: number,
     readerMode: ReaderMode,
 ) {
-
     const updateChapter = useCinematifierStore(s => s.updateChapter);
     const setError = useCinematifierStore(s => s.setError);
     const [isProcessingChapter, setIsProcessingChapter] = useState(false);
     const abortControllerRef = useRef<AbortController | null>(null);
-
-    const retryCinematifyText = useCallback(
-        async (
-            text: string,
-            config: ReturnType<typeof getCinematifierAIConfig>,
-            onChunk: (blocks: CinematicBlock[], isDone: boolean) => void,
-            signal: AbortSignal,
-        ) => {
-            let lastError: unknown;
-            for (let attempt = 0; attempt < 2; attempt++) {
-                try {
-                    return await cinematifyText(text, config, undefined, onChunk, signal);
-                } catch (error) {
-                    lastError = error;
-                    if (signal.aborted) throw error;
-                    if (attempt >= 1) break;
-                    await new Promise(resolve => setTimeout(resolve, 800));
-                }
-            }
-            throw lastError instanceof Error ? lastError : new Error(String(lastError));
-        },
-        [],
-    );
-
+    const bridgeHook = useRenderBridge({
+        mode: readerMode === 'cinematified' ? 'cinematized' : 'original',
+    });
 
     const processCurrentChapter = useCallback(async () => {
         if (!currentChapter || currentChapter.isProcessed) return;
@@ -69,60 +57,48 @@ export function useChapterProcessing(
         setIsProcessingChapter(true);
         const controller = new AbortController();
         abortControllerRef.current = controller;
-        let streamingFlushFrame: number | null = null;
-        let pendingIsDone = false;
         updateChapter(currentChapterIndex, { status: 'processing', errorMessage: undefined });
 
+        const config = getCinematifierAIConfig();
+        const chapterSourceText = currentChapter.originalModeText ?? currentChapter.originalText;
+        const adapter = new CinematicStreamAdapter();
+        const unbindStream = bridgeHook.bindStream(adapter, [currentChapter.id]);
+
         try {
-            const config = getCinematifierAIConfig();
-            let result;
+            adapter.start(config.provider);
+            const result = await runFullSystemPipeline(chapterSourceText, config, {
+                inputIsRebuilt: true,
+                onChunk:
+                    config.provider === 'none'
+                        ? undefined
+                        : (blocks, isDone) => {
+                              adapter.pushChunk(blocks);
+                              if (isDone) adapter.complete();
+                          },
+                signal: controller.signal,
+            });
+            adapter.complete();
 
-            if (config.provider === 'none') {
-                const pipeline = CinematificationPipeline.createEnrichedOfflinePipeline();
-                // If pipeline supports abort signal, pass it here (future-proof)
-                result = await pipeline.execute(currentChapter.originalText);
-            } else {
-                const accumulatedBlocks: CinematicBlock[] = [];
-
-                const flushStreamingBlocks = (isDone: boolean) => {
-                    updateChapter(currentChapterIndex, {
-                        cinematifiedBlocks: [...accumulatedBlocks],
-                        isProcessed: isDone,
-                    });
-                };
-
-                const scheduleStreamingFlush = (isDone: boolean) => {
-                    pendingIsDone = pendingIsDone || isDone;
-                    if (streamingFlushFrame !== null) return;
-                    streamingFlushFrame = window.requestAnimationFrame(() => {
-                        streamingFlushFrame = null;
-                        flushStreamingBlocks(pendingIsDone);
-                        pendingIsDone = false;
-                    });
-                };
-
-                result = await retryCinematifyText(
-                    currentChapter.originalText,
-                    config,
-                    (blocks, isDone) => {
-                        accumulatedBlocks.push(...blocks);
-                        scheduleStreamingFlush(isDone);
-                    },
-                    controller.signal,
-                );
-
-                if (streamingFlushFrame !== null) {
-                    window.cancelAnimationFrame(streamingFlushFrame);
-                    streamingFlushFrame = null;
-                }
-            }
+            const metadata = extractOverallMetadata(
+                result.cinematizedMode.rawText,
+                result.cinematizedMode.blocks,
+            );
 
             updateChapter(currentChapterIndex, {
-                cinematifiedBlocks: result.blocks,
-                cinematifiedText: result.rawText,
+                originalModeText: result.originalMode.text,
+                originalModeScenes: result.originalMode.scenes,
+                cinematifiedBlocks: result.cinematizedMode.blocks,
+                cinematifiedText: result.cinematizedMode.rawText,
                 isProcessed: true,
                 status: 'ready',
                 errorMessage: undefined,
+                toneTags: metadata.toneTags,
+                characters: metadata.characters,
+                renderPlan: result.cinematizedMode.renderPlan,
+                stageTrace: result.cinematizedMode.stageTrace,
+                cinematizedScenes: result.cinematizedMode.scenes,
+                narrativeMode: result.cinematizedMode.narrativeMode,
+                povCharacter: result.cinematizedMode.povCharacter,
             });
             const updatedBook = useCinematifierStore.getState().book;
             if (updatedBook)
@@ -130,24 +106,31 @@ export function useChapterProcessing(
                     console.warn('[CinematicReader] Failed to persist book:', e);
                 });
         } catch (err) {
-            if (streamingFlushFrame !== null) {
-                window.cancelAnimationFrame(streamingFlushFrame);
-                streamingFlushFrame = null;
-            }
             if (controller.signal.aborted) {
-                // Cancelled by user, do not update chapter
+                adapter.error('Cancelled by user');
                 return;
             }
+            adapter.error(toChapterErrorMessage(err));
             console.error('[CinematicReader] Process error:', err);
             if (!currentChapter) return;
             try {
-                const result = cinematifyOffline(currentChapter.originalText);
+                const sourceText = currentChapter.originalModeText ?? currentChapter.originalText;
+                const result = cinematifyOffline(sourceText);
+                const metadata = extractOverallMetadata(result.rawText, result.blocks);
                 updateChapter(currentChapterIndex, {
+                    originalModeText: sourceText,
                     cinematifiedBlocks: result.blocks,
                     cinematifiedText: result.rawText,
                     isProcessed: true,
                     status: 'ready',
                     errorMessage: 'AI provider failed; offline fallback applied for this chapter.',
+                    toneTags: metadata.toneTags,
+                    characters: metadata.characters,
+                    renderPlan: undefined,
+                    stageTrace: undefined,
+                    cinematizedScenes: undefined,
+                    narrativeMode: undefined,
+                    povCharacter: undefined,
                 });
                 setError('AI processing failed for the chapter; offline fallback was applied.');
                 const updatedBook = useCinematifierStore.getState().book;
@@ -165,13 +148,18 @@ export function useChapterProcessing(
                 setError(`Chapter processing failed: ${message}`);
             }
         } finally {
-            if (streamingFlushFrame !== null) {
-                window.cancelAnimationFrame(streamingFlushFrame);
-            }
+            unbindStream();
             setIsProcessingChapter(false);
             abortControllerRef.current = null;
         }
-    }, [currentChapter, currentChapterIndex, isProcessingChapter, updateChapter, setError, retryCinematifyText]);
+    }, [
+        currentChapter,
+        currentChapterIndex,
+        isProcessingChapter,
+        updateChapter,
+        setError,
+        bridgeHook,
+    ]);
 
     const cancelProcessing = useCallback(() => {
         if (abortControllerRef.current) {
@@ -190,5 +178,6 @@ export function useChapterProcessing(
         isProcessingChapter,
         processCurrentChapter,
         cancelProcessing,
+        sceneState: bridgeHook.sceneState,
     };
 }

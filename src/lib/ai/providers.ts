@@ -1,8 +1,11 @@
 /**
- * ai/providers.ts — AI Provider Implementations (Non-Streaming)
+ * ai/providers.ts — AI Provider Dispatch (Backward-Compatible Shim)
  *
- * Contains the base `callAI` router dispatching to each provider's REST API,
- * plus shared helpers: proxyFetch, handleHttpError, getTimeoutMs.
+ * Delegates to isolated provider classes in ./providers/ while preserving
+ * the existing `callAI()` and `prepareAICall()` signatures that the rest
+ * of the codebase depends on.
+ *
+ * All legacy exports are maintained — consumers don't need to change.
  */
 
 import type { AIConfig, AIProvider, ModelPreset } from './types';
@@ -12,6 +15,7 @@ import { AI_JSON_TIMEOUT_MS, AI_RAWTEXT_TIMEOUT_MS, AI_MAX_RETRY_DELAY_MS } from
 import { buildTokenPlan, type TokenPlan } from './tokenFlow';
 import { assertSecureEndpoint, normalizeApiKey } from '../security/aiSecurity';
 import { KeyManager, validateKey } from '../security/keyManager';
+import { getProvider } from './providers/index';
 
 // ─── UNIFIED SYSTEM PROMPT ────────────────────────────────────────────────────
 
@@ -83,6 +87,8 @@ const PROVIDER_KEY_FIELDS: Partial<Record<AIProvider, keyof AIConfig>> = {
     anthropic: 'anthropicKey',
     groq: 'groqKey',
     deepseek: 'deepseekKey',
+    'nvidia-nim': 'nvidiaNimKey',
+    gwen: 'gwenKey',
 };
 
 export function getApiKeyCandidates(config: AIConfig, provider: AIProvider): string[] {
@@ -217,47 +223,12 @@ export function capitalizeProvider(provider: string): string {
     return provider.charAt(0).toUpperCase() + provider.slice(1);
 }
 
-/** Shared fetch logic for OpenAI-compatible providers (OpenAI, Groq, DeepSeek). */
-async function callOpenAICompatible(
-    config: AIConfig,
-    prepared: PreparedAICall,
-): Promise<string> {
-    const provider = prepared.provider;
-    const providerCfg = OPENAI_COMPATIBLE_PROVIDERS[provider];
+// ─── BASE ROUTER — DELEGATES TO PROVIDER CLASSES ─────────────────────────────
 
-    const body = {
-        model: prepared.model,
-        messages: [
-            { role: 'system', content: prepared.systemPrompt },
-            { role: 'user', content: prepared.prompt },
-        ],
-        ...(prepared.useJSON ? { response_format: { type: 'json_object' } } : {}),
-        [providerCfg.maxTokensField]: prepared.maxTokens,
-        temperature: prepared.preset.temperature,
-    };
-
-    const res = API_PROXY_URL
-        ? await proxyFetch(provider, body, prepared.timeoutMs)
-        : await fetchWithKeyRotation(provider, getApiKeyCandidates(config, provider), apiKey => {
-              assertSecureEndpoint(providerCfg.url, `${capitalizeProvider(provider)} endpoint`);
-              return fetch(providerCfg.url, {
-                  method: 'POST',
-                  headers: {
-                      'Content-Type': 'application/json',
-                      Authorization: `Bearer ${apiKey}`,
-                  },
-                  signal: AbortSignal.timeout(prepared.timeoutMs),
-                  body: JSON.stringify(body),
-              });
-          });
-
-    if (!res.ok) await handleHttpError(res, provider);
-    const data = await res.json();
-    return data.choices?.[0]?.message?.content ?? '';
-}
-
-// ─── BASE ROUTER (single source of truth for all providers) ───────────────────
-
+/**
+ * Main provider dispatch. Delegates to the isolated provider class for the
+ * configured provider. Preserves the original `callAI()` signature exactly.
+ */
 export async function callAI(
     prompt: string,
     config: AIConfig,
@@ -267,140 +238,20 @@ export async function callAI(
     const provider = prepared.provider;
     const keyManager = new KeyManager();
     keyManager.assertBackendOnlyUsage(provider, API_PROXY_URL);
-    let result = '';
 
-    // ── CHROME NANO ──────────────────────────────────────────
-    if (provider === 'chrome') {
-        if (!window.ai?.languageModel) {
-            throw new Error(
-                'Chrome AI is not available in this browser. Enable it in chrome://flags.',
-            );
-        }
-        const caps = await window.ai.languageModel.capabilities();
-        if (caps.available === 'no')
-            throw new Error('Chrome AI model is unavailable (may need to download).');
+    // Delegate to isolated provider class
+    const providerInstance = getProvider(provider);
+    const response = await providerInstance.generate(prepared.prompt, config, {
+        model: prepared.model,
+        maxTokens: prepared.maxTokens,
+        temperature: prepared.preset.temperature,
+        systemPrompt: prepared.systemPrompt,
+        useJSON: prepared.useJSON,
+        rawTextMode: config.rawTextMode,
+        timeoutMs: prepared.timeoutMs,
+    });
 
-        const session = await window.ai.languageModel.create({
-            systemPrompt: prepared.systemPrompt,
-        });
-        try {
-            result = await session.prompt(prepared.prompt);
-        } finally {
-            session.destroy();
-        }
-    }
-
-    // ── GEMINI ────────────────────────────────────────────────
-    else if (provider === 'gemini') {
-        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${prepared.model}:generateContent`;
-
-        const geminiBody = {
-            system_instruction: {
-                parts: [{ text: prepared.systemPrompt }],
-            },
-            contents: [{ parts: [{ text: prepared.prompt }] }],
-            tools: config.useSearchGrounding ? [{ google_search: {} }] : undefined,
-            generationConfig: {
-                ...(prepared.useJSON ? { response_mime_type: 'application/json' } : {}),
-                temperature: prepared.preset.temperature,
-                maxOutputTokens: prepared.maxTokens,
-            },
-        };
-
-        const res = API_PROXY_URL
-            ? await proxyFetch('gemini', geminiBody, prepared.timeoutMs)
-            : await fetchWithKeyRotation(provider, getApiKeyCandidates(config, provider), apiKey => {
-                  assertSecureEndpoint(endpoint, 'Gemini endpoint');
-                  return fetch(endpoint, {
-                      method: 'POST',
-                      headers: {
-                          'Content-Type': 'application/json',
-                          'x-goog-api-key': apiKey,
-                      },
-                      signal: AbortSignal.timeout(prepared.timeoutMs),
-                      body: JSON.stringify(geminiBody),
-                  });
-              });
-
-        if (!res.ok) await handleHttpError(res, 'gemini');
-        const data = await res.json();
-        result = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-    }
-
-    // ── OPENAI / GROQ / DEEPSEEK (OpenAI-compatible) ────────
-    else if (provider in OPENAI_COMPATIBLE_PROVIDERS) {
-        result = await callOpenAICompatible(config, prepared);
-    }
-
-    // ── ANTHROPIC ─────────────────────────────────────────────
-    else if (provider === 'anthropic') {
-        const anthropicBody = {
-            model: prepared.model,
-            max_tokens: prepared.maxTokens,
-            system: prepared.systemPrompt,
-            messages: [{ role: 'user', content: prepared.prompt }],
-            temperature: prepared.preset.temperature,
-        };
-
-        const endpoint = 'https://api.anthropic.com/v1/messages';
-
-        const res = API_PROXY_URL
-            ? await proxyFetch('anthropic', anthropicBody, prepared.timeoutMs)
-            : await fetchWithKeyRotation(provider, getApiKeyCandidates(config, provider), apiKey => {
-                  assertSecureEndpoint(endpoint, 'Anthropic endpoint');
-                  return fetch(endpoint, {
-                      method: 'POST',
-                      headers: {
-                          'Content-Type': 'application/json',
-                          'x-api-key': apiKey,
-                          'anthropic-version': '2023-06-01',
-                          // Required for direct browser→Anthropic calls without a backend proxy.
-                          // Anthropic blocks browser CORS by default; this header opts in.
-                          // Safe here because the key is user-provided and stored locally.
-                          'anthropic-dangerous-direct-browser-access': 'true',
-                      },
-                      signal: AbortSignal.timeout(prepared.timeoutMs),
-                      body: JSON.stringify(anthropicBody),
-                  });
-              });
-
-        if (!res.ok) await handleHttpError(res, 'anthropic');
-        const data = await res.json();
-        result = data.content?.[0]?.text ?? '';
-    }
-
-    // ── OLLAMA ────────────────────────────────────────────────
-    else if (provider === 'ollama') {
-        if (!config.ollamaUrl && !API_PROXY_URL) {
-            throw new Error('Ollama URL is not configured.');
-        }
-
-        const ollamaUrl = config.ollamaUrl?.replace(/\/$/, '') ?? '';
-
-        if (!API_PROXY_URL) {
-            assertSecureEndpoint(ollamaUrl, 'Ollama URL', { allowHttpLocalhost: true });
-        }
-
-        const ollamaBody = {
-            model: prepared.model,
-            prompt: `${prepared.systemPrompt}\n\n${prepared.prompt}`,
-            stream: false,
-            ...(prepared.useJSON ? { format: 'json' } : {}),
-        };
-        const res = API_PROXY_URL
-            ? await proxyFetch('ollama', ollamaBody, prepared.timeoutMs)
-            : await fetch(`${ollamaUrl}/api/generate`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  signal: AbortSignal.timeout(prepared.timeoutMs),
-                  body: JSON.stringify(ollamaBody),
-              });
-        if (!res.ok) await handleHttpError(res, 'ollama');
-        const data = await res.json();
-        result = data.response ?? '';
-    }
-
-    if (result !== '') return result;
+    if (response.text !== '') return response.text;
 
     throw new AIError(
         `Empty response from provider: ${provider}`,

@@ -42,21 +42,31 @@ export const CinematifierApp: React.FC = () => {
     const processFile = useFileProcessing(useCallback(() => setShowReader(true), []));
 
     const handleCloseReader = useCallback(() => setShowReader(false), []);
-    const handleContinueReading = useCallback(() => { if (book) setShowReader(true); }, [book]);
+    const handleContinueReading = useCallback(() => {
+        if (book) setShowReader(true);
+    }, [book]);
     const handleNewBook = useCallback(() => reset(), [reset]);
 
     return (
         <div
             className={darkMode ? '' : 'theme-light'}
-            style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--surface)', color: 'var(--on-surface)' }}
+            style={{
+                minHeight: '100vh',
+                display: 'flex',
+                flexDirection: 'column',
+                background: 'var(--surface)',
+                color: 'var(--on-surface)',
+            }}
         >
             {/* Cinematic Reader View */}
             {showReader && book && (
-                <Suspense fallback={
-                    <div className="app-loading-screen">
-                        <div className="app-loading-spinner" />
-                    </div>
-                }>
+                <Suspense
+                    fallback={
+                        <div className="app-loading-screen">
+                            <div className="app-loading-spinner" />
+                        </div>
+                    }
+                >
                     <CinematicReader onClose={handleCloseReader} />
                 </Suspense>
             )}
@@ -70,10 +80,17 @@ export const CinematifierApp: React.FC = () => {
 
                     {/* ── Header ── */}
                     <header className="cin-header" role="banner">
-                        <a href="#main-content" className="skip-to-content">Skip to main content</a>
+                        <a href="#main-content" className="skip-to-content">
+                            Skip to main content
+                        </a>
 
                         <div className="cin-header-brand">
-                            <Film size={28} color="var(--primary)" strokeWidth={1.5} aria-hidden="true" />
+                            <Film
+                                size={28}
+                                color="var(--primary)"
+                                strokeWidth={1.5}
+                                aria-hidden="true"
+                            />
                             <span className="cin-brand-name">Cinematifier</span>
                         </div>
 
@@ -95,9 +112,15 @@ export const CinematifierApp: React.FC = () => {
                                 className="cin-icon-btn"
                                 onClick={toggleDarkMode}
                                 title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-                                aria-label={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+                                aria-label={
+                                    darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'
+                                }
                             >
-                                {darkMode ? <Sun size={18} strokeWidth={1.5} /> : <Moon size={18} strokeWidth={1.5} />}
+                                {darkMode ? (
+                                    <Sun size={18} strokeWidth={1.5} />
+                                ) : (
+                                    <Moon size={18} strokeWidth={1.5} />
+                                )}
                             </button>
                             <button
                                 className="cin-icon-btn"
@@ -121,7 +144,8 @@ export const CinematifierApp: React.FC = () => {
 
                             {/* Main headline */}
                             <h1 className="cin-hero-title">
-                                Transform Novels<br />
+                                Transform Novels
+                                <br />
                                 <em>into Cinema</em>
                             </h1>
 
@@ -135,14 +159,28 @@ export const CinematifierApp: React.FC = () => {
                             {book && !isProcessing && (
                                 <div className="cin-resume-card">
                                     <div className="cin-resume-card-info">
-                                        <BookOpen size={18} color="var(--primary)" aria-hidden="true" />
+                                        <BookOpen
+                                            size={18}
+                                            color="var(--primary)"
+                                            aria-hidden="true"
+                                        />
                                         <div>
-                                            <div className="cin-resume-label">Currently in Library</div>
+                                            <div className="cin-resume-label">
+                                                Currently in Library
+                                            </div>
                                             <div className="cin-resume-title">{book.title}</div>
+                                            {book.author && (
+                                                <div className="cin-resume-label">
+                                                    by {book.author}
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                     <div className="cin-resume-actions">
-                                        <button className="cin-btn-primary" onClick={handleContinueReading}>
+                                        <button
+                                            className="cin-btn-primary"
+                                            onClick={handleContinueReading}
+                                        >
                                             <Sparkles size={15} aria-hidden="true" />
                                             Continue Reading
                                         </button>
@@ -157,12 +195,21 @@ export const CinematifierApp: React.FC = () => {
                         {/* ── Upload Panel ── */}
                         <div className="cin-upload-panel">
                             {(!book || isProcessing) && (
-                                <UploadZone onFileSelect={processFile} isProcessing={isProcessing} />
+                                <UploadZone
+                                    onFileSelect={processFile}
+                                    isProcessing={isProcessing}
+                                />
                             )}
                             {book && !isProcessing && (
                                 <div className="cin-change-book-panel">
-                                    <p className="cin-change-book-label">Load a different manuscript</p>
-                                    <UploadZone onFileSelect={processFile} isProcessing={isProcessing} compact />
+                                    <p className="cin-change-book-label">
+                                        Load a different manuscript
+                                    </p>
+                                    <UploadZone
+                                        onFileSelect={processFile}
+                                        isProcessing={isProcessing}
+                                        compact
+                                    />
                                 </div>
                             )}
 
@@ -186,13 +233,31 @@ export const CinematifierApp: React.FC = () => {
                     {/* ── Feature Strip ── */}
                     <section className="cin-features" aria-label="Key features">
                         {[
-                            { icon: '🎬', label: 'Cinematic Blocks', desc: 'Dialogue, action, SFX, scene breaks' },
-                            { icon: '🎭', label: 'Emotion Engine', desc: 'Real-time tension & emotion tracking' },
-                            { icon: '📖', label: 'Dual Modes', desc: 'Original text or full cinematification' },
-                            { icon: '🌒', label: 'Offline-First', desc: 'No cloud required, runs locally' },
+                            {
+                                icon: '🎬',
+                                label: 'Cinematic Blocks',
+                                desc: 'Dialogue, action, SFX, scene breaks',
+                            },
+                            {
+                                icon: '🎭',
+                                label: 'Emotion Engine',
+                                desc: 'Real-time tension & emotion tracking',
+                            },
+                            {
+                                icon: '📖',
+                                label: 'Dual Modes',
+                                desc: 'Original text or full cinematification',
+                            },
+                            {
+                                icon: '🌒',
+                                label: 'Offline-First',
+                                desc: 'No cloud required, runs locally',
+                            },
                         ].map(f => (
                             <div key={f.label} className="cin-feature-tile">
-                                <span className="cin-feature-icon" aria-hidden="true">{f.icon}</span>
+                                <span className="cin-feature-icon" aria-hidden="true">
+                                    {f.icon}
+                                </span>
                                 <span className="cin-feature-label">{f.label}</span>
                                 <span className="cin-feature-desc">{f.desc}</span>
                             </div>
@@ -209,7 +274,9 @@ export const CinematifierApp: React.FC = () => {
             )}
 
             {/* ── Processing Overlay ── */}
-            {isProcessing && processingProgress && <ProcessingOverlay progress={processingProgress} />}
+            {isProcessing && processingProgress && (
+                <ProcessingOverlay progress={processingProgress} />
+            )}
 
             {/* ── Settings Modal ── */}
             {showSettings && (
@@ -219,16 +286,16 @@ export const CinematifierApp: React.FC = () => {
                     aria-modal="true"
                     aria-labelledby="settings-modal-title"
                     onClick={() => setShowSettings(false)}
-                    onKeyDown={e => { if (e.key === 'Escape') setShowSettings(false); }}
+                    onKeyDown={e => {
+                        if (e.key === 'Escape') setShowSettings(false);
+                    }}
                     tabIndex={-1}
                 >
-                    <div
-                        className="cin-modal-card"
-                        onClick={e => e.stopPropagation()}
-                        tabIndex={0}
-                    >
+                    <div className="cin-modal-card" onClick={e => e.stopPropagation()} tabIndex={0}>
                         <div className="cin-modal-header">
-                            <h2 id="settings-modal-title" className="cin-modal-title">Engine Configuration</h2>
+                            <h2 id="settings-modal-title" className="cin-modal-title">
+                                Engine Configuration
+                            </h2>
                             <button
                                 className="cin-icon-btn"
                                 onClick={() => setShowSettings(false)}
@@ -237,7 +304,9 @@ export const CinematifierApp: React.FC = () => {
                                 <X size={20} strokeWidth={1.5} />
                             </button>
                         </div>
-                        <Suspense fallback={<div className="cin-modal-loading">Loading modules…</div>}>
+                        <Suspense
+                            fallback={<div className="cin-modal-loading">Loading modules…</div>}
+                        >
                             <CinematifierSettings onClose={() => setShowSettings(false)} />
                         </Suspense>
                     </div>

@@ -5,7 +5,6 @@ import React from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { ReadingProgress, Book } from '../../types/cinematifier';
 import { Scrubber } from '../ui/Scrubber';
-import { Button } from '../ui/Button';
 
 interface ReaderFooterProps {
     book: Book;
@@ -23,19 +22,20 @@ export const ReaderFooter: React.FC<ReaderFooterProps> = ({
     const canGoPrev = currentChapterIndex > 0;
     const canGoNext = currentChapterIndex < book.chapters.length - 1;
 
-    const progressPercent = ((readingProgress?.readChapters.length || 0) / book.chapters.length) * 100;
+    const progressPercent =
+        ((readingProgress?.readChapters.length || 0) / book.chapters.length) * 100;
 
     return (
         <footer className="cine-footer" aria-label="Chapter navigation">
-            <Button
-                variant="ghost"
-                className="cine-footer-btn"
+            <button
+                type="button"
+                className="cine-btn cine-btn--ghost cine-footer-btn"
                 onClick={() => setCurrentChapter(currentChapterIndex - 1)}
                 disabled={!canGoPrev}
             >
                 <ChevronLeft size={20} style={{ marginRight: '8px' }} />
                 Previous
-            </Button>
+            </button>
 
             <div className="cine-footer-progress-wrap">
                 <div className="cine-footer-progress-row">
@@ -51,15 +51,15 @@ export const ReaderFooter: React.FC<ReaderFooterProps> = ({
                 <Scrubber progress={progressPercent} />
             </div>
 
-            <Button
-                variant="ghost"
-                className="cine-footer-btn"
+            <button
+                type="button"
+                className="cine-btn cine-btn--ghost cine-footer-btn"
                 onClick={() => setCurrentChapter(currentChapterIndex + 1)}
                 disabled={!canGoNext}
             >
                 Next
                 <ChevronRight size={20} style={{ marginLeft: '8px' }} />
-            </Button>
+            </button>
         </footer>
     );
 };

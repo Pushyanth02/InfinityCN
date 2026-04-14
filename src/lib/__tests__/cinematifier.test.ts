@@ -18,13 +18,18 @@ import {
     parseCinematifiedText,
     cleanExtractedText,
     reconstructParagraphs,
+    formatOriginalText,
+    structureDialogue,
     segmentChapters,
+    extractTitle,
+    splitBookIntoChapters,
     cinematifyOffline,
     detectSceneBreaks,
     createBookFromSegments,
     createReadingProgress,
     extractOverallMetadata,
 } from '../cinematifier';
+import { rebuildParagraphs } from '../cinematifier/textProcessing';
 import type { ChapterSegment } from '../../types/cinematifier';
 
 describe('parseCinematifiedText', () => {
@@ -64,6 +69,13 @@ describe('parseCinematifiedText', () => {
         expect(blocks[0].type).toBe('transition');
         expect(blocks[0].transition?.type).toBe('CUT TO');
         expect(blocks[0].transition?.description).toBe('THE FOREST');
+    });
+
+    it('parses bracket transition markers emitted by core pipeline', () => {
+        const blocks = parseCinematifiedText('[TRANSITION: SMASH CUT]');
+        expect(blocks).toHaveLength(1);
+        expect(blocks[0].type).toBe('transition');
+        expect(blocks[0].transition?.type).toBe('SMASH CUT');
     });
 
     it('parses FADE IN transition', () => {
@@ -148,6 +160,22 @@ describe('parseCinematifiedText', () => {
         const blocks = parseCinematifiedText('(CLOSE ON: his face)');
         expect(blocks[0].type).toBe('action');
         expect(blocks[0].cameraDirection).toBe('CLOSE ON');
+    });
+
+    it('parses [CAMERA] markers with optional trailing text', () => {
+        const blocks = parseCinematifiedText('[CAMERA: OVER THE SHOULDER] He watches the door.');
+        expect(blocks).toHaveLength(1);
+        expect(blocks[0].type).toBe('action');
+        expect(blocks[0].cameraDirection).toBe('OVER THE SHOULDER');
+        expect(blocks[0].content).toBe('He watches the door.');
+    });
+
+    it('parses [AMBIENCE] markers as action metadata', () => {
+        const blocks = parseCinematifiedText('[AMBIENCE: distant rainfall]');
+        expect(blocks).toHaveLength(1);
+        expect(blocks[0].type).toBe('action');
+        expect(blocks[0].ambience).toBe('distant rainfall');
+        expect(blocks[0].content).toBe('');
     });
 
     it('extracts [EMOTION] tag from action line', () => {
@@ -383,6 +411,128 @@ describe('reconstructParagraphs', () => {
         // Dialogue lines should be in separate paragraphs
         expect(result).toContain('"Hello,"');
     });
+
+    it('fixes broken hard-wrapped lines inside paragraphs', () => {
+        const text =
+            'The storm rolled over\n' +
+            'the valley while the old bridge shook.\n' +
+            'Nobody moved until dawn.';
+
+        const result = reconstructParagraphs(text);
+        expect(result).toContain('rolled over the valley');
+        expect(result).not.toContain('rolled over\nthe valley');
+    });
+
+    it('splits merged paragraphs by sentence boundaries', () => {
+        const text =
+            'First sentence. Second sentence. Third sentence. Fourth sentence. Fifth sentence. Sixth sentence.';
+
+        const result = reconstructParagraphs(text);
+        expect(result).toContain('\n\n');
+    });
+
+    it('normalizes inconsistent spacing while preserving wording', () => {
+        const text = '  First   sentence.\tSecond sentence.   Third sentence.  ';
+        const result = reconstructParagraphs(text);
+
+        expect(result).toBe('First sentence. Second sentence. Third sentence.');
+    });
+
+    it('preserves original wording sequence after reconstruction', () => {
+        const text = 'He said, "Wait."\nThen left quickly.';
+        const canonical = (value: string) => value.replace(/\s+/g, ' ').trim();
+
+        expect(canonical(reconstructParagraphs(text))).toBe(canonical(text));
+    });
+});
+
+describe('rebuildParagraphs', () => {
+    it('exposes the paragraph reconstruction API for raw extracted text', () => {
+        const text = 'One. Two. Three. Four. Five.';
+        const result = rebuildParagraphs(text);
+
+        expect(result).toContain('\n\n');
+    });
+});
+
+// ─── structureDialogue ───────────────────────────────────────────────────────
+
+describe('structureDialogue', () => {
+    it('detects quoted dialogue and separates it from narration', () => {
+        const text = 'The room was silent. "Who is there?" The candle flickered.';
+        const result = structureDialogue(text);
+
+        expect(result).toContain('The room was silent.');
+        expect(result).toContain('"Who is there?"');
+        expect(result).toContain('The candle flickered.');
+        expect(result).toContain('\n\n"Who is there?"\n\n');
+    });
+
+    it('attaches speaker labels when attribution appears after quote', () => {
+        const text = '"We should leave now," Mara said. The hallway shook.';
+        const result = structureDialogue(text);
+
+        expect(result).toContain('Mara: "We should leave now,"');
+        expect(result).toContain('Mara said.');
+    });
+
+    it('attaches speaker labels when attribution appears before quote', () => {
+        const text = 'Jon whispered, "Keep your voice down." The lights dimmed.';
+        const result = structureDialogue(text);
+
+        expect(result).toContain('Jon: "Keep your voice down."');
+        expect(result).toContain('Jon whispered');
+    });
+
+    it('keeps narration and dialogue in readable separate blocks', () => {
+        const text =
+            'Rain pressed against the windows. "Do you hear that?" she asked. "Stay close." The floor creaked.';
+        const result = structureDialogue(text);
+        const blocks = result.split(/\n\n+/).map(block => block.trim());
+
+        expect(blocks.length).toBeGreaterThanOrEqual(4);
+        expect(blocks.some(block => block.startsWith('she: "Do you hear that?"'))).toBe(true);
+        expect(blocks.some(block => block === '"Stay close."')).toBe(true);
+    });
+});
+
+// ─── formatOriginalText ─────────────────────────────────────────────────────
+
+describe('formatOriginalText', () => {
+    it('improves readability with paragraph/dialogue separation only', () => {
+        const text =
+            'The corridor was dark and wet. "Stay quiet," she said. The neon sign crackled overhead.';
+        const result = formatOriginalText(text);
+
+        expect(result).toContain('The corridor was dark and wet.');
+        expect(result).toContain('"Stay quiet,"');
+        expect(result).toContain('The neon sign crackled overhead.');
+        expect(result).toContain('\n\n"Stay quiet,"\n\n');
+    });
+
+    it('normalizes inconsistent spacing and line wrapping', () => {
+        const text = '  First line\ncontinues here.\t\tSecond sentence.   Third sentence.  ';
+        const result = formatOriginalText(text);
+
+        expect(result).toContain('First line continues here.');
+        expect(result).not.toMatch(/[ ]{2,}/);
+    });
+
+    it('preserves exact content sequence (ignoring whitespace differences)', () => {
+        const text = 'He paused. "No." Mara said she understood.';
+        const result = formatOriginalText(text);
+
+        const canonical = (value: string) => value.replace(/\s+/g, '');
+        expect(canonical(result)).toBe(canonical(text));
+    });
+
+    it('does not inject speaker labels in original mode formatting', () => {
+        const text = '"We need to move," Mara said. The rain intensified.';
+        const result = formatOriginalText(text);
+
+        expect(result).not.toContain('Mara: "We need to move,"');
+        expect(result).toContain('Mara said.');
+    });
 });
 
 // ─── segmentChapters ─────────────────────────────────────────────────────────
@@ -470,6 +620,69 @@ describe('segmentChapters', () => {
         expect(ch1).toBeDefined();
         expect(ch1!.title).toContain('Chapter 1');
         expect(ch1!.title).toContain('The Beginning');
+    });
+
+    it('detects numeric heading patterns like "1. Title"', () => {
+        const text = `1. Dawn at the Harbor\n${makeContent()}\n2. The Return\n${makeContent()}`;
+        const segments = segmentChapters(text);
+
+        expect(segments.length).toBe(2);
+        expect(segments[0].title).toMatch(/^1\s+/);
+        expect(segments[1].title).toMatch(/^2\s+/);
+    });
+});
+
+// ─── splitBookIntoChapters ───────────────────────────────────────────────────
+
+describe('splitBookIntoChapters', () => {
+    const makeContent = (repeat = 20) =>
+        'The hero walked through the dense forest. '.repeat(repeat);
+
+    it('returns chapters with only title and content in document order', () => {
+        const text = `Chapter 3\n${makeContent()}\nChapter 9\n${makeContent()}`;
+
+        const chapters = splitBookIntoChapters(text);
+
+        expect(chapters.length).toBe(2);
+        expect(chapters[0]).toHaveProperty('title');
+        expect(chapters[0]).toHaveProperty('content');
+        expect(chapters[0].title).toMatch(/chapter 3/i);
+        expect(chapters[1].title).toMatch(/chapter 9/i);
+        expect(Object.keys(chapters[0]).sort()).toEqual(['content', 'title']);
+    });
+
+    it('preserves ordering based on text position, not chapter number value', () => {
+        const text = `Chapter 10\n${makeContent()}\nChapter 2\n${makeContent()}`;
+
+        const chapters = splitBookIntoChapters(text);
+
+        expect(chapters[0].title).toMatch(/chapter 10/i);
+        expect(chapters[1].title).toMatch(/chapter 2/i);
+    });
+});
+
+// ─── extractTitle ───────────────────────────────────────────────────────────
+
+describe('extractTitle', () => {
+    it('extracts title from explicit Title: prefix', () => {
+        const text = `Title: The Last Ember\nBy Jane Doe\n\nChapter 1\nThe rain fell.`;
+        expect(extractTitle(text)).toBe('The Last Ember');
+    });
+
+    it('extracts title from markdown heading near top', () => {
+        const text = `# The Silent Harbor\nBy A. Writer\n\nChapter 1\nCold wind swept the docks.`;
+        expect(extractTitle(text)).toBe('The Silent Harbor');
+    });
+
+    it('extracts uppercase title when followed by byline', () => {
+        const text = `THE GLASS STATION\nby M. Rowan\n\nChapter 1\nFootsteps echoed.`;
+        expect(extractTitle(text)).toBe('THE GLASS STATION');
+    });
+
+    it('falls back to Untitled Novel when no confident title is found', () => {
+        const text =
+            'Copyright 2026\nAll rights reserved\n\nThe wind moved through the corridor and he stepped inside carefully.';
+        expect(extractTitle(text)).toBe('Untitled Novel');
     });
 });
 

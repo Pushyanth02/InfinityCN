@@ -4,6 +4,7 @@ import './styles.css';
 import './cinematifier.css';
 import CinematifierApp from './components/CinematifierApp';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
+import { client } from './lib/runtime/appwrite';
 
 // Lazy load non-critical analytics — deferred from critical path
 // eslint-disable-next-line react-refresh/only-export-components
@@ -18,6 +19,11 @@ const SpeedInsights = lazy(() =>
 // Catch unhandled promise rejections so they don't fail silently
 window.addEventListener('unhandledrejection', e => {
     console.error('[Unhandled Rejection]', e.reason);
+});
+
+// Verify Appwrite connectivity when the app boots.
+void client.ping().catch(error => {
+    console.error('[Appwrite] Ping failed', error);
 });
 
 const root = document.getElementById('root');

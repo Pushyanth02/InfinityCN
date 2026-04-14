@@ -388,6 +388,7 @@ describe('NarrativeAnalysisStage', () => {
             rawText: '',
             metadata: { sfxCount: 0, transitionCount: 0, beatCount: 0, originalWordCount: 0 },
             startTime: performance.now(),
+            stageTrace: [],
         };
         stage.execute(context);
         expect(context.povCharacter).toBe('Sarah');
@@ -402,6 +403,7 @@ describe('NarrativeAnalysisStage', () => {
             rawText: '',
             metadata: { sfxCount: 0, transitionCount: 0, beatCount: 0, originalWordCount: 0 },
             startTime: performance.now(),
+            stageTrace: [],
         };
         stage.execute(context);
         expect(context.narrativeMode).toBe('flashback');
@@ -416,6 +418,7 @@ describe('NarrativeAnalysisStage', () => {
             rawText: '',
             metadata: { sfxCount: 0, transitionCount: 0, beatCount: 0, originalWordCount: 0 },
             startTime: performance.now(),
+            stageTrace: [],
         };
         stage.execute(context);
         expect(context.narrativeMode).toBe('normal');
@@ -432,6 +435,7 @@ describe('SceneSegmentationStage', () => {
             rawText: '',
             metadata: { sfxCount: 0, transitionCount: 0, beatCount: 0, originalWordCount: 0 },
             startTime: performance.now(),
+            stageTrace: [],
         };
         stage.execute(context);
         expect(context.scenes).toBeDefined();
@@ -449,6 +453,7 @@ describe('SceneSegmentationStage', () => {
             rawText: '',
             metadata: { sfxCount: 0, transitionCount: 0, beatCount: 0, originalWordCount: 0 },
             startTime: performance.now(),
+            stageTrace: [],
         };
         stage.execute(context);
         expect(context.scenes!.length).toBe(2);

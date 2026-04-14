@@ -5,77 +5,98 @@
 ## Features
 
 ### Core Cinematification
+
 - **AI-Powered Transformation** — Converts text into screenplay-style content with SFX: annotations, BEAT/PAUSE markers, and CUT TO/FADE IN transitions
 - **Emotion & Tension Tracking** — Real-time emotion detection (joy, fear, sadness, suspense, anger, surprise) with tension scores (0-100)
 - **Semantic Context** — Uses embeddings (all-MiniLM-L6-v2) for long-range context continuity across chapters
 - **Ambient Audio** — Procedural Web Audio API soundscapes that adapt to story emotion
 
 ### Document Support
+
 - **Multi-Format** — PDF, EPUB, DOCX, PPTX, TXT (up to 50MB)
 - **OCR Support** — Tesseract.js-powered character recognition for scanned PDFs (up to 5 pages)
 - **Smart Parsing** — Automatic chapter segmentation with paragraph reconstruction
 - **Lazy Loading** — Heavy dependencies (pdfjs, fflate, tesseract) load only when needed
 
 ### Text Processing & Analysis (Free, No API Keys Required)
+
 - **Readability Analysis** — Flesch-Kincaid Reading Ease/Grade Level, sentence complexity, vocabulary diversity
 - **Sentiment Tracking** — AFINN-inspired lexicon (~200+ words) with negation/intensifier handling and emotion flow
 - **Pacing Analysis** — Tension arc computation, flat/rushed zone detection, Shannon entropy for variety scoring
 - **Text Statistics** — Word/character/sentence/paragraph counting, reading time estimation, top word frequency analysis
 - **Scene Detection** — Heuristic scene break detection via location/character/time changes
-- **Inspirational Quotes** — Curated literary quotes for display during processing (offline, no API required)
+- **Paragraph Breaker APIs** — Strategy-based paragraph splitting (sentence-cluster, dialogue-pivot, scene-cue) with canonical content-preservation guards
+- **Book Metadata Enrichment** — Multi-source lookup (Open Library, Google Books, Gutendex, Wikipedia)
+- **Inspirational Quotes** — Free API quotes with deterministic offline fallback
 
 ### Reader Experience
+
 - **Dual-Mode** — Toggle between Original and Cinematified text
 - **Immersion Levels** — Minimal (instant), Balanced, Cinematic (full animations)
 - **Accessibility** — Dyslexia-friendly font option, adjustable font size and line spacing
 - **Dark/Light Mode** — System-aware with manual toggle
 - **Bookmarks & Progress** — Track reading progress, bookmark chapters
+- **Expanded Story Discovery** — Related-title recommendations across novels, manga, manhwa, and manhua with source/type badges and sidebar filters
+- **Cinematic Depth Metrics** — Live scene/cue/tension/mood stats derived from chapter render plans
 
 ### AI Providers
+
 - **7 Providers** — Gemini 2.5 Flash, OpenAI GPT-4o-mini, Claude 3.5 Sonnet, Groq Llama 3.3 70B, DeepSeek, Ollama (local), Chrome AI (Gemini Nano)
 - **Offline Fallback** — Fast algorithmic processing when no AI configured
 - **Streaming** — Real-time cinematification with block-by-block streaming
-- **Encrypted Storage** — AES-GCM encrypted API keys in localStorage
 
 ### Technical
+
 - **Offline-First** — IndexedDB via Dexie + PWA service worker
 - **Composable Pipeline** — Modular stage-based processing (cleaning → reconstruction → analysis → cinematification → enrichment)
 - **Responsive** — 480px mobile to 1200px+ desktop
 
 ## Tech Stack
 
-| Layer | Stack |
-|-------|-------|
-| Framework | React 19 + TypeScript 5.9 |
-| Build | Vite 8 (Rolldown) + vite-plugin-pwa |
-| State | Zustand (persisted) |
-| Storage | Dexie (IndexedDB) |
-| Animation | Framer Motion |
-| Icons | Lucide React |
-| PDF | pdfjs-dist |
-| OCR | Tesseract.js |
+| Layer      | Stack                                   |
+| ---------- | --------------------------------------- |
+| Framework  | React 19 + TypeScript 6                 |
+| Build      | Vite 8 (Rolldown) + vite-plugin-pwa     |
+| State      | Zustand (persisted)                     |
+| Storage    | Dexie (IndexedDB)                       |
+| Animation  | Framer Motion                           |
+| Icons      | Lucide React                            |
+| PDF        | pdfjs-dist                              |
+| OCR        | Tesseract.js                            |
 | Embeddings | @xenova/transformers (all-MiniLM-L6-v2) |
-| Testing | Vitest + Testing Library |
-| Linting | ESLint + Prettier |
-| Hooks | Husky + lint-staged |
-| CI/CD | GitHub Actions |
+| Testing    | Vitest + Testing Library                |
+| Linting    | ESLint + Prettier                       |
+| Hooks      | Husky + lint-staged                     |
+| CI/CD      | GitHub Actions                          |
 
 ## Free APIs & Algorithms
 
 The app integrates the following free APIs and algorithms that require **no API keys**:
 
-| Feature | Implementation | Source |
-|---------|---------------|--------|
-| PDF Text Extraction | pdfjs-dist (Mozilla PDF.js) | Bundled (lazy-loaded) |
-| EPUB/DOCX/PPTX Extraction | fflate + XML parsing | Bundled (lazy-loaded) |
-| Character Recognition (OCR) | Tesseract.js (WASM) | Bundled (lazy-loaded) |
-| Semantic Embeddings | all-MiniLM-L6-v2 via ONNX.js | Bundled (lazy-loaded) |
-| Readability Scoring | Flesch-Kincaid formulas | Built-in algorithm |
-| Sentiment Analysis | AFINN-inspired lexicon | Built-in algorithm |
-| Pacing Analysis | Tension arc + Shannon entropy | Built-in algorithm |
-| Text Statistics | Word/sentence/paragraph metrics | Built-in algorithm |
-| Scene Detection | Location/time/structure heuristics | Built-in algorithm |
-| Inspirational Quotes | Curated offline literary quotes | Built-in collection |
+| Feature                     | Implementation                                                 | Source                                                      |
+| --------------------------- | -------------------------------------------------------------- | ----------------------------------------------------------- |
+| PDF Text Extraction         | pdfjs-dist (Mozilla PDF.js)                                    | Bundled (lazy-loaded)                                       |
+| EPUB/DOCX/PPTX Extraction   | fflate + XML parsing                                           | Bundled (lazy-loaded)                                       |
+| Character Recognition (OCR) | Tesseract.js (WASM)                                            | Bundled (lazy-loaded)                                       |
+| Semantic Embeddings         | all-MiniLM-L6-v2 via ONNX.js                                   | Bundled (lazy-loaded)                                       |
+| Readability Scoring         | Flesch-Kincaid formulas                                        | Built-in algorithm                                          |
+| Sentiment Analysis          | AFINN-inspired lexicon                                         | Built-in algorithm                                          |
+| Pacing Analysis             | Tension arc + Shannon entropy                                  | Built-in algorithm                                          |
+| Text Statistics             | Word/sentence/paragraph metrics                                | Built-in algorithm                                          |
+| Scene Detection             | Location/time/structure heuristics                             | Built-in algorithm                                          |
+| Paragraph Breaker APIs      | Multi-strategy paragraph segmentation with confidence scoring  | Built-in algorithm                                          |
+| Book Metadata Enrichment    | Title/author/description enrichment                            | Open Library + Google Books + Gutendex + Wikipedia APIs     |
+| Reader Story Discovery      | Related title recommendations across novel/manga/manhwa/manhua | Open Library + Google Books + Gutendex + Jikan + Kitsu APIs |
+| Inspirational Quotes        | Multi-source quote retrieval + offline fallback                | DummyJSON Quotes API + Quotable API + built-in collection   |
+
+## Core Engine Enhancements
+
+- Scene-to-scene transition tagging (`[TRANSITION: ...]`) with tension-aware selection
+- Camera cue generation (`[CAMERA: ...]`) based on tension, dialogue ratio, and readability
+- Ambient sound bed hinting (`[AMBIENCE: ...]`) inferred from scene context
+- Expanded scene analysis metrics: dialogue ratio and emotional charge
+- Paragraph reconstruction supports sentence-cluster, dialogue-pivot, and scene-cue strategies with canonical-content fallback checks
+- Reader analytics exposes cinematic depth metrics (scene count, cue count, average tension, dominant mood)
 
 ## Getting Started
 
@@ -100,18 +121,17 @@ npm run build
 
 ## Scripts
 
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Start Vite dev server |
-| `npm run build` | Type-check and build for production |
-| `npm run lint` | Run ESLint |
-| `npm run format` | Format code with Prettier |
-| `npm run format:check` | Check formatting without writing |
-| `npm test` | Run test suite |
-| `npm run test:watch` | Run tests in watch mode |
-| `npm run test:coverage` | Run tests with coverage |
-| `npm run preview` | Preview production build |
-
+| Command                 | Description                         |
+| ----------------------- | ----------------------------------- |
+| `npm run dev`           | Start Vite dev server               |
+| `npm run build`         | Type-check and build for production |
+| `npm run lint`          | Run ESLint                          |
+| `npm run format`        | Format code with Prettier           |
+| `npm run format:check`  | Check formatting without writing    |
+| `npm test`              | Run test suite                      |
+| `npm run test:watch`    | Run tests in watch mode             |
+| `npm run test:coverage` | Run tests with coverage             |
+| `npm run preview`       | Preview production build            |
 
 ## Project Structure
 
@@ -137,7 +157,6 @@ src/
     __tests__/
       CinematifierApp.test.tsx  # Component tests
   lib/
-    ai.ts                    # Multi-provider AI engine barrel
     ai/
       cache.ts               # AI response caching
       errors.ts              # AI error types
@@ -146,31 +165,37 @@ src/
       providers.ts           # AI provider implementations
       streaming.ts           # Streaming response handling
       types.ts               # AI type definitions
-    audioSynth.ts            # Procedural ambient audio (Web Audio API)
-    cinematifier.ts          # Text-to-cinematic transformation engine
-    cinematifier/
-      aiEngine.ts            # AI-powered cinematification orchestration
-      chapterSegmentation.ts # Chapter boundary detection
-      entities.ts            # Book & ReadingProgress entity factories
-      index.ts               # Cinematifier barrel export
-      metadata.ts            # Narrative metadata extraction
-      offlineEngine.ts       # Offline/fallback cinematification
-      pacingAnalyzer.ts      # Pacing analysis & tension arcs
-      parser.ts              # AI output → CinematicBlock[] parsing
-      pipeline.ts            # Composable pipeline engine
-      readability.ts         # Flesch-Kincaid readability analysis
-      sceneDetection.ts      # Heuristic scene break detection
-      sentimentTracker.ts    # Lexicon-based sentiment/emotion tracking
-      textProcessing.ts      # Text cleaning & paragraph reconstruction
-    cinematifierDb.ts        # IndexedDB persistence (Dexie)
-    constants.ts             # Shared constants
-    crypto.ts                # AES-GCM key encryption (SubtleCrypto)
-    embeddings.ts            # Semantic embeddings (all-MiniLM-L6-v2)
-    pdfWorker.ts             # Multi-format document extraction + OCR
-    quotableApi.ts           # Curated offline literary quotes
-    rateLimiter.ts           # Client-side rate limiting
-    serverJobs.ts            # Frontend client for the server job API
-    textStatistics.ts        # Text statistics & metrics API
+    engine/
+      cinematifier/
+        chapterEngine.ts      # Canonical stage-ordered chapter pipeline
+        fullSystemPipeline.ts # Full text -> cinematic orchestration
+        paragraphBreakers.ts  # Paragraph-breaker API strategies
+        pipeline.ts           # Stage definitions and execution engine
+        textProcessing.ts     # Text cleaning + paragraph reconstruction
+    processing/
+      bookAsyncProcessor.ts   # Chunked async processing for large books
+      pdfJobs.ts              # Resumable processing job tracking
+      pdfWorker.ts            # Multi-format extraction + OCR
+    runtime/
+      appwrite.ts             # Appwrite client wiring
+      bookManager.ts          # Local-first library manager
+      freeApis.ts             # Free metadata enrichment APIs
+      quotableApi.ts          # Quote APIs with offline fallback
+      readerApis.ts           # Reader lexical + story discovery APIs
+      readerBackend.ts        # Reader telemetry + cinematic depth analytics
+      renderer.ts             # Runtime cue and scene planning
+    audioSynth.ts             # Procedural ambient audio (Web Audio API)
+    cinematifier.ts           # Engine facade export
+    cinematifierDb.ts         # IndexedDB persistence (Dexie)
+    crypto.ts                 # AES-GCM key encryption (SubtleCrypto)
+    embeddings.ts             # Semantic embeddings (all-MiniLM-L6-v2)
+    rateLimiter.ts            # Client-side rate limiting
+    textStatistics.ts         # Text statistics & metrics API
+  hooks/
+    useChapterProcessing.ts   # Per-chapter processing + cancellation
+    useFileProcessing.ts      # Upload/extract/segment/process orchestration
+    useReaderAnalytics.ts     # Reader telemetry snapshot lifecycle
+    useReaderDiscovery.ts     # Word lens + story discovery integration
   store/
     cinematifierStore.ts     # Zustand state with encrypted persistence
   types/
@@ -181,35 +206,6 @@ src/
   index.css                  # Global CSS reset & variables
   styles.css                 # App-level styles
   cinematifier.css           # Reader-specific styles
-server/
-  src/
-    index.ts                 # Express API server entry point
-    worker.ts                # RabbitMQ job consumer
-    config.ts                # Centralized config from env vars
-    types.ts                 # Server-side type definitions
-    lib/
-      cinematifier.ts        # Server-side cinematification engine
-      hash.ts                # SHA-256 content hashing
-    middleware/
-      cors.ts                # CORS origin validation
-      errorHandler.ts        # Centralized Express error handler
-      rateLimit.ts           # Redis sliding-window rate limiter
-      securityHeaders.ts     # Security headers (CSP, X-Content-Type-Options)
-    routes/
-      ai.ts                  # AI proxy routes with Redis caching
-      health.ts              # Health check with service status
-      jobs.ts                # Job submission, status, SSE events
-    services/
-      aiProvider.ts          # Server-side AI provider calls
-      cache.ts               # Redis AI response cache
-      jobManager.ts          # Job lifecycle state management
-      rabbitmq.ts            # RabbitMQ connection and queue topology
-      redis.ts               # Redis client singleton with Pub/Sub
-  Dockerfile                 # Multi-stage build (api + worker targets)
-  package.json
-.github/
-  workflows/ci.yml           # GitHub Actions CI pipeline (Node 22)
-docker-compose.yml           # Full infrastructure stack
 ```
 
 ## License

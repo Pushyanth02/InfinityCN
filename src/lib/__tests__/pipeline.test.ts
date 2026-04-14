@@ -107,6 +107,7 @@ describe('CinematificationPipeline', () => {
             rawText: '',
             metadata: { sfxCount: 0, transitionCount: 0, beatCount: 0, originalWordCount: 0 },
             startTime: performance.now(),
+            stageTrace: [],
         };
 
         stage.execute(context);
@@ -122,6 +123,7 @@ describe('CinematificationPipeline', () => {
             rawText: '',
             metadata: { sfxCount: 0, transitionCount: 0, beatCount: 0, originalWordCount: 0 },
             startTime: performance.now(),
+            stageTrace: [],
         };
 
         stage.execute(context);
@@ -136,6 +138,7 @@ describe('CinematificationPipeline', () => {
             rawText: '',
             metadata: { sfxCount: 0, transitionCount: 0, beatCount: 0, originalWordCount: 0 },
             startTime: performance.now(),
+            stageTrace: [],
         };
 
         stage.execute(context);
@@ -162,6 +165,16 @@ describe('CinematificationPipeline', () => {
         ]);
     });
 
+    it('enriched offline pipeline ends with Renderer stage', () => {
+        const pipeline = CinematificationPipeline.createEnrichedOfflinePipeline();
+        const names = pipeline.getStageNames();
+
+        expect(names.at(-1)).toBe('Renderer');
+        expect(names).toContain('Scene Segmentation');
+        expect(names).toContain('Narrative Analysis');
+        expect(names).toContain('Offline Cinematification');
+    });
+
     it('offline pipeline produces valid result', async () => {
         const pipeline = CinematificationPipeline.createOfflinePipeline();
         const text = `
@@ -178,6 +191,19 @@ Suddenly, an explosion shook the building.
         expect(result.blocks.length).toBeGreaterThan(0);
         expect(result.metadata.originalWordCount).toBeGreaterThan(0);
         expect(result.metadata.processingTimeMs).toBeGreaterThanOrEqual(0);
+    });
+
+    it('enriched pipeline returns renderer plan and stage trace', async () => {
+        const pipeline = CinematificationPipeline.createEnrichedOfflinePipeline();
+        const text = 'A door creaked open.\n\n"Did you hear that?" Maya whispered.';
+
+        const result = await pipeline.execute(text);
+
+        expect(result.renderPlan).toBeDefined();
+        expect((result.renderPlan?.cues.length ?? 0) > 0).toBe(true);
+        expect(result.stageTrace).toBeDefined();
+        expect(result.stageTrace?.length).toBe(pipeline.getStageNames().length);
+        expect(result.stageTrace?.at(-1)?.stageName).toBe('Renderer');
     });
 
     // ─── Custom Stages ──────────────────────────────────────

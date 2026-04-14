@@ -1,32 +1,38 @@
 # Roadmap: InfinityCN
 
-## Milestone 1: GSD Protocol Integration (v1.0.0)
-**Goal:** Establish a structured planning and execution framework.
+## Milestone 1: Architecture Baseline (v1.0.0)
+
+**Goal:** Lock in modular pipeline-first system boundaries.
 
 - [x] **Phase 1: Codebase Mapping**
-  - Mapped stack, integrations, architecture, structure, conventions, and testing.
-- [/] **Phase 2: Planning Set & Initialization**
-  - Initialize PROJECT, ROADMAP, STATE, and REQUIREMENTS.
-- [ ] **Phase 3: System Health Audit**
-  - Validate core flow and identify immediate architecture improvements.
+    - Mapped stack, integrations, architecture, structure, conventions, and testing.
+- [x] **Phase 2: Planning Set & Initialization**
+    - PROJECT, ROADMAP, STATE, and REQUIREMENTS aligned to active system.
+- [x] **Phase 3: Pipeline Hardening**
+    - Canonical stage ordering reinforced with chapter/full-system pipelines.
 
-## Milestone 2: Core Flow & Reliability (v1.1.0)
-**Goal:** Harden the backend job management and AI pipeline.
+## Milestone 2: Reader Backend & Discovery (v1.1.0)
 
-- [ ] **Phase 1: RabbitMQ Scaling**
-  - Optimize worker concurrency and job state synchronization.
-- [ ] **Phase 2: AI Pipeline Stability**
-  - Implement robust retries and enhanced JSON validation for cinematic outputs.
-- [ ] **Phase 3: Large Document Stress Testing**
-  - Verify performance for 100k+ word novels.
+**Goal:** Expand backend-powered reader insights and recommendation depth.
 
-## Milestone 3: Immersive Experience (v1.2.0)
-**Goal:** Enhance the cinematic reader and narrative analysis.
+- [x] **Phase 1: Reader Telemetry Backend**
+    - Added local telemetry snapshots and pace analytics summaries.
+- [x] **Phase 2: Story Discovery APIs**
+    - Added novel/manga/manhwa/manhua discovery across Open Library, Google Books, Gutendex, Jikan, and Kitsu.
+- [x] **Phase 3: Reader UI Wiring**
+    - Added content-type filters, source badges, and richer sidebar recommendation states.
 
-- [ ] **Phase 1: Emotional Tension Mapping**
-  - Improve auto-scroll dynamics and SFX precision based on narrative tension.
-- [ ] **Phase 2: Character Tracking**
-  - Integrate character-specific theme support.
+## Milestone 3: Paragraph + Cinematic Elevation (v1.2.0)
+
+**Goal:** Increase readability and cinematic observability without breaking canonical text.
+
+- [x] **Phase 1: Paragraph Breaker APIs**
+    - Added strategy-based paragraph APIs (sentence-cluster, dialogue-pivot, scene-cue).
+- [x] **Phase 2: Cinematic Depth Metrics**
+    - Surfaced chapter-level scene/cue/tension/mood summaries in reader analytics.
+- [ ] **Phase 3: Extended Validation Sweep**
+    - Run expanded UX and edge-case tests on mixed-content sources.
 
 ---
-*Roadmap updated: 2026-03-25*
+
+_Roadmap updated: 2026-04-13_

@@ -32,7 +32,7 @@ function ChapterNav({
     useEffect(() => {
         if (isOpen && navRef.current) {
             const focusable = navRef.current.querySelectorAll<HTMLElement>(
-                'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+                'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
             );
             if (focusable.length) focusable[0].focus();
             const handleKeyDown = (e: KeyboardEvent) => {
@@ -87,7 +87,11 @@ function ChapterNav({
                     >
                         <div className="chapter-nav-header">
                             <h3 id="chapter-nav-title">Chapters</h3>
-                            <button onClick={onClose} className="chapter-nav-close" aria-label="Close chapter navigation">
+                            <button
+                                onClick={onClose}
+                                className="chapter-nav-close"
+                                aria-label="Close chapter navigation"
+                            >
                                 <X size={20} />
                             </button>
                         </div>

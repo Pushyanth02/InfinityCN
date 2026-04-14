@@ -181,7 +181,10 @@ export async function encrypt(plaintext: string): Promise<string> {
 export async function decrypt(encoded: string): Promise<string> {
     if (!encoded) return '';
 
-    const tryDecrypt = async (payload: string, getKey: () => Promise<CryptoKey>): Promise<string> => {
+    const tryDecrypt = async (
+        payload: string,
+        getKey: () => Promise<CryptoKey>,
+    ): Promise<string> => {
         const key = await getKey();
         const combined = decodeBase64(payload);
         const iv = combined.slice(0, 12);

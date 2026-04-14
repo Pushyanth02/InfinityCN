@@ -26,10 +26,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
         if (this.state.hasError) {
             return (
                 this.props.fallback ?? (
-                    <div
-                        role="alert"
-                        className="cine-error-alert"
-                    >
+                    <div role="alert" className="cine-error-alert">
                         Something went wrong loading this component.
                         <button
                             onClick={() => this.setState({ hasError: false, error: null })}

@@ -6,18 +6,84 @@
  */
 
 // ─── Types ─────────────────────────────────────────────────
-export type { AIConfig, ModelPreset, AIErrorType } from './types';
+export type {
+    AIConfig,
+    AIProviderName,
+    AIResponse,
+    GenerateOptions,
+    AIProviderInstance,
+    ModelPreset,
+    AIErrorType,
+    AIFallbackProvider,
+} from './types';
 
 // ─── Presets ───────────────────────────────────────────────
 export { MODEL_PRESETS } from './presets';
 
 // ─── Orchestrator ──────────────────────────────────────────
 export { AIManager } from './manager';
-export type { Provider, AIManagerProvider, AIManagerOptions, AIManagerResult } from './manager';
+export type {
+    Provider,
+    AIManagerProvider,
+    AIManagerOptions,
+    AIManagerResult,
+    AIManagerCostSummary,
+} from './manager';
+import { AIManager } from './manager';
+import type { AIManagerOptions, AIManagerResult } from './manager';
+
+// ─── Cost Control ──────────────────────────────────────────
+export { estimateProviderCallCostUsd, getProviderPricing, isWithinCostBudget } from './costControl';
+
+// ─── Router ────────────────────────────────────────────────
+export {
+    AIProviderRouter,
+    ProviderScoreCalculator,
+    FallbackChain,
+    ProviderHealthTracker,
+    getDefaultRouter,
+    chooseProvider,
+    hashPromptForRouting,
+    ROUTING_POLICIES,
+} from './router';
+export type {
+    RequestPolicy,
+    RequestComplexity,
+    ProviderProfile,
+    ProviderScore,
+    RoutingDecision,
+    RouterConfig,
+} from './router';
 
 // ─── Cache ─────────────────────────────────────────────────
 import { getCacheKey, getCached, setCache } from './cache';
 export { getCacheKey, getCached, setCache } from './cache';
+
+// ─── Request Pipeline (Cache + Retry + RateLimit + Dedup) ──
+export {
+    createCacheKey,
+    AIResponseCache,
+    RetryPolicy,
+    RequestDeduplicator,
+    QueueProcessor,
+    RequestPipeline,
+    getDefaultPipeline,
+} from './requestPipeline';
+export type {
+    CacheKeyInput,
+    CacheEntry,
+    CacheStats,
+    AIResponseCacheOptions,
+    RetryPolicyConfig,
+    RetryAttempt,
+    RetryEventHandler,
+    DedupStats,
+    QueuePriority,
+    QueueJob,
+    QueueProcessorOptions,
+    QueueProcessorStats,
+    PipelineOptions,
+} from './requestPipeline';
 
 // ─── Errors ────────────────────────────────────────────────
 import { withRetry } from './errors';
@@ -25,10 +91,32 @@ import { withRetry } from './errors';
 // ─── Providers ─────────────────────────────────────────────
 import { callAI, prepareAICall } from './providers';
 
+// ─── Provider Registry ─────────────────────────────────────
+export { getProvider, registerProvider, listProviders, hasProvider } from './providers/index';
+
 // ─── Streaming ─────────────────────────────────────────────
 export { streamAI } from './streaming';
 import { getRateLimiter } from './streaming';
 export { getRateLimiter };
+
+// ─── Stream Controller ─────────────────────────────────────
+export {
+    StreamController,
+    StreamSession,
+    getDefaultStreamController,
+    streamResponse,
+    cancelStream,
+    onToken,
+    onChunkComplete,
+} from './streamController';
+export type {
+    StreamEvent,
+    StreamEventType,
+    StreamProgress,
+    StreamSessionState,
+    StreamEventHandler,
+    StreamControllerOptions,
+} from './streamController';
 
 // ─── REQUEST DEDUPLICATION ─────────────────────────────────
 
@@ -139,4 +227,26 @@ export async function testConnection(config: AIConfig): Promise<AIConnectionStat
             message: err instanceof Error ? err.message : 'Unknown error.',
         };
     }
+}
+
+const defaultAIManager = new AIManager();
+
+export function getDefaultAIManager(): AIManager {
+    return defaultAIManager;
+}
+
+export async function callAIManaged(
+    prompt: string,
+    config: AIConfig,
+    options?: AIManagerOptions,
+): Promise<AIManagerResult> {
+    return defaultAIManager.generate(prompt, config, options);
+}
+
+export async function* streamAIManaged(
+    prompt: string,
+    config: AIConfig,
+    options?: AIManagerOptions,
+): AsyncGenerator<string> {
+    yield* defaultAIManager.stream(prompt, config, options);
 }

@@ -40,4 +40,3 @@ export const ReaderChapterSidebar: React.FC<ReaderChapterSidebarProps> = ({
         </aside>
     );
 };
-

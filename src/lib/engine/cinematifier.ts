@@ -23,12 +23,20 @@ export {
     // Text Processing
     cleanExtractedText,
     reconstructParagraphs,
+    formatOriginalText,
+    structureDialogue,
     normalizeQuotes,
     normalizeUnicode,
+    runParagraphBreakerApis,
+    chooseParagraphBreakerResult,
+    rebuildParagraphsWithBreakerApis,
     // Chapter Segmentation
     segmentChapters,
+    extractTitle,
+    splitBookIntoChapters,
     // Scene Detection
     detectSceneBreaks,
+    detectOriginalModeScenes,
     segmentScenesUniversal,
     detectPOVShift,
     detectNarrativeMode,
@@ -53,10 +61,12 @@ export {
     TextStatisticsStage,
     NarrativeAnalysisStage,
     SceneSegmentationStage,
+    RendererStage,
     // Core Pipeline (Prompt 2A)
     rebuildParagraphs,
     segmentScenes,
     analyzeScene,
+    applyTensionFormatting,
     cinematizeScene,
     validateOutput,
     runCorePipeline,
@@ -71,5 +81,9 @@ export type {
     OutputValidation,
     CorePipelineSceneResult,
     CorePipelineResult,
+    ParagraphBreakerOptions,
+    ParagraphBreakerResult,
+    ParagraphBreakerStrategy,
     Scene,
+    ChapterContent,
 } from './cinematifier/index';

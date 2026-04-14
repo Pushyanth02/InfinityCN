@@ -62,7 +62,7 @@ export const ReaderHeader: React.FC<ReaderHeaderWithRefProps> = ({
 }) => {
     const handleDownload = () => {
         const text = book.chapters
-            .map(c => `Chapter ${c.number}: ${c.title}\n\n${c.originalText}`)
+            .map(c => `Chapter ${c.number}: ${c.title}\n\n${c.originalModeText ?? c.originalText}`)
             .join('\n\n\n');
         const blob = new Blob([text], { type: 'text/plain' });
         const url = URL.createObjectURL(blob);

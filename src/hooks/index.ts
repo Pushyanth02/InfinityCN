@@ -5,3 +5,6 @@ export { useChapterProcessing } from './useChapterProcessing';
 export { useBookHydration } from './useBookHydration';
 export { useFileProcessing } from './useFileProcessing';
 export { useAIConnectionTest } from './useAIConnectionTest';
+export { useReaderAnalytics } from './useReaderAnalytics';
+export { useReaderDiscovery } from './useReaderDiscovery';
+export { useRenderBridge } from './useRenderBridge';

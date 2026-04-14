@@ -2,9 +2,9 @@
  * parser.ts — Cinematic Block Parser
  *
  * Parses AI-generated cinematified text into structured CinematicBlock arrays.
- * Handles: [SCENE:] markers, SFX: annotations, BEAT/PAUSE markers, CUT TO/FADE IN
- * transitions, scene breaks (— ✦ —), [REFLECTION]/[TENSION] wrappers, dialogue,
- * camera directions, and regular action text.
+ * Handles: [SCENE:] markers, [TRANSITION:]/CUT TO transitions, [CAMERA:]/camera
+ * directions, [AMBIENCE:] cues, SFX annotations, BEAT/PAUSE markers, scene breaks
+ * (— ✦ —), [REFLECTION]/[TENSION] wrappers, dialogue, and regular action text.
  *
  * Also exports shared helpers (generateBlockId, guessSFXIntensity, validation)
  * used by the offline engine.
@@ -55,7 +55,9 @@ export function validateTransitionType(type: string): TransitionType {
 // ─── SFX Intensity Heuristic ───────────────────────────────
 
 /** Guess SFX intensity from the sound description */
-export function guessSFXIntensity(sound: string): import('../../../types/cinematifier').SFXIntensity {
+export function guessSFXIntensity(
+    sound: string,
+): import('../../../types/cinematifier').SFXIntensity {
     const upper = sound.toUpperCase();
     if (/CRASH|BANG|BOOM|BLAST|EXPLOSI|SHATTER|THUNDER|GUNSHOT|ROAR/.test(upper)) return 'loud';
     if (/SILENCE|WHISPER|SOFT|GENTLE|HUM|DRIP|TICK|CREAK/.test(upper)) return 'soft';
@@ -183,9 +185,9 @@ function parseTextLine(line: string): CinematicBlock[] {
 
 /**
  * Parse AI-generated cinematified text into structured CinematicBlock[].
- * Handles: [SCENE:] markers, SFX: annotations, BEAT/PAUSE markers, CUT TO/FADE IN transitions,
- * scene breaks (— ✦ —), [REFLECTION]/[TENSION] wrappers, dialogue, camera directions,
- * and regular action text.
+ * Handles: [SCENE:] markers, [TRANSITION:]/CUT TO transitions, [CAMERA:]/camera directions,
+ * [AMBIENCE:] cues, SFX annotations, BEAT/PAUSE markers, scene breaks (— ✦ —),
+ * [REFLECTION]/[TENSION] wrappers, dialogue, and regular action text.
  */
 export function parseCinematifiedText(text: string): CinematicBlock[] {
     const blocks: CinematicBlock[] = [];
@@ -270,6 +272,29 @@ export function parseCinematifiedText(text: string): CinematicBlock[] {
                 continue;
             }
 
+            // [TRANSITION: CUT TO] and optional trailing description
+            const bracketTransition = line.match(/^\[TRANSITION:\s*(.+?)\]\s*(.*)$/i);
+            if (bracketTransition) {
+                const transitionBody = bracketTransition[1].trim();
+                const trailingDescription = bracketTransition[2]?.trim() || '';
+                const [rawTypePart, ...rawInlineDescription] = transitionBody.split(':');
+                const transitionType = validateTransitionType(rawTypePart.trim().toUpperCase());
+                const description =
+                    [rawInlineDescription.join(':').trim(), trailingDescription]
+                        .filter(Boolean)
+                        .join(' ')
+                        .trim() || undefined;
+
+                blocks.push({
+                    id: generateBlockId(),
+                    type: 'transition',
+                    content: description || '',
+                    intensity: 'normal',
+                    transition: { type: transitionType, description },
+                });
+                continue;
+            }
+
             // Scene transitions: CUT TO:, FADE IN, FADE OUT, FADE TO BLACK, etc.
             const transMatch = line.match(
                 /^(CUT TO|FADE IN|FADE OUT|FADE TO BLACK|DISSOLVE TO|SMASH CUT|MATCH CUT|JUMP CUT|WIPE TO|IRIS IN|IRIS OUT):?\s*(.*)/i,
@@ -284,6 +309,41 @@ export function parseCinematifiedText(text: string): CinematicBlock[] {
                     intensity: 'normal',
                     transition: { type: validateTransitionType(rawType), description: desc },
                 });
+                continue;
+            }
+
+            // [CAMERA: CLOSE ON] optional trailing narrative text
+            const bracketCamera = line.match(/^\[CAMERA:\s*(.+?)\]\s*(.*)$/i);
+            if (bracketCamera) {
+                const direction = bracketCamera[1].trim().toUpperCase();
+                const desc = bracketCamera[2]?.trim() || '';
+                blocks.push({
+                    id: generateBlockId(),
+                    type: 'action',
+                    content: desc,
+                    intensity: 'normal',
+                    cameraDirection: direction,
+                });
+                continue;
+            }
+
+            // [AMBIENCE: rainfall] or [AMBIENCE] rainfall
+            const bracketAmbience = line.match(/^\[AMBIENCE(?::\s*(.+?))?\]\s*(.*)$/i);
+            if (bracketAmbience) {
+                const taggedAmbience = bracketAmbience[1]?.trim() || '';
+                const trailing = bracketAmbience[2]?.trim() || '';
+                const ambience = taggedAmbience || trailing;
+                const content = taggedAmbience ? trailing : '';
+
+                if (ambience) {
+                    blocks.push({
+                        id: generateBlockId(),
+                        type: 'action',
+                        content,
+                        intensity: 'normal',
+                        ambience,
+                    });
+                }
                 continue;
             }
 

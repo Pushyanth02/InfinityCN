@@ -9,8 +9,11 @@ interface CinematicRendererProps {
 
 const INITIAL_RENDER_BLOCKS = 120;
 const RENDER_BATCH_SIZE = 80;
+const LOAD_AHEAD_MARGIN = '500px 0px';
 
-function getParagraphType(block: CinematicBlock): 'scene' | 'dialogue' | 'reflection' | 'tension' | 'action' {
+function getParagraphType(
+    block: CinematicBlock,
+): 'scene' | 'dialogue' | 'reflection' | 'tension' | 'action' {
     if (block.type === 'title_card') return 'scene';
     if (block.type === 'dialogue') return 'dialogue';
     if (block.type === 'inner_thought') return 'reflection';
@@ -26,52 +29,79 @@ function getBlockSpacing(block: CinematicBlock): string {
     return '1rem';
 }
 
-export const CinematicRenderer: React.FC<CinematicRendererProps> = React.memo(function CinematicRenderer({
-    blocks,
-    immersionLevel,
-}) {
-    const [visibleCount, setVisibleCount] = useState(() =>
-        Math.min(blocks.length, INITIAL_RENDER_BLOCKS),
-    );
+export const CinematicRenderer: React.FC<CinematicRendererProps> = React.memo(
+    function CinematicRenderer({ blocks, immersionLevel }) {
+        const [visibleCount, setVisibleCount] = useState(() =>
+            Math.min(blocks.length, INITIAL_RENDER_BLOCKS),
+        );
+        const loadMoreRef = React.useRef<HTMLDivElement | null>(null);
 
-    useEffect(() => {
-        const timer = window.setTimeout(() => {
-            setVisibleCount(prev => {
-                if (blocks.length <= INITIAL_RENDER_BLOCKS) return blocks.length;
-                return Math.min(blocks.length, Math.max(prev, INITIAL_RENDER_BLOCKS));
-            });
-        }, 0);
+        useEffect(() => {
+            const timer = window.setTimeout(() => {
+                setVisibleCount(prev => {
+                    if (blocks.length <= INITIAL_RENDER_BLOCKS) return blocks.length;
+                    return Math.min(blocks.length, Math.max(prev, INITIAL_RENDER_BLOCKS));
+                });
+            }, 0);
 
-        return () => window.clearTimeout(timer);
-    }, [blocks.length]);
+            return () => window.clearTimeout(timer);
+        }, [blocks.length]);
 
-    useEffect(() => {
-        if (visibleCount >= blocks.length) return;
+        useEffect(() => {
+            if (visibleCount >= blocks.length) return;
 
-        const timer = window.setTimeout(() => {
-            setVisibleCount(prev => Math.min(blocks.length, prev + RENDER_BATCH_SIZE));
-        }, 16);
+            const sentinel = loadMoreRef.current;
+            if (!sentinel) return;
 
-        return () => window.clearTimeout(timer);
-    }, [visibleCount, blocks.length]);
+            if (typeof IntersectionObserver === 'undefined') {
+                const timer = window.setTimeout(() => {
+                    setVisibleCount(prev => Math.min(blocks.length, prev + RENDER_BATCH_SIZE));
+                }, 32);
+                return () => window.clearTimeout(timer);
+            }
 
-    const visibleBlocks = useMemo(() => blocks.slice(0, visibleCount), [blocks, visibleCount]);
+            const observer = new IntersectionObserver(
+                entries => {
+                    if (entries[0]?.isIntersecting) {
+                        setVisibleCount(prev => Math.min(blocks.length, prev + RENDER_BATCH_SIZE));
+                    }
+                },
+                {
+                    root: null,
+                    rootMargin: LOAD_AHEAD_MARGIN,
+                    threshold: 0,
+                },
+            );
 
-    return (
-        <>
-            {visibleBlocks.map((block, i) => {
-                const paragraphType = getParagraphType(block);
-                return (
-                    <div
-                        key={block.id}
-                        className={`cine-paragraph cine-paragraph--${paragraphType}`}
-                        data-paragraph-type={paragraphType}
-                        style={{ marginBlock: getBlockSpacing(block) }}
-                    >
-                        <CinematicBlockView block={block} index={i} immersionLevel={immersionLevel} />
-                    </div>
-                );
-            })}
-        </>
-    );
-});
+            observer.observe(sentinel);
+            return () => observer.disconnect();
+        }, [visibleCount, blocks.length]);
+
+        const visibleBlocks = useMemo(() => blocks.slice(0, visibleCount), [blocks, visibleCount]);
+
+        return (
+            <>
+                {visibleBlocks.map((block, i) => {
+                    const paragraphType = getParagraphType(block);
+                    return (
+                        <div
+                            key={block.id}
+                            className={`cine-paragraph cine-paragraph--${paragraphType}`}
+                            data-paragraph-type={paragraphType}
+                            style={{ marginBlock: getBlockSpacing(block) }}
+                        >
+                            <CinematicBlockView
+                                block={block}
+                                index={i}
+                                immersionLevel={immersionLevel}
+                            />
+                        </div>
+                    );
+                })}
+                {visibleCount < blocks.length && (
+                    <div ref={loadMoreRef} aria-hidden="true" style={{ height: 1 }} />
+                )}
+            </>
+        );
+    },
+);

@@ -17,11 +17,7 @@ function isPrivateIp(hostname: string): boolean {
 }
 
 function isLocalAddress(hostname: string): boolean {
-    return (
-        LOCAL_HOSTNAMES.has(hostname) ||
-        hostname.endsWith('.local') ||
-        isPrivateIp(hostname)
-    );
+    return LOCAL_HOSTNAMES.has(hostname) || hostname.endsWith('.local') || isPrivateIp(hostname);
 }
 
 export function assertSecureEndpoint(

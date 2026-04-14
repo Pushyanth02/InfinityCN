@@ -1,38 +1,42 @@
 # Codebase Structure: InfinityCN
+
 ## Global Architecture Map
 
-**Analysis Date:** 2026-03-30
-**Architecture:** Hybrid Node/.NET System
+**Analysis Date:** 2026-04-13
+**Architecture:** Frontend-first modular runtime + engine pipeline
 
 ---
 
-## 📁 Root Directory
-- `.planning/` — GSD Protocol and project vision (RULES.md, PROJECT.md, Codebase Map).
-- `dotnet/` — Cinematic engine solution (.NET 9.0 Solution).
-  - `src/` — Main service projects (API, Core, Infrastructure, Worker).
-  - `tests/` — NUnit and xUnit verification projects.
-- `server/` — Express API gateway and job manager.
-  - `src/` — Core Node.js services and worker scripts.
-- `src/` — React frontend and browser-side narrative engine.
-  - `components/` — UI elements and specific narrative renderers.
-  - `lib/` — Business logical units (Cinematifier Engine).
-  - `store/` — Zustand state containers.
-- `public/` — Static assets and PWA manifest.
-- `tests/` — Vitest frontend integration tests.
+## Root Directory
 
-## 📁 The Cinematifier Engine (`src/lib/cinematifier`)
-- `pipeline.ts` — Main orchestrator for scene processing.
-- `aiEngine.ts` — Routing and validation for multiple AI providers.
-- `offlineEngine.ts` — Local-ML fallback using Transformers.js.
-- `parser.ts` — Extraction of raw story text from multiple formats.
-- `sceneDetection.ts` — Core logic for identifying narrative boundaries.
-- `sentimentTracker.ts` — Tracking of character emotion and narrative tension.
-- `pacingAnalyzer.ts` — Analysis of readability and narrative flow.
+- `.planning/` — GSD protocol docs, roadmap, state, and architecture artifacts.
+- `docs/` — UX docs (wireframes, testing checklist).
+- `public/` — static assets and PWA files.
+- `src/` — application source.
 
-## 📁 Backend Services (`server/src/services`)
-- `redis/` — Session management and state synchronization.
-- `rabbitmq/` — Distributed job queuing.
-- `aiProxy/` — Secure proxying to cloud AI providers.
+## Source Layout (`src/`)
+
+- `components/` — UI-only React components.
+    - `reader/` — reader-focused presentation components.
+- `hooks/` — orchestration hooks that bridge UI with runtime/engine APIs.
+- `lib/` — business logic and system services.
+    - `ai/` — provider orchestration, streaming, rate limiting, and caching.
+    - `engine/` — cinematification pipeline and deterministic text systems.
+        - `cinematifier/` — chapter engine, full-system pipeline, paragraph breakers, scene/narrative analysis.
+    - `processing/` — extraction and resumable async processing workflows.
+    - `runtime/` — reader/runtime services (renderer, telemetry, discovery APIs, metadata APIs).
+    - `security/` — crypto and migration-safe security utilities.
+- `store/` — persisted Zustand state.
+- `test/` — Vitest setup.
+- `types/` — shared type definitions.
+
+## Key Runtime + Engine Modules
+
+- `src/lib/runtime/readerApis.ts` — lexical lookup + multi-source story discovery (novel/manga/manhwa/manhua).
+- `src/lib/runtime/readerBackend.ts` — telemetry snapshots and reader cinematic depth analytics.
+- `src/lib/engine/cinematifier/paragraphBreakers.ts` — deterministic paragraph-breaker APIs.
+- `src/lib/engine/cinematifier/fullSystemPipeline.ts` — canonical orchestration from rebuilt text to render plan.
 
 ---
-*Structure audit: 2026-03-30*
+
+_Structure audit: 2026-04-13_

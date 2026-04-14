@@ -9,4 +9,3 @@ export function useAIConnectionTest() {
         return testConnection(config);
     }, []);
 }
-

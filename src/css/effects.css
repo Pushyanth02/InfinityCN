@@ -30,6 +30,22 @@
     opacity: 0.8;
 }
 
+.cine-ambience-tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-family: var(--cine-font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+    color: #a5f3fc;
+    background-color: rgba(34, 211, 238, 0.12);
+    border: 1px solid rgba(34, 211, 238, 0.28);
+    opacity: 0.9;
+}
+
 .cine-emotion--joy {
     background-color: rgba(250, 204, 21, 0.15);
     color: #fde047;

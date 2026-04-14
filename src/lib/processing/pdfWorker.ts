@@ -77,38 +77,317 @@ export function detectFormat(file: File): SupportedFormat {
 /** Accepted file extensions for the upload input */
 export const ACCEPTED_EXTENSIONS = '.pdf,.epub,.docx,.pptx,.txt';
 
+export type ExtractionStage = 'loading' | 'extracting' | 'ocr' | 'normalizing' | 'complete';
+
+export interface ExtractionProgress {
+    format: SupportedFormat;
+    stage: ExtractionStage;
+    percentComplete: number;
+    message: string;
+    pagesProcessed?: number;
+    totalPages?: number;
+}
+
+export type ExtractionProgressCallback = (progress: ExtractionProgress) => void;
+
+function emitExtractionProgress(
+    callback: ExtractionProgressCallback | undefined,
+    progress: ExtractionProgress,
+) {
+    if (!callback) return;
+    const clamped = Math.min(100, Math.max(0, progress.percentComplete));
+    callback({ ...progress, percentComplete: clamped });
+}
+
 /**
  * Extract text from any supported document format.
  * Routes to the appropriate extractor based on file type.
  */
-export async function extractText(file: File): Promise<string> {
+export async function extractText(
+    file: File,
+    onProgress?: ExtractionProgressCallback,
+): Promise<string> {
     const format = detectFormat(file);
     let raw = '';
+
+    emitExtractionProgress(onProgress, {
+        format,
+        stage: 'loading',
+        percentComplete: 2,
+        message: `Preparing ${format.toUpperCase()} extraction...`,
+    });
+
     try {
         switch (format) {
             case 'txt':
-                raw = await file.text(); break;
+                emitExtractionProgress(onProgress, {
+                    format,
+                    stage: 'extracting',
+                    percentComplete: 25,
+                    message: 'Reading text file...',
+                });
+                raw = await file.text();
+                break;
             case 'pdf':
-                raw = await extractTextFromPDF(file); break;
+                return await extractPDFText(file, onProgress);
             case 'epub':
-                raw = await extractTextFromEPUB(file); break;
+                emitExtractionProgress(onProgress, {
+                    format,
+                    stage: 'extracting',
+                    percentComplete: 20,
+                    message: 'Extracting EPUB chapters...',
+                });
+                raw = await extractTextFromEPUB(file);
+                break;
             case 'docx':
-                raw = await extractTextFromDOCX(file); break;
+                emitExtractionProgress(onProgress, {
+                    format,
+                    stage: 'extracting',
+                    percentComplete: 20,
+                    message: 'Extracting DOCX paragraphs...',
+                });
+                raw = await extractTextFromDOCX(file);
+                break;
             case 'pptx':
-                raw = await extractTextFromPPTX(file); break;
+                emitExtractionProgress(onProgress, {
+                    format,
+                    stage: 'extracting',
+                    percentComplete: 20,
+                    message: 'Extracting PPTX slides...',
+                });
+                raw = await extractTextFromPPTX(file);
+                break;
         }
     } catch (err) {
         if (err instanceof Error) {
-            throw new Error(`Failed to extract text from ${file.name}: ${err.message}`, { cause: err });
+            throw new Error(`Failed to extract text from ${file.name}: ${err.message}`, {
+                cause: err,
+            });
         }
         throw err;
     }
-    return normalizeExtractedText(raw);
+
+    emitExtractionProgress(onProgress, {
+        format,
+        stage: 'normalizing',
+        percentComplete: 96,
+        message: 'Cleaning and normalizing text...',
+    });
+
+    const normalized = normalizeExtractedText(raw);
+
+    emitExtractionProgress(onProgress, {
+        format,
+        stage: 'complete',
+        percentComplete: 100,
+        message: 'Text extraction complete.',
+    });
+
+    return normalized;
 }
 
 // ─── PDF Extraction ───────────────────────────────────────
 
-const extractTextFromPDF = async (file: File): Promise<string> => {
+type PDFTextItem = {
+    str?: string;
+    transform?: number[];
+};
+
+type PositionedToken = {
+    text: string;
+    x: number;
+    y: number;
+};
+
+const PDF_LINE_Y_TOLERANCE = 3;
+
+function normalizeBoundaryLine(line: string): string {
+    return line.trim().replace(/\d+/g, '__NUM__').replace(/\s+/g, ' ').toLowerCase();
+}
+
+function isBoundaryArtifact(line: string): boolean {
+    const trimmed = line.trim();
+    if (!trimmed) return true;
+
+    const pageNumberPattern = /^(?:page\s*)?\d{1,4}(?:\s*(?:\/|of)\s*\d{1,4})?$/i;
+    const punctuationOnlyPattern = /^[^\p{L}\p{N}]+$/u;
+    return pageNumberPattern.test(trimmed) || punctuationOnlyPattern.test(trimmed);
+}
+
+function extractOrderedPageText(items: PDFTextItem[]): string {
+    const tokens: PositionedToken[] = items
+        .map(item => {
+            const raw = item.str ?? '';
+            const text = raw.replace(/\s+/g, ' ').trim();
+            if (!text || !item.transform || item.transform.length < 6) return null;
+
+            return {
+                text,
+                x: item.transform[4],
+                y: item.transform[5],
+            };
+        })
+        .filter((token): token is PositionedToken => token !== null)
+        .sort((a, b) => {
+            if (Math.abs(a.y - b.y) > PDF_LINE_Y_TOLERANCE) {
+                return b.y - a.y;
+            }
+            return a.x - b.x;
+        });
+
+    if (tokens.length === 0) return '';
+
+    const lines: string[] = [];
+    let lineTokens: PositionedToken[] = [];
+    let currentY = tokens[0].y;
+
+    const flushLine = () => {
+        if (lineTokens.length === 0) return;
+        const text = lineTokens
+            .sort((a, b) => a.x - b.x)
+            .map(token => token.text)
+            .join(' ')
+            .replace(/\s+([,.;!?])/g, '$1')
+            .trim();
+
+        if (text) lines.push(text);
+        lineTokens = [];
+    };
+
+    for (const token of tokens) {
+        if (Math.abs(token.y - currentY) > PDF_LINE_Y_TOLERANCE) {
+            flushLine();
+            currentY = token.y;
+        }
+        lineTokens.push(token);
+    }
+    flushLine();
+
+    return lines.join('\n');
+}
+
+function removeRecurringBoundaryArtifacts(pages: string[]): string[] {
+    if (pages.length === 0) return [];
+
+    const headerCounts = new Map<string, number>();
+    const footerCounts = new Map<string, number>();
+    const scanDepth = 3;
+
+    const pageLines = pages.map(page =>
+        page
+            .split('\n')
+            .map(line => line.trim())
+            .filter(Boolean),
+    );
+
+    for (const lines of pageLines) {
+        const topCount = Math.min(scanDepth, lines.length);
+        const bottomStart = Math.max(0, lines.length - scanDepth);
+
+        for (let i = 0; i < topCount; i++) {
+            const key = normalizeBoundaryLine(lines[i]);
+            if (key) headerCounts.set(key, (headerCounts.get(key) ?? 0) + 1);
+        }
+
+        for (let i = bottomStart; i < lines.length; i++) {
+            const key = normalizeBoundaryLine(lines[i]);
+            if (key) footerCounts.set(key, (footerCounts.get(key) ?? 0) + 1);
+        }
+    }
+
+    const recurrenceThreshold = Math.max(3, Math.ceil(pages.length * 0.25));
+    const recurringHeaders = new Set(
+        [...headerCounts.entries()]
+            .filter(([, count]) => count >= recurrenceThreshold)
+            .map(([k]) => k),
+    );
+    const recurringFooters = new Set(
+        [...footerCounts.entries()]
+            .filter(([, count]) => count >= recurrenceThreshold)
+            .map(([k]) => k),
+    );
+
+    return pageLines.map(lines => {
+        let start = 0;
+        let end = lines.length - 1;
+
+        while (start <= end) {
+            const line = lines[start];
+            const normalized = normalizeBoundaryLine(line);
+            if (recurringHeaders.has(normalized) || isBoundaryArtifact(line)) {
+                start++;
+                continue;
+            }
+            break;
+        }
+
+        while (end >= start) {
+            const line = lines[end];
+            const normalized = normalizeBoundaryLine(line);
+            if (recurringFooters.has(normalized) || isBoundaryArtifact(line)) {
+                end--;
+                continue;
+            }
+            break;
+        }
+
+        return lines.slice(start, end + 1).join('\n');
+    });
+}
+
+/**
+ * Extract plain text from a PDF while preserving page/line reading order.
+ * Performs only text cleanup (artifact removal + whitespace normalization).
+ */
+export async function extractPDFText(
+    file: File,
+    onProgress?: ExtractionProgressCallback,
+): Promise<string> {
+    const format = detectFormat(file);
+    if (format !== 'pdf') {
+        throw new Error(`extractPDFText only supports PDF files (received ${format}).`);
+    }
+
+    const pages = await extractTextFromPDF(file, onProgress);
+
+    emitExtractionProgress(onProgress, {
+        format: 'pdf',
+        stage: 'normalizing',
+        percentComplete: 90,
+        message: 'Removing headers, footers, and PDF artifacts...',
+        pagesProcessed: pages.length,
+        totalPages: pages.length,
+    });
+
+    const cleanedPages = removeRecurringBoundaryArtifacts(pages)
+        .map(page => normalizeExtractedText(page))
+        .filter(Boolean);
+
+    const plainText = normalizeExtractedText(cleanedPages.join('\n\n'));
+
+    emitExtractionProgress(onProgress, {
+        format: 'pdf',
+        stage: 'complete',
+        percentComplete: 100,
+        message: 'PDF extraction complete.',
+        pagesProcessed: pages.length,
+        totalPages: pages.length,
+    });
+
+    return plainText;
+}
+
+const extractTextFromPDF = async (
+    file: File,
+    onProgress?: ExtractionProgressCallback,
+): Promise<string[]> => {
+    emitExtractionProgress(onProgress, {
+        format: 'pdf',
+        stage: 'loading',
+        percentComplete: 5,
+        message: 'Loading PDF engine...',
+    });
+
     // Dynamic import: pdfjs-dist (~400KB) downloads only when this runs
     let pdfjsLib: Awaited<typeof import('pdfjs-dist')>;
     try {
@@ -118,19 +397,54 @@ const extractTextFromPDF = async (file: File): Promise<string> => {
         ]);
         pdfjsLib = lib;
         pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
+        emitExtractionProgress(onProgress, {
+            format: 'pdf',
+            stage: 'loading',
+            percentComplete: 12,
+            message: 'PDF engine ready.',
+        });
     } catch {
         throw new Error('Failed to load PDF library. Please reload the page and try again.');
     }
 
     try {
+        emitExtractionProgress(onProgress, {
+            format: 'pdf',
+            stage: 'loading',
+            percentComplete: 14,
+            message: 'Reading PDF file...',
+        });
+
         const arrayBuffer = await file.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+        loadingTask.onProgress = (progressData: { loaded: number; total: number }) => {
+            if (!progressData.total) return;
+            const ratio = Math.min(1, Math.max(0, progressData.loaded / progressData.total));
+            emitExtractionProgress(onProgress, {
+                format: 'pdf',
+                stage: 'loading',
+                percentComplete: Math.round(15 + ratio * 15),
+                message: `Loading PDF structure (${Math.round(ratio * 100)}%)...`,
+            });
+        };
+
+        const pdf = await loadingTask.promise;
+        emitExtractionProgress(onProgress, {
+            format: 'pdf',
+            stage: 'extracting',
+            percentComplete: 30,
+            message: `Extracting text from ${pdf.numPages} pages...`,
+            pagesProcessed: 0,
+            totalPages: pdf.numPages,
+        });
+
         const pages: string[] = new Array(pdf.numPages);
 
         // Extract pages in batches of 10 for parallelism
         const BATCH = 10;
         const MAX_OCR_PAGES = 5; // Limit OCR attempts to avoid freezing on image-heavy PDFs
         let ocrPagesUsed = 0;
+        let pagesProcessed = 0;
 
         for (let start = 1; start <= pdf.numPages; start += BATCH) {
             const end = Math.min(start + BATCH - 1, pdf.numPages);
@@ -139,28 +453,21 @@ const extractTextFromPDF = async (file: File): Promise<string> => {
                 batch.push(
                     pdf.getPage(i).then(async page => {
                         const content = await page.getTextContent();
-
-                        const textParts: string[] = [];
-                        let lastY = -1;
-                        for (const item of content.items as Array<{
-                            str?: string;
-                            transform?: number[];
-                        }>) {
-                            if (!item.str || !item.transform) continue;
-                            const y = item.transform[5];
-                            if (lastY !== -1 && Math.abs(y - lastY) > 5) {
-                                textParts.push('\n');
-                            } else if (lastY !== -1 && item.str.trim()) {
-                                textParts.push(' ');
-                            }
-                            textParts.push(item.str);
-                            lastY = y;
-                        }
-
-                        let pageText = textParts.join('');
+                        let pageText = extractOrderedPageText(content.items as PDFTextItem[]);
 
                         // OCR Fallback for scanned/image-based pages (limited scope)
                         if (pageText.trim().length < 50 && ocrPagesUsed < MAX_OCR_PAGES) {
+                            emitExtractionProgress(onProgress, {
+                                format: 'pdf',
+                                stage: 'ocr',
+                                percentComplete: Math.round(
+                                    30 + ((i - 1) / Math.max(1, pdf.numPages)) * 55,
+                                ),
+                                message: `Running OCR on page ${i}...`,
+                                pagesProcessed,
+                                totalPages: pdf.numPages,
+                            });
+
                             ocrPagesUsed++;
                             try {
                                 const Tesseract = await import('tesseract.js');
@@ -185,85 +492,23 @@ const extractTextFromPDF = async (file: File): Promise<string> => {
                         }
 
                         pages[i - 1] = pageText;
+                        pagesProcessed++;
+                        const pageRatio = pagesProcessed / Math.max(1, pdf.numPages);
+                        emitExtractionProgress(onProgress, {
+                            format: 'pdf',
+                            stage: 'extracting',
+                            percentComplete: Math.round(30 + pageRatio * 55),
+                            message: `Extracted ${pagesProcessed} of ${pdf.numPages} pages...`,
+                            pagesProcessed,
+                            totalPages: pdf.numPages,
+                        });
                     }),
                 );
             }
             await Promise.all(batch);
         }
 
-        // Smart Header/Footer Detection via Frequency Analysis
-        // Check the first and last few lines of each page for recurring text.
-        const SCAN_DEPTH = 3; // lines to check at top/bottom of each page
-        const headerCandidates = new Map<string, number>();
-        const footerCandidates = new Map<string, number>();
-
-        // Normalize a line for frequency comparison:
-        // - Replace standalone numbers with a token so "42" and "43" match
-        // - Trim whitespace
-        const normalizeLine = (line: string): string =>
-            line.trim().replace(/^\d{1,4}$/, '__PAGE_NUM__');
-
-        // Pre-compute split lines and normalized forms once per page
-        const pageData = pages.map(page => {
-            const lines = page
-                .split('\n')
-                .map(l => l.trim())
-                .filter(Boolean);
-            const normalized = lines.map(normalizeLine);
-            return { raw: page, lines, normalized };
-        });
-
-        pageData.forEach(({ lines, normalized }) => {
-            if (lines.length === 0) return;
-
-            // Top lines (headers)
-            const topN = Math.min(SCAN_DEPTH, lines.length);
-            for (let k = 0; k < topN; k++) {
-                const key = normalized[k];
-                if (key) headerCandidates.set(key, (headerCandidates.get(key) || 0) + 1);
-            }
-            // Bottom lines (footers)
-            const bottomStart = Math.max(0, lines.length - SCAN_DEPTH);
-            for (let k = bottomStart; k < lines.length; k++) {
-                const key = normalized[k];
-                if (key) footerCandidates.set(key, (footerCandidates.get(key) || 0) + 1);
-            }
-        });
-
-        // Threshold: 25% of pages or at least 3 pages
-        const threshold = Math.max(3, pages.length * 0.25);
-        const commonHeaders = new Set<string>();
-        const commonFooters = new Set<string>();
-
-        headerCandidates.forEach((count, key) => {
-            if (count >= threshold) commonHeaders.add(key);
-        });
-        footerCandidates.forEach((count, key) => {
-            if (count >= threshold) commonFooters.add(key);
-        });
-
-        const cleanedPages = pageData.map(({ raw }) => {
-            const lines = raw.split('\n');
-            let startIdx = 0;
-            let endIdx = lines.length - 1;
-
-            // Strip header lines from the top (use cached normalized values)
-            const normalizedFull = lines.map(normalizeLine);
-            while (startIdx <= endIdx && startIdx < SCAN_DEPTH) {
-                const norm = normalizedFull[startIdx];
-                if (!norm || commonHeaders.has(norm)) startIdx++;
-                else break;
-            }
-            // Strip footer lines from the bottom
-            while (endIdx >= startIdx && endIdx >= lines.length - SCAN_DEPTH) {
-                const norm = normalizedFull[endIdx];
-                if (!norm || commonFooters.has(norm)) endIdx--;
-                else break;
-            }
-            return lines.slice(startIdx, endIdx + 1).join('\n');
-        });
-
-        return cleanedPages.join('\n\n');
+        return pages;
     } catch (error) {
         console.error('[pdfWorker] extraction failed:', error);
         throw new Error(
@@ -360,18 +605,22 @@ async function extractTextFromEPUB(file: File): Promise<string> {
         throw new Error('Invalid EPUB: no readable content found in spine');
     }
     // 3. Extract text from each XHTML chapter in spine order (parallelized)
-    const chapters: string[] = await Promise.all(spineItems.map(async href => {
-        const filePath = opfDir + href;
-        const data = files[filePath];
-        if (!data) return '';
-        const html = decodeUTF8(data);
-        const doc = parser.parseFromString(html, 'application/xhtml+xml');
-        const body = doc.querySelector('body');
-        return body?.textContent?.trim() || '';
-    }));
+    const chapters: string[] = await Promise.all(
+        spineItems.map(async href => {
+            const filePath = opfDir + href;
+            const data = files[filePath];
+            if (!data) return '';
+            const html = decodeUTF8(data);
+            const doc = parser.parseFromString(html, 'application/xhtml+xml');
+            const body = doc.querySelector('body');
+            return body?.textContent?.trim() || '';
+        }),
+    );
     const filtered = chapters.filter(Boolean);
     if (filtered.length === 0) {
-        throw new Error('Could not extract text from EPUB. The file may be DRM-protected or empty.');
+        throw new Error(
+            'Could not extract text from EPUB. The file may be DRM-protected or empty.',
+        );
     }
     return filtered.join('\n\n');
 }
@@ -389,16 +638,18 @@ async function extractTextFromDOCX(file: File): Promise<string> {
     const WP_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
     const paragraphs = Array.from(doc.getElementsByTagNameNS(WP_NS, 'p'));
     // Parallelize extraction of paragraph text
-    const textParts: string[] = await Promise.all(paragraphs.map(async para => {
-        const textNodes = para.getElementsByTagNameNS(WP_NS, 't');
-        const paraText: string[] = [];
-        for (let j = 0; j < textNodes.length; j++) {
-            const content = textNodes[j].textContent;
-            if (content) paraText.push(content);
-        }
-        const joined = paraText.join('');
-        return joined.trim() ? joined : '';
-    }));
+    const textParts: string[] = await Promise.all(
+        paragraphs.map(async para => {
+            const textNodes = para.getElementsByTagNameNS(WP_NS, 't');
+            const paraText: string[] = [];
+            for (let j = 0; j < textNodes.length; j++) {
+                const content = textNodes[j].textContent;
+                if (content) paraText.push(content);
+            }
+            const joined = paraText.join('');
+            return joined.trim() ? joined : '';
+        }),
+    );
     const filtered = textParts.filter(Boolean);
     if (filtered.length === 0) {
         throw new Error('Could not extract text from DOCX. The file may be empty or corrupted.');

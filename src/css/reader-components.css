@@ -21,7 +21,11 @@
     background: rgba(220, 38, 38, 0.08);
     color: #dc2626;
     cursor: pointer;
-    transition: color var(--transition-fast), background var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
+    transition:
+        color var(--transition-fast),
+        background var(--transition-fast),
+        transform var(--transition-fast),
+        box-shadow var(--transition-fast);
     flex-shrink: 0;
 }
 
@@ -162,9 +166,14 @@
     background: transparent;
     color: var(--on-surface-variant);
     cursor: pointer;
-    transition: color var(--transition-fast), background var(--transition-fast);
+    transition:
+        color var(--transition-fast),
+        background var(--transition-fast);
 }
-.chapter-nav-close:hover { color: var(--on-surface); background: var(--surface-container-high); }
+.chapter-nav-close:hover {
+    color: var(--on-surface);
+    background: var(--surface-container-high);
+}
 
 .chapter-nav-list {
     flex: 1;
@@ -191,7 +200,10 @@
     transition: all var(--transition-fast);
 }
 
-.chapter-nav-item:hover { background: var(--surface-container); color: var(--on-surface); }
+.chapter-nav-item:hover {
+    background: var(--surface-container);
+    color: var(--on-surface);
+}
 
 .chapter-nav-item.active {
     background: var(--surface-container);
@@ -246,8 +258,15 @@
     cursor: pointer;
     transition: all var(--transition-fast);
 }
-.cine-nav-btn:hover { background: var(--surface-container-high); color: var(--on-surface); }
-.cine-nav-btn:disabled { opacity: 0.3; cursor: not-allowed; pointer-events: none; }
+.cine-nav-btn:hover {
+    background: var(--surface-container-high);
+    color: var(--on-surface);
+}
+.cine-nav-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+    pointer-events: none;
+}
 
 .cine-reading-progress {
     display: flex;
@@ -284,7 +303,7 @@
 
 .cine-settings-overlay {
     position: absolute;
-    top: 56px;    /* below header */
+    top: 56px; /* below header */
     right: 0;
     width: 340px;
     max-height: calc(100vh - 110px);

@@ -37,4 +37,3 @@ describe('AI cache system', () => {
         expect(getCached(key)).toBeNull();
     });
 });
-

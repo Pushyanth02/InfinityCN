@@ -7,7 +7,10 @@ describe('RequestQueueLimiter', () => {
     });
 
     it('processes queued requests in order', async () => {
-        const limiter = new RequestQueueLimiter({ rpm: 6000, tpm: 6_000_000 }, { rpm: 6000, tpm: 6_000_000 });
+        const limiter = new RequestQueueLimiter(
+            { rpm: 6000, tpm: 6_000_000 },
+            { rpm: 6000, tpm: 6_000_000 },
+        );
         const order: string[] = [];
 
         const first = limiter.enqueueRequest({
@@ -33,7 +36,10 @@ describe('RequestQueueLimiter', () => {
     });
 
     it('deduplicates requests sharing the same dedupKey', async () => {
-        const limiter = new RequestQueueLimiter({ rpm: 6000, tpm: 6_000_000 }, { rpm: 6000, tpm: 6_000_000 });
+        const limiter = new RequestQueueLimiter(
+            { rpm: 6000, tpm: 6_000_000 },
+            { rpm: 6000, tpm: 6_000_000 },
+        );
         let calls = 0;
 
         const first = limiter.enqueueRequest({
@@ -62,7 +68,10 @@ describe('RequestQueueLimiter', () => {
     });
 
     it('applies both global and per-user limiters per request', async () => {
-        const limiter = new RequestQueueLimiter({ rpm: 6000, tpm: 6_000_000 }, { rpm: 6000, tpm: 6_000_000 });
+        const limiter = new RequestQueueLimiter(
+            { rpm: 6000, tpm: 6_000_000 },
+            { rpm: 6000, tpm: 6_000_000 },
+        );
         const acquireSpy = vi.spyOn(RateLimiter.prototype, 'acquire');
 
         await limiter.enqueueRequest({
@@ -76,4 +85,3 @@ describe('RequestQueueLimiter', () => {
         expect(acquireSpy).toHaveBeenNthCalledWith(2, { requests: 1, tokens: 42 });
     });
 });
-

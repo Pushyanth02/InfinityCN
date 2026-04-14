@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { detectFormat, ACCEPTED_EXTENSIONS } from '../pdfWorker';
+import { detectFormat, ACCEPTED_EXTENSIONS, extractPDFText } from '../pdfWorker';
 
 // ─── Test helpers ─────────────────────────────────────────────────────────────
 
@@ -167,5 +167,21 @@ describe('detectFormat — error cases', () => {
         } catch (err) {
             expect((err as Error).message).toMatch(/docx/i);
         }
+    });
+});
+
+// ─── extractPDFText API contract ───────────────────────────────────────────
+
+describe('extractPDFText', () => {
+    it('rejects non-PDF input files', async () => {
+        await expect(extractPDFText(makeFile('notes.txt', 1024, 'text/plain'))).rejects.toThrow(
+            /only supports PDF files/i,
+        );
+    });
+
+    it('rejects unsupported extension before extraction', async () => {
+        await expect(extractPDFText(makeFile('image.jpg', 1024, 'image/jpeg'))).rejects.toThrow(
+            /unsupported/i,
+        );
     });
 });

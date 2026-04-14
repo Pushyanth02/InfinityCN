@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { segmentScenesUniversal } from '../cinematifier/sceneDetection';
+import { detectOriginalModeScenes, segmentScenesUniversal } from '../cinematifier/sceneDetection';
 
 describe('segmentScenesUniversal (Prompt 2B)', () => {
     it('splits scenes on time shifts', () => {
@@ -55,6 +55,48 @@ describe('segmentScenesUniversal (Prompt 2B)', () => {
         const scenes = segmentScenesUniversal(text);
 
         expect(scenes.length).toBeGreaterThanOrEqual(3);
+        for (const scene of scenes) {
+            expect(scene.id).toMatch(/^scene-\d+$/);
+            expect(scene.text.trim().length).toBeGreaterThan(0);
+        }
+    });
+});
+
+describe('detectOriginalModeScenes', () => {
+    it('splits scenes on time shift phrases', () => {
+        const text =
+            'The campfire burned low as they waited.\n\nHours later, the first horn echoed from the ridge.';
+
+        const scenes = detectOriginalModeScenes(text);
+        expect(scenes.length).toBe(2);
+        expect(scenes[0].id).toBe('scene-1');
+        expect(scenes[1].id).toBe('scene-2');
+    });
+
+    it('splits scenes on location changes', () => {
+        const text =
+            'At Rivergate, the docks were crowded before sunrise.\n\nIn Stonekeep, the gates remained closed.';
+
+        const scenes = detectOriginalModeScenes(text);
+        expect(scenes.length).toBe(2);
+    });
+
+    it('splits scenes on strong paragraph breaks', () => {
+        const text = 'Mara checked the maps.\n\n\n\nThe scouts returned with grim news.';
+        const scenes = detectOriginalModeScenes(text);
+
+        expect(scenes.length).toBe(2);
+        expect(scenes[0].text).toContain('Mara checked the maps.');
+        expect(scenes[1].text).toContain('The scouts returned with grim news.');
+    });
+
+    it('returns deterministic Scene[] shape with id and text', () => {
+        const text =
+            'At dawn, the road was empty.\n\nMeanwhile, in Highwatch, the bells rang.\n\n\n\nBy dusk, the gates were shut.';
+
+        const scenes = detectOriginalModeScenes(text);
+
+        expect(scenes.length).toBeGreaterThanOrEqual(2);
         for (const scene of scenes) {
             expect(scene.id).toMatch(/^scene-\d+$/);
             expect(scene.text.trim().length).toBeGreaterThan(0);

@@ -1,29 +1,50 @@
 # System Integrations: InfinityCN
+
 ## Core Connectivity Map
 
-**Analysis Date:** 2026-03-30
-**Environment:** Hybrid Local/Cloud System
+**Analysis Date:** 2026-04-13
+**Environment:** Browser-first runtime with optional cloud AI providers
 
 ---
 
-## 🌩️ AI Processing Integrations
-- **Primary Model:** Anthropic (Sonnet) & OpenAI (GPT-4o) for high-reasoning cinematification.
-- **Provider Proxy:** Node.js `server/src/services/aiProxy` handles secure routing and billing limits.
-- **Secondary Routing:** `.NET Core Engine` handles specific document-heavy AI tasks.
-- **Offline ML:** `Transformers.js` is the fallback when cloud services are unreachable.
+## AI Provider Integrations
 
-## 📦 Data persistence Integrations
-- **Cloud Database:** Redis for session state, user progress sync, and active scene caching.
-- **Local Database:** Dexie (IndexedDB) for browser-resident book data, ensuring the "offline-first" experience.
-- **Backup:** S3-compatible storage for raw source document archiving.
+- OpenAI
+- Anthropic
+- Gemini
+- Groq
+- DeepSeek
+- Ollama (local)
+- Chrome AI (Gemini Nano)
 
-## 🏗️ Message & Queuing Integrations
-- **RabbitMQ:** Orchestrates decoupling between the Node.js API and the .NET cinematization workers.
-- **WebSockets:** Real-time push of cinematification progress to the React frontend.
+Provider orchestration lives in `src/lib/ai/`.
 
-## 🎨 Asset Integrations
-- **Iconography:** Lucide React.
-- **Media:** Public CDN for sound effects (SFX) and ambient music layers.
+## External Discovery + Metadata APIs
+
+- Open Library
+- Google Books API
+- Gutendex
+- Jikan (Manga)
+- Kitsu (Manga/Manhwa/Manhua)
+- Wikipedia Summary API
+- DictionaryAPI + Datamuse (word lens)
+- DummyJSON Quotes + Quotable (processing quotes)
+
+Runtime API modules live in `src/lib/runtime/`.
+
+## Local Processing + Storage Integrations
+
+- Dexie (IndexedDB) for persistent book and progress data.
+- localStorage for telemetry snapshots and encrypted configuration state.
+- pdfjs-dist, fflate, and Tesseract.js for ingestion and OCR.
+- Transformers.js for local embedding/offline pathways.
+
+## UI + Runtime Integration Boundaries
+
+- Components: UI only (`src/components/`).
+- Hooks: orchestration (`src/hooks/`).
+- Business logic: runtime/engine modules (`src/lib/runtime`, `src/lib/engine`).
 
 ---
-*Integration audit: 2026-03-30*
+
+_Integration audit: 2026-04-13_

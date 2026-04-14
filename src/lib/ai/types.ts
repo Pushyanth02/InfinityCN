@@ -2,6 +2,7 @@
  * ai/types.ts — AI Engine Type Definitions
  *
  * Shared interfaces and types used across the AI engine modules.
+ * Defines the core AIProviderInstance interface that all providers implement.
  */
 
 import type { AIConnectionStatus } from '../../types/cinematifier';
@@ -9,9 +10,9 @@ import type { AIConnectionStatus } from '../../types/cinematifier';
 // Re-export for convenience
 export type { AIConnectionStatus };
 
-// ─── PUBLIC CONFIG TYPE ────────────────────────────────────────────────────────
+// ─── PROVIDER NAME UNION ───────────────────────────────────────────────────────
 
-export type AIProvider =
+export type AIProviderName =
     | 'none'
     | 'chrome'
     | 'gemini'
@@ -19,7 +20,67 @@ export type AIProvider =
     | 'openai'
     | 'anthropic'
     | 'groq'
-    | 'deepseek';
+    | 'deepseek'
+    | 'nvidia-nim'
+    | 'gemma'
+    | 'gwen';
+
+/** @deprecated Use AIProviderName — kept as alias for backward compatibility. */
+export type AIProvider = AIProviderName;
+
+export type AIFallbackProvider = 'openai' | 'gemini' | 'claude';
+
+// ─── AI RESPONSE ───────────────────────────────────────────────────────────────
+
+export interface AIResponse {
+    text: string;
+    model: string;
+    provider: AIProviderName;
+    tokenUsage?: {
+        promptTokens: number;
+        completionTokens: number;
+        totalTokens: number;
+    };
+}
+
+// ─── GENERATE OPTIONS ──────────────────────────────────────────────────────────
+
+export interface GenerateOptions {
+    model?: string;
+    maxTokens?: number;
+    temperature?: number;
+    systemPrompt?: string;
+    useJSON?: boolean;
+    rawTextMode?: boolean;
+    timeoutMs?: number;
+    signal?: AbortSignal;
+}
+
+// ─── AI PROVIDER INSTANCE INTERFACE ────────────────────────────────────────────
+
+/**
+ * Core provider contract. Every AI provider must implement generate(), stream(),
+ * and healthCheck(). Provider logic is isolated — no cross-provider coupling.
+ */
+export interface AIProviderInstance {
+    /** Provider identifier matching the AIProviderName union. */
+    readonly name: AIProviderName;
+    /** Approximate cost per 1K tokens (USD). Used for routing decisions. */
+    readonly costPer1KTokens?: number;
+    /** Whether this provider supports streaming responses. */
+    readonly supportsStreaming: boolean;
+
+    /** Generate a complete response synchronously. */
+    generate(prompt: string, config: AIConfig, options?: GenerateOptions): Promise<AIResponse>;
+
+    /** Stream response chunks as they arrive. */
+    stream(prompt: string, config: AIConfig, options?: GenerateOptions): AsyncGenerator<string>;
+
+    /** Verify provider connectivity. Returns true if reachable. */
+    healthCheck(config: AIConfig): Promise<boolean>;
+}
+
+// ─── PUBLIC CONFIG TYPE ────────────────────────────────────────────────────────
 
 export interface AIConfig {
     provider: AIProvider;
@@ -35,6 +96,18 @@ export interface AIConfig {
     deepseekKey: string;
     ollamaUrl: string;
     ollamaModel: string;
+    /** NVIDIA NIM API key */
+    nvidiaNimKey?: string;
+    /** Gwen custom adapter endpoint URL */
+    gwenUrl?: string;
+    /** Gwen custom adapter API key */
+    gwenKey?: string;
+    /** Optional fallback order for multi-provider routing in AIManager. */
+    fallbackProviders?: AIFallbackProvider[];
+    /** Prefer lower-cost fallback providers when multiple providers are available. */
+    preferLowerCost?: boolean;
+    /** Optional per-request cost budget (USD) used by AIManager guardrails. */
+    maxCostUsd?: number;
     /** When true, skip JSON response formatting and use higher token limits (for cinematification) */
     rawTextMode?: boolean;
     /** Custom system prompt to replace the default JSON-oriented one */

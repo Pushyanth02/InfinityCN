@@ -26,6 +26,7 @@ export function createBookFromSegments(
         number: index + 1,
         title: seg.title,
         originalText: seg.content,
+        originalModeText: seg.content,
         cinematifiedBlocks: [],
         status: 'pending' as const,
         isProcessed: false,

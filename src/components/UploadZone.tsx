@@ -14,13 +14,22 @@ interface UploadZoneProps {
     compact?: boolean;
 }
 
-export const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelect, isProcessing, compact = false }) => {
+export const UploadZone: React.FC<UploadZoneProps> = ({
+    onFileSelect,
+    isProcessing,
+    compact = false,
+}) => {
     const [isDragging, setIsDragging] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleFile = useCallback(
         (file: File) => {
-            if (!isProcessing && (file.type === 'application/pdf' || file.name.endsWith('.txt') || file.name.endsWith('.epub'))) {
+            if (
+                !isProcessing &&
+                (file.type === 'application/pdf' ||
+                    file.name.endsWith('.txt') ||
+                    file.name.endsWith('.epub'))
+            ) {
                 onFileSelect(file);
             }
         },
@@ -52,6 +61,12 @@ export const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelect, isProcessi
         [handleFile],
     );
 
+    const handleOpenFileDialog = useCallback(() => {
+        if (!isProcessing) {
+            fileInputRef.current?.click();
+        }
+    }, [isProcessing]);
+
     if (compact) {
         return (
             <label className="upload-compact" aria-label="Upload a new manuscript">
@@ -76,10 +91,7 @@ export const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelect, isProcessi
             onDrop={handleDrop}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
-            role="button"
-            tabIndex={0}
-            aria-label="Upload zone: drag and drop or click to select a manuscript"
-            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') fileInputRef.current?.click(); }}
+            aria-label="Upload zone: drag and drop a manuscript"
         >
             <input
                 ref={fileInputRef}
@@ -93,7 +105,10 @@ export const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelect, isProcessi
             />
 
             {/* Icon */}
-            <div className={`upload-icon-ring ${isDragging ? 'upload-icon-ring--active' : ''}`} aria-hidden="true">
+            <div
+                className={`upload-icon-ring ${isDragging ? 'upload-icon-ring--active' : ''}`}
+                aria-hidden="true"
+            >
                 <Upload size={28} strokeWidth={1.5} color="var(--primary)" />
             </div>
 
@@ -102,22 +117,20 @@ export const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelect, isProcessi
                 <p className="upload-headline">
                     {isDragging ? 'Drop it here' : 'Drop your manuscript'}
                 </p>
-                <p className="upload-subtext">
-                    PDF, TXT, or EPUB · up to 50 MB
-                </p>
+                <p className="upload-subtext">PDF, TXT, or EPUB · up to 50 MB</p>
             </div>
 
             {/* CTA Button */}
-            <label
-                htmlFor="manuscript-file-input"
+            <button
+                type="button"
                 className="upload-cta-btn"
-                role="button"
-                tabIndex={-1}
+                onClick={handleOpenFileDialog}
+                disabled={isProcessing}
                 aria-label="Select a manuscript file from your device"
             >
                 <FileText size={16} aria-hidden="true" />
                 Select Manuscript
-            </label>
+            </button>
 
             <p className="upload-footnote">
                 Processed locally — your manuscript never leaves your device

@@ -3,6 +3,7 @@ import {
     rebuildParagraphs,
     segmentScenes,
     analyzeScene,
+    applyTensionFormatting,
     cinematizeScene,
     validateOutput,
     runCorePipeline,
@@ -33,6 +34,42 @@ describe('corePipeline (Prompt 2A)', () => {
 
         expect(analysis.tensionScore).toBeGreaterThan(0);
         expect(analysis.shortLineCount).toBeGreaterThan(0);
+        expect(analysis.dialogueRatio).toBeGreaterThanOrEqual(0);
+        expect(analysis.dialogueRatio).toBeLessThanOrEqual(1);
+        expect(analysis.emotionalCharge).toBeGreaterThanOrEqual(0);
+    });
+
+    it('applyTensionFormatting uses short lines for high tension', () => {
+        const input = 'The corridor lights flickered while footsteps echoed behind the steel door.';
+
+        const out = applyTensionFormatting(input, 90);
+        expect(out).toContain('\n');
+        expect(out.split('\n').length).toBeGreaterThan(1);
+    });
+
+    it('applyTensionFormatting keeps normal paragraphs for low tension', () => {
+        const input =
+            'Morning sunlight covered the valley. The birds circled slowly over the river.';
+
+        const out = applyTensionFormatting(input, 10);
+        expect(out).toContain(
+            'Morning sunlight covered the valley. The birds circled slowly over the river.',
+        );
+    });
+
+    it('applyTensionFormatting isolates sentences for suspense range', () => {
+        const input = 'He waited at the door. The lock clicked. Nobody moved.';
+
+        const out = applyTensionFormatting(input, 52);
+        expect(out).toMatch(/He waited at the door\.\n\nThe lock clicked\.\n\nNobody moved\./);
+    });
+
+    it('applyTensionFormatting preserves exact non-whitespace content', () => {
+        const input = 'Run now! The lights failed. He held his breath.';
+        const out = applyTensionFormatting(input, 85);
+
+        const canonical = (text: string) => text.replace(/\s+/g, '');
+        expect(canonical(out)).toBe(canonical(input));
     });
 
     it('cinematizeScene separates dialogue clearly', () => {
@@ -72,6 +109,23 @@ describe('corePipeline (Prompt 2A)', () => {
         expect(normalize(out)).toEqual(normalize(scene));
     });
 
+    it('cinematizeScene preserves exact non-whitespace content', () => {
+        const scene = 'The alarm rang. "Move now," Mara said. Then silence.';
+        const out = cinematizeScene(scene);
+
+        const canonical = (text: string) => text.replace(/\s+/g, '');
+        expect(canonical(out)).toBe(canonical(scene));
+    });
+
+    it('cinematizeScene isolates short dramatic lines as cinematic beats', () => {
+        const scene = 'They waited in the dark corridor. Run now! No time. The lights failed.';
+        const out = cinematizeScene(scene);
+
+        expect(out).toContain('Run now!');
+        expect(out).toContain('No time.');
+        expect(out).toMatch(/Run now!\n\nNo time\./);
+    });
+
     it('validateOutput returns valid result for clean output', () => {
         const text = '"We wait."\n\nThe room stayed quiet.';
         const validation = validateOutput(text);
@@ -88,6 +142,42 @@ describe('corePipeline (Prompt 2A)', () => {
         expect(result.rebuiltText.length).toBeGreaterThan(0);
         expect(result.scenes.length).toBeGreaterThan(0);
         expect(result.outputText.length).toBeGreaterThan(0);
+        expect(result.outputText).toContain('[CAMERA:');
+        expect(result.outputText).toContain('[SCENE:');
+        expect(result.outputText).toContain('[SFX: gunshot]');
         expect(result.validation).toBeDefined();
+    });
+
+    it('runCorePipeline adds transition markers between scenes', () => {
+        const input =
+            'The room was calm and silent at first.\n\n***\n\nRun now! Danger is at the door and everyone screamed.';
+
+        const result = runCorePipeline(input);
+
+        expect(result.outputText).toContain('[TRANSITION:');
+        expect(result.outputText.match(/\[TRANSITION:/g)?.length ?? 0).toBeGreaterThanOrEqual(1);
+    });
+
+    it('runCorePipeline adds at most one tension wrapper per scene', () => {
+        const input =
+            'Run now! Danger is everywhere. The alarm screamed and footsteps rushed the hall. Everyone froze.';
+
+        const result = runCorePipeline(input);
+        const openCount = (result.outputText.match(/\[TENSION\]/g) || []).length;
+        const closeCount = (result.outputText.match(/\[\/TENSION\]/g) || []).length;
+
+        expect(openCount).toBeLessThanOrEqual(result.scenes.length);
+        expect(openCount).toBe(closeCount);
+    });
+
+    it('runCorePipeline avoids unnecessary markers on calm narrative', () => {
+        const input =
+            'Morning light touched the old library. Dust moved through the quiet aisles as she turned the page.';
+
+        const result = runCorePipeline(input);
+
+        expect(result.outputText).toContain('[SCENE:');
+        expect(result.outputText).not.toContain('[TENSION]');
+        expect(result.outputText).not.toContain('[SFX:');
     });
 });

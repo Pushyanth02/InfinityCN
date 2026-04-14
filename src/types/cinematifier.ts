@@ -77,6 +77,54 @@ export interface SceneTransition {
     toLocation?: string;
 }
 
+export interface OriginalModeScene {
+    id: string;
+    text: string;
+}
+
+// ─── Renderer Planning ───────────────────────────────────────────────────────
+
+export interface RenderCue {
+    blockId: string;
+    blockType: CinematicBlockType;
+    sceneIndex: number;
+    content: string;
+    estimatedDurationMs: number;
+    intensity: CinematicBlock['intensity'];
+    timing: CinematicBlock['timing'];
+    speaker?: string;
+    cameraDirection?: string;
+    ambience?: string;
+    emotion?: EmotionCategory;
+    tensionScore?: number;
+}
+
+export interface RenderScenePlan {
+    id: string;
+    title: string;
+    sourceParagraphCount: number;
+    blockStartIndex: number;
+    blockEndIndex: number;
+    cueCount: number;
+    estimatedDurationMs: number;
+    dominantEmotion?: EmotionCategory;
+    averageTensionScore?: number;
+}
+
+export interface RenderPlan {
+    cues: RenderCue[];
+    scenes: RenderScenePlan[];
+    totalEstimatedDurationMs: number;
+    generatedAt: number;
+}
+
+export interface PipelineStageTrace {
+    stageName: string;
+    startedAtMs: number;
+    finishedAtMs: number;
+    durationMs: number;
+}
+
 // ─── Cinematic Text Block ──────────────────────────────────────────────────────
 
 export type CinematicBlockType =
@@ -123,6 +171,7 @@ export interface CinematicBlock {
     transition?: SceneTransition;
     intensity: 'whisper' | 'normal' | 'emphasis' | 'shout' | 'explosive';
     cameraDirection?: string; // e.g., "CLOSE ON", "WIDE SHOT", "POV"
+    ambience?: string; // e.g., "rainfall", "crowd murmur", "eerie silence"
     timing?: 'slow' | 'normal' | 'quick' | 'rapid';
     emotion?: EmotionCategory;
     tensionScore?: number; // 0-100
@@ -136,6 +185,8 @@ export interface Chapter {
     number: number; // Sequential: 1, 2, 3...
     title: string; // "Chapter 1", "The Awakening", etc.
     originalText: string; // 2,000-5,000 words typical
+    originalModeText?: string; // Readability-formatted original mode text
+    originalModeScenes?: OriginalModeScene[]; // Original-mode scene segmentation
     cinematifiedText?: string; // AI-enhanced version (serialized blocks)
     cinematifiedBlocks: CinematicBlock[];
     status: ChapterStatus;
@@ -145,6 +196,11 @@ export interface Chapter {
     errorMessage?: string; // If processing failed
     toneTags?: string[];
     characters?: Record<string, CharacterAppearance>;
+    cinematizedScenes?: { title: string; paragraphs: string[] }[];
+    renderPlan?: RenderPlan;
+    stageTrace?: PipelineStageTrace[];
+    narrativeMode?: 'normal' | 'flashback' | 'dream' | 'memory';
+    povCharacter?: string;
 }
 
 // ─── Book Entity ───────────────────────────────────────────────────────────────
@@ -192,7 +248,14 @@ export type ImmersionLevel = 'minimal' | 'balanced' | 'cinematic';
 // ─── Processing State ──────────────────────────────────────────────────────────
 
 export interface ProcessingProgress {
-    phase: 'extracting' | 'segmenting' | 'cinematifying' | 'complete' | 'error';
+    phase:
+        | 'uploading'
+        | 'extracting'
+        | 'segmenting'
+        | 'structuring'
+        | 'cinematifying'
+        | 'complete'
+        | 'error';
     currentChapter: number;
     totalChapters: number;
     percentComplete: number;
@@ -226,6 +289,10 @@ export interface CinematificationResult {
     povCharacter?: string;
     /** Scene groups from heuristic segmentation (populated by SceneSegmentationStage) */
     scenes?: { title: string; paragraphs: string[] }[];
+    /** Runtime render cues/scenes derived from cinematic blocks */
+    renderPlan?: RenderPlan;
+    /** Per-stage execution timings for deterministic verification and debugging */
+    stageTrace?: PipelineStageTrace[];
 }
 
 export interface ChapterSegment {

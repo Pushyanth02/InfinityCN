@@ -23,7 +23,13 @@
  */
 
 import type { AIConfig } from '../../ai';
-import type { CinematicBlock, CinematificationResult } from '../../../types/cinematifier';
+import type {
+    CinematicBlock,
+    CinematificationResult,
+    PipelineStageTrace,
+    RenderPlan,
+} from '../../../types/cinematifier';
+import { buildRenderPlan } from '../../runtime/renderer';
 import { cleanExtractedText, reconstructParagraphs } from './textProcessing';
 import { cinematifyOffline } from './offlineEngine';
 import { cinematifyText } from './aiEngine';
@@ -79,6 +85,10 @@ export interface PipelineContext {
     povCharacter?: string;
     /** Scene groups from heuristic segmentation (populated by SceneSegmentationStage) */
     scenes?: { title: string; paragraphs: string[] }[];
+    /** Runtime render plan generated from cinematic blocks and scene boundaries */
+    renderPlan?: RenderPlan;
+    /** Per-stage execution timings for verification/debugging */
+    stageTrace: PipelineStageTrace[];
 }
 
 // ─── Pipeline Stage Interface ──────────────────────────────
@@ -119,7 +129,7 @@ export class ParagraphReconstructionStage implements PipelineStage {
 
     execute(context: PipelineContext): void {
         checkCancelled(context);
-        context.onProgress?.(0.10, 'Reconstructing paragraphs...');
+        context.onProgress?.(0.1, 'Reconstructing paragraphs...');
         context.text = reconstructParagraphs(context.text);
     }
 }
@@ -139,7 +149,7 @@ export class AICinematificationStage implements PipelineStage {
             context.aiConfig,
             context.onProgress,
             context.onChunk,
-            context.signal
+            context.signal,
         );
 
         context.blocks = result.blocks;
@@ -156,7 +166,7 @@ export class OfflineCinematificationStage implements PipelineStage {
 
     execute(context: PipelineContext): void {
         checkCancelled(context);
-        context.onProgress?.(0.20, 'Cinematifying (offline)...');
+        context.onProgress?.(0.2, 'Cinematifying (offline)...');
         const result = cinematifyOffline(context.text);
 
         context.blocks = result.blocks;
@@ -175,7 +185,7 @@ export class ReadabilityAnalysisStage implements PipelineStage {
 
     execute(context: PipelineContext): void {
         checkCancelled(context);
-        context.onProgress?.(0.60, 'Analyzing readability...');
+        context.onProgress?.(0.6, 'Analyzing readability...');
         context.readability = analyzeReadability(context.text);
     }
 }
@@ -186,7 +196,7 @@ export class SentimentEnrichmentStage implements PipelineStage {
 
     execute(context: PipelineContext): void {
         checkCancelled(context);
-        context.onProgress?.(0.70, 'Analyzing sentiment...');
+        context.onProgress?.(0.7, 'Analyzing sentiment...');
         context.sentiment = analyzeSentimentFlow(context.text);
 
         // Enrich blocks that lack emotion tags with sentiment-derived emotions
@@ -212,7 +222,7 @@ export class PacingAnalysisStage implements PipelineStage {
 
     execute(context: PipelineContext): void {
         checkCancelled(context);
-        context.onProgress?.(0.80, 'Analyzing pacing...');
+        context.onProgress?.(0.8, 'Analyzing pacing...');
         context.pacing = analyzePacing(context.blocks);
     }
 }
@@ -234,7 +244,7 @@ export class NarrativeAnalysisStage implements PipelineStage {
 
     execute(context: PipelineContext): void {
         checkCancelled(context);
-        context.onProgress?.(0.90, 'Analyzing narrative mode...');
+        context.onProgress?.(0.9, 'Analyzing narrative mode...');
         const paragraphs = context.text
             .split(/\n\n+/)
             .map(p => p.trim())
@@ -266,6 +276,17 @@ export class SceneSegmentationStage implements PipelineStage {
             title: deriveSceneTitle(group, i + 1),
             paragraphs: group,
         }));
+    }
+}
+
+/** Final stage: Convert cinematic blocks into runtime render cues and scene plans */
+export class RendererStage implements PipelineStage {
+    readonly name = 'Renderer';
+
+    execute(context: PipelineContext): void {
+        checkCancelled(context);
+        context.onProgress?.(0.99, 'Preparing renderer plan...');
+        context.renderPlan = buildRenderPlan(context.blocks, context.scenes);
     }
 }
 
@@ -323,11 +344,23 @@ export class CinematificationPipeline {
             onProgress: options.onProgress,
             onChunk: options.onChunk,
             signal: options.signal,
+            stageTrace: [],
         };
 
         for (const stage of this.stages) {
             checkCancelled(context);
-            await stage.execute(context);
+            const startedAtMs = performance.now();
+            try {
+                await stage.execute(context);
+            } finally {
+                const finishedAtMs = performance.now();
+                context.stageTrace.push({
+                    stageName: stage.name,
+                    startedAtMs,
+                    finishedAtMs,
+                    durationMs: Math.max(0, Math.round(finishedAtMs - startedAtMs)),
+                });
+            }
         }
 
         const processingTimeMs = Math.round(performance.now() - context.startTime);
@@ -356,6 +389,8 @@ export class CinematificationPipeline {
         if (context.narrativeMode) result.narrativeMode = context.narrativeMode;
         if (context.povCharacter) result.povCharacter = context.povCharacter;
         if (context.scenes) result.scenes = context.scenes;
+        if (context.renderPlan) result.renderPlan = context.renderPlan;
+        result.stageTrace = context.stageTrace;
 
         return result;
     }
@@ -389,40 +424,44 @@ export class CinematificationPipeline {
     /**
      * Create an enriched offline pipeline with analytics stages.
      *
-     * Stages: TextCleaning → ParagraphReconstruction → ReadabilityAnalysis
-     *         → TextStatistics → NarrativeAnalysis → SceneSegmentation
-     *         → OfflineCinematification → SentimentEnrichment → PacingAnalysis
+     * Stages: TextCleaning → ParagraphReconstruction → SceneSegmentation
+     *         → NarrativeAnalysis → OfflineCinematification
+     *         → ReadabilityAnalysis → TextStatistics
+     *         → SentimentEnrichment → PacingAnalysis → Renderer
      */
     static createEnrichedOfflinePipeline(): CinematificationPipeline {
         return new CinematificationPipeline()
             .addStage(new TextCleaningStage())
             .addStage(new ParagraphReconstructionStage())
+            .addStage(new SceneSegmentationStage())
+            .addStage(new NarrativeAnalysisStage())
+            .addStage(new OfflineCinematificationStage())
             .addStage(new ReadabilityAnalysisStage())
             .addStage(new TextStatisticsStage())
-            .addStage(new NarrativeAnalysisStage())
-            .addStage(new SceneSegmentationStage())
-            .addStage(new OfflineCinematificationStage())
             .addStage(new SentimentEnrichmentStage())
-            .addStage(new PacingAnalysisStage());
+            .addStage(new PacingAnalysisStage())
+            .addStage(new RendererStage());
     }
 
     /**
      * Create an enriched AI pipeline with analytics stages.
      *
-     * Stages: TextCleaning → ParagraphReconstruction → ReadabilityAnalysis
-     *         → TextStatistics → NarrativeAnalysis → SceneSegmentation
-     *         → AICinematification → SentimentEnrichment → PacingAnalysis
+     * Stages: TextCleaning → ParagraphReconstruction → SceneSegmentation
+     *         → NarrativeAnalysis → AICinematification
+     *         → ReadabilityAnalysis → TextStatistics
+     *         → SentimentEnrichment → PacingAnalysis → Renderer
      */
     static createEnrichedAIPipeline(): CinematificationPipeline {
         return new CinematificationPipeline()
             .addStage(new TextCleaningStage())
             .addStage(new ParagraphReconstructionStage())
+            .addStage(new SceneSegmentationStage())
+            .addStage(new NarrativeAnalysisStage())
+            .addStage(new AICinematificationStage())
             .addStage(new ReadabilityAnalysisStage())
             .addStage(new TextStatisticsStage())
-            .addStage(new NarrativeAnalysisStage())
-            .addStage(new SceneSegmentationStage())
-            .addStage(new AICinematificationStage())
             .addStage(new SentimentEnrichmentStage())
-            .addStage(new PacingAnalysisStage());
+            .addStage(new PacingAnalysisStage())
+            .addStage(new RendererStage());
     }
 }
