@@ -4,6 +4,7 @@
     "version": "15.0.0",
     "type": "module",
     "scripts": {
+        "migrate:folders": "node scripts/migrate.js",
         "dev": "vite",
         "build": "tsc -b && vite build",
         "lint": "eslint .",
@@ -22,7 +23,9 @@
         "dexie": "^4.4.2",
         "fflate": "^0.8.2",
         "framer-motion": "^12.38.0",
+        "html2canvas": "^1.4.1",
         "lucide-react": "^1.8.0",
+        "pdf-lib": "^1.17.1",
         "pdfjs-dist": "^5.6.205",
         "react": "^19.2.5",
         "react-dom": "^19.2.5",
