@@ -4,8 +4,7 @@ import path from 'path';
 // Define old path to new path mapping
 // Ensure the mapping represents your actual refactor rules.
 const map = {
-  // Update this to contain all 60 of your specific components. Here is an example schema:
-    'src/ui/ErrorBoundary.tsx': 'src/app/error-boundary.tsx',
+    // Update this to contain all 60 of your specific components. Here is an example schema:  'src/components/CinematifierApp.tsx': 'src/app/App.tsx',    'src/ui/ErrorBoundary.tsx': 'src/app/error-boundary.tsx',
     'src/store/cinematifierStore.ts': 'src/app/store.ts',
     'src/styles.css': 'src/assets/styles/global-styles.css',
     'src/css/variables.css': 'src/assets/styles/global-vars.css',
