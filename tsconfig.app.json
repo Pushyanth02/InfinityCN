@@ -21,12 +21,11 @@
         "erasableSyntaxOnly": true,
         "noFallthroughCasesInSwitch": true,
         "noUncheckedSideEffectImports": true,
-        "baseUrl": ".",
         "paths": {
-            "@app/*": ["src/app/*"],
-            "@features/*": ["src/features/*"],
-            "@shared/*": ["src/shared/*"],
-            "@assets/*": ["src/assets/*"]
+            "@app/*": ["./src/app/*"],
+            "@features/*": ["./src/features/*"],
+            "@shared/*": ["./src/shared/*"],
+            "@assets/*": ["./src/assets/*"]
         }
     },
     "include": ["src"]
