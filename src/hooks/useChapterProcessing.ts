@@ -170,7 +170,13 @@ export function useChapterProcessing(
     // Auto-process chapter when it changes
     useEffect(() => {
         if (currentChapter && !currentChapter.isProcessed && readerMode === 'cinematified') {
-            processCurrentChapter();
+            const timer = window.setTimeout(() => {
+                void processCurrentChapter();
+            }, 0);
+
+            return () => {
+                window.clearTimeout(timer);
+            };
         }
     }, [currentChapter, readerMode, processCurrentChapter]);
 

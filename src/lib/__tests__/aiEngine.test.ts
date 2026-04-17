@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { cinematifyText, validateAICinematification } from '../cinematifier/aiEngine';
 import * as aiModule from '../ai';
 import type { AIConfig } from '../ai';
-import * as embeddingsModule from '../embeddings';
+import * as embeddingsModule from '../ai/embeddings';
 import type { CinematicBlock } from '../../types/cinematifier';
 
 // Mock the AI module
@@ -16,7 +16,7 @@ vi.mock('../ai', async importOriginal => {
 });
 
 // Mock the embeddings module
-vi.mock('../embeddings', () => ({
+vi.mock('../ai/embeddings', () => ({
     generateEmbedding: vi.fn(),
     retrieveRelevantContext: vi.fn(),
 }));

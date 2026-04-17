@@ -27,7 +27,7 @@
  * ```
  */
 
-import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import {
     RenderBridge,
     type RenderBridgeConfig,
@@ -96,18 +96,15 @@ export interface UseRenderBridgeReturn {
 }
 
 export function useRenderBridge(options?: UseRenderBridgeOptions): UseRenderBridgeReturn {
-    const configRef = useRef<RenderBridgeConfig>({
-        mode: options?.mode ?? 'cinematized',
-        estimatedTokensPerScene: options?.estimatedTokensPerScene,
-        stateUpdateThrottleMs: options?.stateUpdateThrottleMs,
-    });
-
-    // Stable bridge instance across renders
-    const bridgeRef = useRef<RenderBridge | null>(null);
-    if (!bridgeRef.current) {
-        bridgeRef.current = new RenderBridge(configRef.current);
-    }
-    const bridge = bridgeRef.current;
+    // Keep a single bridge instance for the hook lifecycle.
+    const [bridge] = useState(
+        () =>
+            new RenderBridge({
+                mode: options?.mode ?? 'cinematized',
+                estimatedTokensPerScene: options?.estimatedTokensPerScene,
+                stateUpdateThrottleMs: options?.stateUpdateThrottleMs,
+            } as RenderBridgeConfig),
+    );
 
     // React state mirror of the bridge's reader state
     const [readerState, setReaderState] = useState<ReaderState>(() => bridge.state);
@@ -184,10 +181,9 @@ export function useRenderBridge(options?: UseRenderBridgeOptions): UseRenderBrid
     // Cleanup on unmount
     useEffect(() => {
         return () => {
-            bridgeRef.current?.destroy();
-            bridgeRef.current = null;
+            bridge.destroy();
         };
-    }, []);
+    }, [bridge]);
 
     // Memoized callbacks
     const bindStream = useCallback(

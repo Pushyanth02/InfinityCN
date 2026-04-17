@@ -120,7 +120,6 @@ export function useReaderDiscovery(): UseReaderDiscoveryResult {
     useEffect(() => {
         const requestedWord = wordQuery.trim();
         if (requestedWord.length < MIN_WORD_LOOKUP_LENGTH) {
-            setWordSuggestions([]);
             return;
         }
 
@@ -161,6 +160,9 @@ export function useReaderDiscovery(): UseReaderDiscoveryResult {
         };
     }, [wordInsight?.word, wordQuery, runLookup]);
 
+    const visibleWordSuggestions =
+        wordQuery.trim().length < MIN_WORD_LOOKUP_LENGTH ? [] : wordSuggestions;
+
     return {
         wordQuery,
         setWordQuery,
@@ -168,7 +170,7 @@ export function useReaderDiscovery(): UseReaderDiscoveryResult {
         isWordLookupLoading,
         wordLookupError,
         wordInsight,
-        wordSuggestions,
+        wordSuggestions: visibleWordSuggestions,
         recentWords,
     };
 }
