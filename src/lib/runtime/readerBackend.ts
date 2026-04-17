@@ -269,7 +269,7 @@ export function getReaderAnalyticsSummary(
                     return null;
             }
         })
-        .filter((value): value is number => typeof value === 'number');
+        .filter((value): value is 30 | 52 | 74 | 92 => value !== null);
 
     const cinematicAverageTension =
         blockTensionValues.length > 0
