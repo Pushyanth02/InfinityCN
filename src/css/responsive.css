@@ -283,6 +283,10 @@
         display: none;
     }
 
+    .cine-sidebar-toggle--insights {
+        display: none;
+    }
+
     .cine-chapter-nav-sidebar {
         width: 240px;
     }
@@ -339,6 +343,10 @@
         display: none;
     }
     .cine-mode-btn span {
+        display: none;
+    }
+
+    .cine-sidebar-toggle {
         display: none;
     }
 

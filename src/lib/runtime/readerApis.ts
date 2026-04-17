@@ -1,237 +1,64 @@
 const DEFAULT_TIMEOUT_MS = 2400;
 const WORD_CACHE_TTL_MS = 45 * 60 * 1000;
-const BOOK_CACHE_TTL_MS = 20 * 60 * 1000;
+const SUGGESTION_CACHE_TTL_MS = 15 * 60 * 1000;
 
 interface CacheEntry<T> {
     value: T;
     expiresAt: number;
 }
 
-export type ReaderApiSource =
-    | 'dictionaryapi'
-    | 'datamuse'
-    | 'openlibrary'
-    | 'gutendex'
-    | 'googlebooks'
-    | 'jikan'
-    | 'kitsu';
-
-export type ReaderContentType = 'novel' | 'manga' | 'manhwa' | 'manhua';
-
-export type ReaderSuggestionSource = Extract<
-    ReaderApiSource,
-    'openlibrary' | 'gutendex' | 'googlebooks' | 'jikan' | 'kitsu'
->;
+export type ReaderApiSource = 'dictionaryapi' | 'datamuse';
 
 export interface ReaderWordMeaning {
     partOfSpeech?: string;
     definition: string;
     example?: string;
+    synonyms: string[];
+    antonyms: string[];
 }
 
 export interface ReaderWordInsight {
     word: string;
     phonetic?: string;
+    audioUrl?: string;
     meanings: ReaderWordMeaning[];
     relatedWords: string[];
+    antonyms: string[];
+    examples: string[];
+    syllableCount?: number;
     sources: ReaderApiSource[];
-}
-
-export interface ReaderBookSuggestion {
-    title: string;
-    author?: string;
-    year?: number;
-    source: ReaderSuggestionSource;
-    contentType: ReaderContentType;
-    score?: number;
-    summary?: string;
-}
-
-export interface ReaderBookSuggestionOptions {
-    timeoutMs?: number;
-    includeTypes?: ReaderContentType[];
-    limit?: number;
 }
 
 interface DictionaryMeaning {
     partOfSpeech?: string;
+    synonyms?: string[];
+    antonyms?: string[];
     definitions?: Array<{
         definition?: string;
         example?: string;
+        synonyms?: string[];
+        antonyms?: string[];
     }>;
 }
 
 interface DictionaryEntry {
-    word?: string;
     phonetic?: string;
+    phonetics?: Array<{
+        text?: string;
+        audio?: string;
+    }>;
     meanings?: DictionaryMeaning[];
 }
 
 interface DatamuseEntry {
     word?: string;
-}
-
-interface OpenLibraryDoc {
-    title?: string;
-    author_name?: string[];
-    first_publish_year?: number;
-    subject?: string[];
-}
-
-interface OpenLibrarySearchResponse {
-    docs?: OpenLibraryDoc[];
-}
-
-interface GutendexAuthor {
-    name?: string;
-}
-
-interface GutendexBook {
-    title?: string;
-    authors?: GutendexAuthor[];
-    subjects?: string[];
-    summaries?: string[];
-}
-
-interface GutendexResponse {
-    results?: GutendexBook[];
-}
-
-interface GoogleBooksVolumeInfo {
-    title?: string;
-    authors?: string[];
-    publishedDate?: string;
-    categories?: string[];
-    description?: string;
-    averageRating?: number;
-}
-
-interface GoogleBooksItem {
-    volumeInfo?: GoogleBooksVolumeInfo;
-}
-
-interface GoogleBooksResponse {
-    items?: GoogleBooksItem[];
-}
-
-interface JikanMangaEntity {
-    name?: string;
-}
-
-interface JikanMangaPublished {
-    from?: string;
-}
-
-interface JikanMangaEntry {
-    title?: string;
-    title_english?: string;
-    type?: string;
-    synopsis?: string;
     score?: number;
-    authors?: JikanMangaEntity[];
-    genres?: JikanMangaEntity[];
-    themes?: JikanMangaEntity[];
-    published?: JikanMangaPublished;
-}
-
-interface JikanMangaResponse {
-    data?: JikanMangaEntry[];
-}
-
-interface KitsuMangaAttributes {
-    canonicalTitle?: string;
-    synopsis?: string;
-    averageRating?: string;
-    subtype?: string;
-    mangaType?: string;
-    startDate?: string;
-}
-
-interface KitsuMangaEntry {
-    attributes?: KitsuMangaAttributes;
-}
-
-interface KitsuMangaResponse {
-    data?: KitsuMangaEntry[];
+    numSyllables?: number;
+    tags?: string[];
 }
 
 const wordInsightCache = new Map<string, CacheEntry<ReaderWordInsight | null>>();
-const bookSuggestionCache = new Map<string, CacheEntry<ReaderBookSuggestion[]>>();
-
-const ALL_CONTENT_TYPES: ReaderContentType[] = ['novel', 'manga', 'manhwa', 'manhua'];
-
-const READER_SOURCE_PRIORITY: ReaderSuggestionSource[] = [
-    'openlibrary',
-    'googlebooks',
-    'gutendex',
-    'jikan',
-    'kitsu',
-];
-
-function normalizeText(value: string): string {
-    return value
-        .toLowerCase()
-        .replace(/[^a-z0-9\s]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-}
-
-function buildTypeCacheKey(includeTypes: ReaderContentType[]): string {
-    if (includeTypes.length === 0) return 'all';
-    return [...includeTypes].sort().join('|');
-}
-
-function parseYear(value?: string): number | undefined {
-    if (!value) return undefined;
-    const match = value.match(/\b(\d{4})\b/);
-    if (!match) return undefined;
-
-    const year = Number(match[1]);
-    if (!Number.isFinite(year) || year < 1000 || year > 2100) return undefined;
-    return year;
-}
-
-function normalizeScore(value: number | undefined): number | undefined {
-    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return undefined;
-
-    const normalized = value > 10 ? value / 10 : value;
-    return Math.round(normalized * 10) / 10;
-}
-
-function inferContentType(hints: Array<string | undefined>): ReaderContentType {
-    const normalizedHints = hints
-        .filter((hint): hint is string => Boolean(hint))
-        .join(' ')
-        .toLowerCase();
-
-    if (
-        normalizedHints.includes('manhwa') ||
-        normalizedHints.includes('korean webtoon') ||
-        normalizedHints.includes('korean comics')
-    ) {
-        return 'manhwa';
-    }
-
-    if (
-        normalizedHints.includes('manhua') ||
-        normalizedHints.includes('chinese comics') ||
-        normalizedHints.includes('donghua source')
-    ) {
-        return 'manhua';
-    }
-
-    if (
-        normalizedHints.includes('manga') ||
-        normalizedHints.includes('shonen') ||
-        normalizedHints.includes('shojo') ||
-        normalizedHints.includes('seinen') ||
-        normalizedHints.includes('josei')
-    ) {
-        return 'manga';
-    }
-
-    return 'novel';
-}
+const wordSuggestionCache = new Map<string, CacheEntry<string[]>>();
 
 function normalizeWord(value: string): string {
     return value
@@ -309,13 +136,26 @@ function setCached<T>(
 
 function parseDictionary(payload: DictionaryEntry[] | null): {
     phonetic?: string;
+    audioUrl?: string;
     meanings: ReaderWordMeaning[];
+    synonyms: string[];
+    antonyms: string[];
+    examples: string[];
 } {
     if (!payload || payload.length === 0) {
-        return { meanings: [] };
+        return {
+            meanings: [],
+            synonyms: [],
+            antonyms: [],
+            examples: [],
+        };
     }
 
     const first = payload[0];
+    const dictionarySynonyms: string[] = [];
+    const dictionaryAntonyms: string[] = [];
+    const dictionaryExamples: string[] = [];
+
     const meanings = (first.meanings ?? [])
         .flatMap(meaning => {
             const definitions = meaning.definitions ?? [];
@@ -323,24 +163,68 @@ function parseDictionary(payload: DictionaryEntry[] | null): {
                 partOfSpeech: meaning.partOfSpeech,
                 definition: definition.definition?.trim() ?? '',
                 example: definition.example?.trim() || undefined,
+                synonyms: uniqueStrings([
+                    ...(meaning.synonyms ?? []),
+                    ...(definition.synonyms ?? []),
+                ]),
+                antonyms: uniqueStrings([
+                    ...(meaning.antonyms ?? []),
+                    ...(definition.antonyms ?? []),
+                ]),
             }));
         })
-        .filter(meaning => meaning.definition.length > 0)
+        .filter(meaning => {
+            if (meaning.definition.length === 0) {
+                return false;
+            }
+
+            dictionarySynonyms.push(...meaning.synonyms);
+            dictionaryAntonyms.push(...meaning.antonyms);
+            if (meaning.example) {
+                dictionaryExamples.push(meaning.example);
+            }
+
+            return true;
+        })
         .slice(0, 6);
 
+    const phoneticText =
+        first.phonetic?.trim() ||
+        first.phonetics?.map(entry => entry.text?.trim() ?? '').find(Boolean) ||
+        undefined;
+    const audioUrl =
+        first.phonetics?.map(entry => entry.audio?.trim() ?? '').find(Boolean) || undefined;
+
     return {
-        phonetic: first.phonetic?.trim() || undefined,
+        phonetic: phoneticText,
+        audioUrl,
         meanings,
+        synonyms: uniqueStrings(dictionarySynonyms),
+        antonyms: uniqueStrings(dictionaryAntonyms),
+        examples: uniqueStrings(dictionaryExamples).slice(0, 4),
     };
 }
 
-function parseRelatedWords(payload: DatamuseEntry[] | null): string[] {
+function parseWordEntries(payload: DatamuseEntry[] | null): string[] {
     if (!payload || payload.length === 0) return [];
 
     return uniqueStrings(payload.map(entry => entry.word?.trim() ?? '').filter(Boolean)).slice(
         0,
-        10,
+        12,
     );
+}
+
+function parseSyllableCount(payload: DatamuseEntry[] | null): number | undefined {
+    if (!payload || payload.length === 0) return undefined;
+
+    const value = payload[0]?.numSyllables;
+    if (typeof value !== 'number' || value <= 0) return undefined;
+    return Math.round(value);
+}
+
+function mergeLexicalWords(baseWord: string, ...groups: string[][]): string[] {
+    const lowered = baseWord.toLowerCase();
+    return uniqueStrings(groups.flat()).filter(word => word.toLowerCase() !== lowered);
 }
 
 export async function lookupReaderWordInsight(
@@ -355,7 +239,13 @@ export async function lookupReaderWordInsight(
 
     const timeoutMs = Math.max(1200, options?.timeoutMs ?? DEFAULT_TIMEOUT_MS);
 
-    const [dictionaryPayload, relatedPayload] = await Promise.all([
+    const [
+        dictionaryPayload,
+        synonymPayload,
+        relatedPayload,
+        antonymPayload,
+        syllablePayload,
+    ] = await Promise.all([
         fetchJson<DictionaryEntry[]>(
             `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`,
             timeoutMs,
@@ -364,27 +254,54 @@ export async function lookupReaderWordInsight(
             `https://api.datamuse.com/words?rel_syn=${encodeURIComponent(word)}&max=12`,
             timeoutMs,
         ),
+        fetchJson<DatamuseEntry[]>(
+            `https://api.datamuse.com/words?ml=${encodeURIComponent(word)}&max=10`,
+            timeoutMs,
+        ),
+        fetchJson<DatamuseEntry[]>(
+            `https://api.datamuse.com/words?rel_ant=${encodeURIComponent(word)}&max=10`,
+            timeoutMs,
+        ),
+        fetchJson<DatamuseEntry[]>(
+            `https://api.datamuse.com/words?sp=${encodeURIComponent(word)}&md=s&max=1`,
+            timeoutMs,
+        ),
     ]);
 
     const dictionary = parseDictionary(dictionaryPayload);
-    const relatedWords = parseRelatedWords(relatedPayload);
+    const relatedWords = mergeLexicalWords(
+        word,
+        dictionary.synonyms,
+        parseWordEntries(synonymPayload),
+        parseWordEntries(relatedPayload),
+    ).slice(0, 14);
+    const antonyms = mergeLexicalWords(
+        word,
+        dictionary.antonyms,
+        parseWordEntries(antonymPayload),
+    ).slice(0, 10);
+    const syllableCount = parseSyllableCount(syllablePayload);
     const sources: ReaderApiSource[] = [];
 
     if (dictionary.meanings.length > 0) {
         sources.push('dictionaryapi');
     }
-    if (relatedWords.length > 0) {
+    if (relatedWords.length > 0 || antonyms.length > 0 || typeof syllableCount === 'number') {
         sources.push('datamuse');
     }
 
     const insight: ReaderWordInsight | null =
-        dictionary.meanings.length === 0 && relatedWords.length === 0
+        dictionary.meanings.length === 0 && relatedWords.length === 0 && antonyms.length === 0
             ? null
             : {
                   word,
                   phonetic: dictionary.phonetic,
+                  audioUrl: dictionary.audioUrl,
                   meanings: dictionary.meanings,
                   relatedWords,
+                  antonyms,
+                  examples: dictionary.examples,
+                  syllableCount,
                   sources,
               };
 
@@ -392,220 +309,30 @@ export async function lookupReaderWordInsight(
     return insight;
 }
 
-function parseOpenLibrarySuggestions(
-    payload: OpenLibrarySearchResponse | null,
-): ReaderBookSuggestion[] {
-    if (!payload?.docs?.length) return [];
+export async function searchReaderWordCompletions(
+    rawQuery: string,
+    options?: { timeoutMs?: number },
+): Promise<string[]> {
+    const query = normalizeWord(rawQuery);
+    if (query.length < 2) return [];
 
-    return payload.docs
-        .map(doc => ({
-            title: doc.title?.trim() ?? '',
-            author: doc.author_name?.[0]?.trim() || undefined,
-            year: typeof doc.first_publish_year === 'number' ? doc.first_publish_year : undefined,
-            contentType: inferContentType(doc.subject ?? []),
-            source: 'openlibrary' as const,
-        }))
-        .filter(suggestion => suggestion.title.length > 0)
-        .slice(0, 6);
-}
-
-function parseGutendexSuggestions(payload: GutendexResponse | null): ReaderBookSuggestion[] {
-    if (!payload?.results?.length) return [];
-
-    return payload.results
-        .map(result => ({
-            title: result.title?.trim() ?? '',
-            author: result.authors?.[0]?.name?.trim() || undefined,
-            contentType: inferContentType(result.subjects ?? []),
-            summary: result.summaries?.[0]?.trim() || undefined,
-            source: 'gutendex' as const,
-        }))
-        .filter(suggestion => suggestion.title.length > 0)
-        .slice(0, 6);
-}
-
-function parseGoogleBooksSuggestions(payload: GoogleBooksResponse | null): ReaderBookSuggestion[] {
-    if (!payload?.items?.length) return [];
-
-    return payload.items
-        .map(item => item.volumeInfo)
-        .filter((info): info is GoogleBooksVolumeInfo => Boolean(info))
-        .map(info => ({
-            title: info.title?.trim() ?? '',
-            author: info.authors?.[0]?.trim() || undefined,
-            year: parseYear(info.publishedDate),
-            contentType: inferContentType(info.categories ?? []),
-            score: normalizeScore(info.averageRating),
-            summary: info.description?.trim() || undefined,
-            source: 'googlebooks' as const,
-        }))
-        .filter(suggestion => suggestion.title.length > 0)
-        .slice(0, 6);
-}
-
-function parseJikanSuggestions(payload: JikanMangaResponse | null): ReaderBookSuggestion[] {
-    if (!payload?.data?.length) return [];
-
-    return payload.data
-        .map(entry => {
-            const genreHints = [
-                entry.type,
-                ...(entry.genres?.map(genre => genre.name) ?? []),
-                ...(entry.themes?.map(theme => theme.name) ?? []),
-            ];
-
-            return {
-                title: entry.title_english?.trim() || entry.title?.trim() || '',
-                author: entry.authors?.[0]?.name?.trim() || undefined,
-                year: parseYear(entry.published?.from),
-                contentType: inferContentType(genreHints),
-                score: normalizeScore(entry.score),
-                summary: entry.synopsis?.trim() || undefined,
-                source: 'jikan' as const,
-            };
-        })
-        .filter(suggestion => suggestion.title.length > 0)
-        .slice(0, 6);
-}
-
-function parseKitsuSuggestions(payload: KitsuMangaResponse | null): ReaderBookSuggestion[] {
-    if (!payload?.data?.length) return [];
-
-    return payload.data
-        .map(entry => entry.attributes)
-        .filter((attributes): attributes is KitsuMangaAttributes => Boolean(attributes))
-        .map(attributes => ({
-            title: attributes.canonicalTitle?.trim() ?? '',
-            year: parseYear(attributes.startDate),
-            contentType: inferContentType([
-                attributes.subtype,
-                attributes.mangaType,
-                attributes.synopsis,
-            ]),
-            score: normalizeScore(Number(attributes.averageRating)),
-            summary: attributes.synopsis?.trim() || undefined,
-            source: 'kitsu' as const,
-        }))
-        .filter(suggestion => suggestion.title.length > 0)
-        .slice(0, 6);
-}
-
-function getSourcePriority(source: ReaderSuggestionSource): number {
-    const index = READER_SOURCE_PRIORITY.indexOf(source);
-    return index === -1 ? READER_SOURCE_PRIORITY.length : index;
-}
-
-function mergeBookSuggestions(
-    openLibrary: ReaderBookSuggestion[],
-    gutendex: ReaderBookSuggestion[],
-    googleBooks: ReaderBookSuggestion[],
-    jikan: ReaderBookSuggestion[],
-    kitsu: ReaderBookSuggestion[],
-    includeTypes: ReaderContentType[],
-    limit: number,
-): ReaderBookSuggestion[] {
-    const allowedTypes =
-        includeTypes.length > 0 ? new Set(includeTypes) : new Set(ALL_CONTENT_TYPES);
-    const merged = [...openLibrary, ...googleBooks, ...gutendex, ...jikan, ...kitsu]
-        .filter(suggestion => allowedTypes.has(suggestion.contentType))
-        .sort((left, right) => {
-            const sourceDelta = getSourcePriority(left.source) - getSourcePriority(right.source);
-            if (sourceDelta !== 0) return sourceDelta;
-
-            const scoreDelta = (right.score ?? 0) - (left.score ?? 0);
-            if (Math.abs(scoreDelta) > 0.01) return scoreDelta;
-
-            return left.title.localeCompare(right.title);
-        });
-
-    const seen = new Set<string>();
-    const result: ReaderBookSuggestion[] = [];
-
-    for (const suggestion of merged) {
-        const key = `${normalizeText(suggestion.title)}|${normalizeText(suggestion.author ?? '')}`;
-        if (seen.has(key)) continue;
-
-        seen.add(key);
-        result.push(suggestion);
-
-        if (result.length >= limit) break;
-    }
-
-    return result;
-}
-
-function resolveSuggestionTypes(types?: ReaderContentType[]): ReaderContentType[] {
-    if (!types || types.length === 0) return ALL_CONTENT_TYPES;
-
-    const normalized = uniqueStrings(types)
-        .map(type => type.toLowerCase())
-        .filter((type): type is ReaderContentType =>
-            (ALL_CONTENT_TYPES as string[]).includes(type),
-        );
-
-    return normalized.length > 0 ? normalized : ALL_CONTENT_TYPES;
-}
-
-export async function fetchReaderStorySuggestions(
-    rawTitle: string,
-    options?: ReaderBookSuggestionOptions,
-): Promise<ReaderBookSuggestion[]> {
-    const title = rawTitle.trim();
-    if (!title) return [];
-
-    const includeTypes = resolveSuggestionTypes(options?.includeTypes);
-    const limit = Math.max(4, Math.min(24, options?.limit ?? 10));
-
-    const cacheKey = `${normalizeText(title)}|${buildTypeCacheKey(includeTypes)}|${limit}`;
-    const cached = getCached(bookSuggestionCache, cacheKey);
+    const cached = getCached(wordSuggestionCache, query);
     if (cached !== null) return cached;
 
-    const timeoutMs = Math.max(1200, options?.timeoutMs ?? DEFAULT_TIMEOUT_MS);
-    const encoded = encodeURIComponent(title);
-
-    const [openLibraryPayload, gutendexPayload, googleBooksPayload, jikanPayload, kitsuPayload] =
-        await Promise.all([
-            fetchJson<OpenLibrarySearchResponse>(
-                `https://openlibrary.org/search.json?title=${encoded}&limit=8`,
-                timeoutMs,
-            ),
-            fetchJson<GutendexResponse>(`https://gutendex.com/books?search=${encoded}`, timeoutMs),
-            fetchJson<GoogleBooksResponse>(
-                `https://www.googleapis.com/books/v1/volumes?q=intitle:${encoded}&maxResults=8&printType=books`,
-                timeoutMs,
-            ),
-            fetchJson<JikanMangaResponse>(
-                `https://api.jikan.moe/v4/manga?q=${encoded}&limit=8&sfw=true`,
-                timeoutMs,
-            ),
-            fetchJson<KitsuMangaResponse>(
-                `https://kitsu.io/api/edge/manga?filter[text]=${encoded}&page[limit]=8`,
-                timeoutMs,
-            ),
-        ]);
-
-    const suggestions = mergeBookSuggestions(
-        parseOpenLibrarySuggestions(openLibraryPayload),
-        parseGutendexSuggestions(gutendexPayload),
-        parseGoogleBooksSuggestions(googleBooksPayload),
-        parseJikanSuggestions(jikanPayload),
-        parseKitsuSuggestions(kitsuPayload),
-        includeTypes,
-        limit,
+    const timeoutMs = Math.max(1000, options?.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+    const payload = await fetchJson<DatamuseEntry[]>(
+        `https://api.datamuse.com/sug?s=${encodeURIComponent(query)}&max=10`,
+        timeoutMs,
     );
 
-    setCached(bookSuggestionCache, cacheKey, suggestions, BOOK_CACHE_TTL_MS);
+    const suggestions = parseWordEntries(payload)
+        .filter(word => word.toLowerCase() !== query)
+        .slice(0, 8);
+    setCached(wordSuggestionCache, query, suggestions, SUGGESTION_CACHE_TTL_MS);
     return suggestions;
-}
-
-export async function fetchReaderBookSuggestions(
-    rawTitle: string,
-    options?: ReaderBookSuggestionOptions,
-): Promise<ReaderBookSuggestion[]> {
-    return fetchReaderStorySuggestions(rawTitle, options);
 }
 
 export function clearReaderApiCaches(): void {
     wordInsightCache.clear();
-    bookSuggestionCache.clear();
+    wordSuggestionCache.clear();
 }

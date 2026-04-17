@@ -19,7 +19,7 @@ const CinematicReader = lazy(() =>
     import('./CinematicReader').then(m => ({ default: m.CinematicReader })),
 );
 const CinematifierSettings = lazy(() =>
-    import('./CinematifierSettings').then(m => ({ default: m.default })),
+    import('../features/settings/components/AppSettings').then(m => ({ default: m.default })),
 );
 
 // ─── Main App Component ────────────────────────────────────

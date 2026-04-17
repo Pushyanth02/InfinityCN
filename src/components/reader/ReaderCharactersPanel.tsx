@@ -1,44 +1,20 @@
 import React from 'react';
-import type { CharacterAppearance } from '../../types/cinematifier';
+import { ChevronRight } from 'lucide-react';
 import type { ReaderAnalyticsSummary } from '../../lib/runtime/readerBackend';
-import type {
-    ReaderBookSuggestion,
-    ReaderContentType,
-    ReaderSuggestionSource,
-    ReaderWordInsight,
-} from '../../lib/runtime/readerApis';
-
-type ReaderSuggestionFilter = ReaderContentType | 'all';
-
-const SUGGESTION_FILTERS: Array<{ value: ReaderSuggestionFilter; label: string }> = [
-    { value: 'all', label: 'All' },
-    { value: 'novel', label: 'Novel' },
-    { value: 'manga', label: 'Manga' },
-    { value: 'manhwa', label: 'Manhwa' },
-    { value: 'manhua', label: 'Manhua' },
-];
-
-const SOURCE_LABELS: Record<ReaderSuggestionSource, string> = {
-    openlibrary: 'Open Library',
-    gutendex: 'Gutendex',
-    googlebooks: 'Google Books',
-    jikan: 'Jikan',
-    kitsu: 'Kitsu',
-};
+import type { ReaderWordInsight } from '../../lib/runtime/readerApis';
 
 interface ReaderCharactersPanelProps {
-    characters?: Record<string, CharacterAppearance>;
     insights: ReaderAnalyticsSummary | null;
+    isOpen: boolean;
+    onClose: () => void;
     wordQuery: string;
     onWordQueryChange: (value: string) => void;
     onLookupWord: (explicitWord?: string) => Promise<void>;
     isWordLookupLoading: boolean;
     wordLookupError: string | null;
     wordInsight: ReaderWordInsight | null;
-    bookSuggestions: ReaderBookSuggestion[];
-    isSuggestionsLoading: boolean;
-    suggestionFilter: ReaderSuggestionFilter;
-    onSuggestionFilterChange: (filter: ReaderSuggestionFilter) => void;
+    wordSuggestions: string[];
+    recentWords: string[];
 }
 
 function formatMinutes(minutes: number): string {
@@ -50,40 +26,40 @@ function formatMinutes(minutes: number): string {
     return `${hours}h ${rest}m`;
 }
 
-function formatContentType(type: ReaderContentType): string {
-    switch (type) {
-        case 'novel':
-            return 'Novel';
-        case 'manga':
-            return 'Manga';
-        case 'manhwa':
-            return 'Manhwa';
-        case 'manhua':
-            return 'Manhua';
-    }
-}
-
 export const ReaderCharactersPanel: React.FC<ReaderCharactersPanelProps> = ({
-    characters,
     insights,
+    isOpen,
+    onClose,
     wordQuery,
     onWordQueryChange,
     onLookupWord,
     isWordLookupLoading,
     wordLookupError,
     wordInsight,
-    bookSuggestions,
-    isSuggestionsLoading,
-    suggestionFilter,
-    onSuggestionFilterChange,
+    wordSuggestions,
+    recentWords,
 }) => {
-    const sortedCharacters = Object.entries(characters ?? {})
-        .sort(([, a], [, b]) => b.dialogueCount - a.dialogueCount)
-        .slice(0, 8);
-    const meanings = wordInsight?.meanings.slice(0, 3) ?? [];
+    const meanings = wordInsight?.meanings.slice(0, 4) ?? [];
+    const sourceLabel = wordInsight?.sources.join(' + ') ?? null;
 
     return (
-        <aside className="cine-insights-sidebar" aria-label="Character panel">
+        <aside
+            className={`cine-insights-sidebar ${isOpen ? '' : 'is-closed'}`}
+            aria-label="Reader insights panel"
+        >
+            <div className="cine-insights-header">
+                <h2 className="cine-insights-title">Insights</h2>
+                <button
+                    type="button"
+                    className="cine-sidebar-close"
+                    onClick={onClose}
+                    aria-label="Hide insights sidebar"
+                    title="Hide insights sidebar"
+                >
+                    <ChevronRight size={16} />
+                </button>
+            </div>
+
             <section className="cine-insight-section">
                 <h3 className="cine-insight-section-title">Reading Pace</h3>
                 {insights ? (
@@ -123,32 +99,54 @@ export const ReaderCharactersPanel: React.FC<ReaderCharactersPanelProps> = ({
             <section className="cine-insight-section">
                 <h3 className="cine-insight-section-title">Cinematic Depth</h3>
                 {insights ? (
-                    <div className="cine-insight-stat-grid">
-                        <div className="cine-insight-stat-card">
-                            <span className="cine-insight-stat-label">Scenes</span>
-                            <strong className="cine-insight-stat-value">
-                                {insights.cinematicSceneCount}
-                            </strong>
+                    <>
+                        <div className="cine-insight-stat-grid">
+                            <div className="cine-insight-stat-card">
+                                <span className="cine-insight-stat-label">Depth</span>
+                                <strong className="cine-insight-stat-value">
+                                    {insights.cinematicDepthScore}/100
+                                </strong>
+                            </div>
+                            <div className="cine-insight-stat-card">
+                                <span className="cine-insight-stat-label">Rhythm</span>
+                                <strong className="cine-insight-stat-value">
+                                    {insights.cinematicRhythm}
+                                </strong>
+                            </div>
+                            <div className="cine-insight-stat-card">
+                                <span className="cine-insight-stat-label">Emotions</span>
+                                <strong className="cine-insight-stat-value">
+                                    {insights.cinematicEmotionRange}
+                                </strong>
+                            </div>
+                            <div className="cine-insight-stat-card">
+                                <span className="cine-insight-stat-label">Swing</span>
+                                <strong className="cine-insight-stat-value">
+                                    {insights.cinematicTensionSwing}
+                                </strong>
+                            </div>
                         </div>
-                        <div className="cine-insight-stat-card">
-                            <span className="cine-insight-stat-label">Cues</span>
-                            <strong className="cine-insight-stat-value">
-                                {insights.cinematicCueCount}
-                            </strong>
+                        <div className="cine-insight-chip-row">
+                            <span className="cine-insight-chip">
+                                Scenes {insights.cinematicSceneCount}
+                            </span>
+                            <span className="cine-insight-chip">Cues {insights.cinematicCueCount}</span>
+                            <span className="cine-insight-chip">
+                                Dialogue {insights.cinematicDialogueRatio}%
+                            </span>
+                            <span className="cine-insight-chip">
+                                Craft {insights.cinematicSfxCount + insights.cinematicTransitionCount}
+                            </span>
                         </div>
-                        <div className="cine-insight-stat-card">
-                            <span className="cine-insight-stat-label">Tension</span>
-                            <strong className="cine-insight-stat-value">
-                                {insights.cinematicAverageTension}
-                            </strong>
+                        <div className="cine-insight-chip-row">
+                            <span className="cine-insight-chip">
+                                Tension {insights.cinematicAverageTension}
+                            </span>
+                            <span className="cine-insight-chip">
+                                Mood {insights.cinematicDominantEmotion ?? 'n/a'}
+                            </span>
                         </div>
-                        <div className="cine-insight-stat-card">
-                            <span className="cine-insight-stat-label">Mood</span>
-                            <strong className="cine-insight-stat-value">
-                                {insights.cinematicDominantEmotion ?? 'n/a'}
-                            </strong>
-                        </div>
-                    </div>
+                    </>
                 ) : (
                     <p className="cine-character-empty">
                         Cinematic metrics load after chapter analysis.
@@ -171,6 +169,8 @@ export const ReaderCharactersPanel: React.FC<ReaderCharactersPanelProps> = ({
                         onChange={event => onWordQueryChange(event.target.value)}
                         placeholder="Lookup a word"
                         aria-label="Lookup a word"
+                        autoComplete="off"
+                        spellCheck={false}
                     />
                     <button
                         type="submit"
@@ -183,12 +183,65 @@ export const ReaderCharactersPanel: React.FC<ReaderCharactersPanelProps> = ({
 
                 {wordLookupError && <p className="cine-word-lens-error">{wordLookupError}</p>}
 
+                {wordSuggestions.length > 0 && (
+                    <div className="cine-word-lens-supplement">
+                        <p className="cine-word-lens-caption">Suggestions</p>
+                        <div className="cine-word-lens-tags">
+                            {wordSuggestions.map(word => (
+                                <button
+                                    key={word}
+                                    className="cine-word-tag"
+                                    type="button"
+                                    onClick={() => {
+                                        onWordQueryChange(word);
+                                        void onLookupWord(word);
+                                    }}
+                                >
+                                    {word}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {recentWords.length > 0 && (
+                    <div className="cine-word-lens-supplement">
+                        <p className="cine-word-lens-caption">Recent</p>
+                        <div className="cine-word-lens-tags">
+                            {recentWords.map(word => (
+                                <button
+                                    key={word}
+                                    className="cine-word-tag"
+                                    type="button"
+                                    onClick={() => {
+                                        onWordQueryChange(word);
+                                        void onLookupWord(word);
+                                    }}
+                                >
+                                    {word}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 {wordInsight && (
                     <div className="cine-word-lens-result">
                         <p className="cine-word-lens-title">
                             <strong>{wordInsight.word}</strong>
                             {wordInsight.phonetic && <span>{wordInsight.phonetic}</span>}
                         </p>
+                        <p className="cine-word-lens-meta">
+                            {typeof wordInsight.syllableCount === 'number' &&
+                                `${wordInsight.syllableCount} syllables`}
+                            {typeof wordInsight.syllableCount === 'number' && sourceLabel && ' · '}
+                            {sourceLabel && `sources: ${sourceLabel}`}
+                        </p>
+                        {wordInsight.examples.length > 0 && (
+                            <p className="cine-word-lens-example">
+                                “{wordInsight.examples[0]}”
+                            </p>
+                        )}
                         {meanings.map((meaning, index) => (
                             <div
                                 key={`${meaning.definition}-${index}`}
@@ -200,96 +253,54 @@ export const ReaderCharactersPanel: React.FC<ReaderCharactersPanelProps> = ({
                                     </span>
                                 )}
                                 <p>{meaning.definition}</p>
+                                {meaning.example && (
+                                    <p className="cine-word-lens-inline-example">
+                                        “{meaning.example}”
+                                    </p>
+                                )}
                             </div>
                         ))}
                         {wordInsight.relatedWords.length > 0 && (
-                            <div className="cine-word-lens-tags">
-                                {wordInsight.relatedWords.slice(0, 8).map(word => (
-                                    <button
-                                        key={word}
-                                        className="cine-word-tag"
-                                        type="button"
-                                        onClick={() => {
-                                            onWordQueryChange(word);
-                                            void onLookupWord(word);
-                                        }}
-                                    >
-                                        {word}
-                                    </button>
-                                ))}
+                            <div className="cine-word-lens-supplement">
+                                <p className="cine-word-lens-caption">Related Vocabulary</p>
+                                <div className="cine-word-lens-tags">
+                                    {wordInsight.relatedWords.slice(0, 10).map(word => (
+                                        <button
+                                            key={word}
+                                            className="cine-word-tag"
+                                            type="button"
+                                            onClick={() => {
+                                                onWordQueryChange(word);
+                                                void onLookupWord(word);
+                                            }}
+                                        >
+                                            {word}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        {wordInsight.antonyms.length > 0 && (
+                            <div className="cine-word-lens-supplement">
+                                <p className="cine-word-lens-caption">Antonyms</p>
+                                <div className="cine-word-lens-tags">
+                                    {wordInsight.antonyms.slice(0, 8).map(word => (
+                                        <button
+                                            key={word}
+                                            className="cine-word-tag"
+                                            type="button"
+                                            onClick={() => {
+                                                onWordQueryChange(word);
+                                                void onLookupWord(word);
+                                            }}
+                                        >
+                                            {word}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
                         )}
                     </div>
-                )}
-            </section>
-
-            <section className="cine-insight-section">
-                <h3 className="cine-insight-section-title">Characters</h3>
-                {sortedCharacters.length === 0 ? (
-                    <p className="cine-character-empty">No character data yet.</p>
-                ) : (
-                    <ul className="cine-character-list">
-                        {sortedCharacters.map(([name, meta]) => (
-                            <li key={name} className="cine-character-item">
-                                <span className="cine-character-name">{name}</span>
-                                <span className="cine-character-meta">
-                                    {meta.dialogueCount} lines · {meta.appearances.length}{' '}
-                                    appearances
-                                </span>
-                            </li>
-                        ))}
-                    </ul>
-                )}
-            </section>
-
-            <section className="cine-insight-section">
-                <h3 className="cine-insight-section-title">Related Titles</h3>
-                <div
-                    className="cine-content-type-filters"
-                    role="group"
-                    aria-label="Content type filters"
-                >
-                    {SUGGESTION_FILTERS.map(filter => (
-                        <button
-                            key={filter.value}
-                            type="button"
-                            className={`cine-content-type-chip ${suggestionFilter === filter.value ? 'is-active' : ''}`}
-                            onClick={() => onSuggestionFilterChange(filter.value)}
-                        >
-                            {filter.label}
-                        </button>
-                    ))}
-                </div>
-
-                {isSuggestionsLoading ? (
-                    <p className="cine-character-empty">Finding related books…</p>
-                ) : bookSuggestions.length === 0 ? (
-                    <p className="cine-character-empty">No external recommendations yet.</p>
-                ) : (
-                    <ul className="cine-book-suggestion-list">
-                        {bookSuggestions.slice(0, 6).map(suggestion => (
-                            <li
-                                key={`${suggestion.title}-${suggestion.author ?? 'unknown'}`}
-                                className="cine-book-suggestion-item"
-                            >
-                                <span className="cine-book-suggestion-title">
-                                    {suggestion.title}
-                                </span>
-                                <span className="cine-book-suggestion-meta">
-                                    {suggestion.author ?? 'Unknown author'}
-                                    {suggestion.year ? ` · ${suggestion.year}` : ''}
-                                </span>
-                                <span className="cine-book-suggestion-badges">
-                                    <span className="cine-book-suggestion-badge">
-                                        {formatContentType(suggestion.contentType)}
-                                    </span>
-                                    <span className="cine-book-suggestion-badge is-source">
-                                        {SOURCE_LABELS[suggestion.source]}
-                                    </span>
-                                </span>
-                            </li>
-                        ))}
-                    </ul>
                 )}
             </section>
         </aside>

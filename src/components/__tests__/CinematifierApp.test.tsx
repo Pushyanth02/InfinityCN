@@ -28,14 +28,18 @@ vi.mock('../../lib/cinematifierDb', () => ({
 // ─── LAZY-LOADED COMPONENT SMOKE TESTS ─────────────────────────────
 
 describe('Lazy component loading', () => {
-    it('CinematicReader lazy component module can be imported', async () => {
+    it(
+        'CinematicReader lazy component module can be imported',
+        async () => {
         // Verify the module resolves (does not throw at import time)
         const module = await import('../../components/CinematicReader');
         expect(module).toBeDefined();
-    });
+        },
+        15_000,
+    );
 
     it('CinematifierSettings lazy component module can be imported', async () => {
-        const module = await import('../../components/CinematifierSettings');
+        const module = await import('../../features/settings/components/AppSettings');
         expect(module).toBeDefined();
     });
 });

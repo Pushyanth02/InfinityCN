@@ -95,6 +95,8 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
 
     const [showSettings, setShowSettings] = useState(false);
     const [showChapterNav, setShowChapterNav] = useState(false);
+    const [isChapterSidebarOpen, setIsChapterSidebarOpen] = useState(true);
+    const [isInsightsSidebarOpen, setIsInsightsSidebarOpen] = useState(true);
 
     // Cross-chunk tracking states
     const [activeEmotion, setActiveEmotion] = useState<string>('');
@@ -108,8 +110,6 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
     const previousModeRef = useRef<ReaderMode>(readerMode);
 
     const currentChapter = book?.chapters[currentChapterIndex];
-    const activeCharacters = currentChapter?.characters ?? book?.characters;
-
     // ─── Custom Hooks ──────────────────────────────────────────
     const { readingProgress, bookmarks, isBookmarked, toggleBookmark } = useReadingProgress();
     const { isAmbientSoundEnabled, toggleAmbientSound } = useAmbientAudio(
@@ -137,11 +137,9 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
         isWordLookupLoading,
         wordLookupError,
         wordInsight,
-        bookSuggestions,
-        isSuggestionsLoading,
-        suggestionFilter,
-        setSuggestionFilter,
-    } = useReaderDiscovery(book?.title);
+        wordSuggestions,
+        recentWords,
+    } = useReaderDiscovery();
 
     const activeStreamBlocks = currentChapter
         ? sceneState?.(currentChapter.id)?.accumulatedBlocks
@@ -251,6 +249,8 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
             if (e.key === 'Escape') {
                 if (showSettings) setShowSettings(false);
                 else if (showChapterNav) setShowChapterNav(false);
+                else if (isInsightsSidebarOpen) setIsInsightsSidebarOpen(false);
+                else if (isChapterSidebarOpen) setIsChapterSidebarOpen(false);
                 else onClose();
             } else if (e.key === 'ArrowLeft' && currentChapterIndex > 0) {
                 setCurrentChapter(currentChapterIndex - 1);
@@ -265,7 +265,16 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [currentChapterIndex, book, onClose, setCurrentChapter, showSettings, showChapterNav]);
+    }, [
+        currentChapterIndex,
+        book,
+        isChapterSidebarOpen,
+        isInsightsSidebarOpen,
+        onClose,
+        setCurrentChapter,
+        showSettings,
+        showChapterNav,
+    ]);
 
     if (!book || !currentChapter) {
         return (
@@ -304,6 +313,10 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                 onToggleAmbientSound={toggleAmbientSound}
                 isAutoScrolling={isAutoScrolling}
                 onToggleAutoScroll={toggleAutoScroll}
+                isChapterSidebarOpen={isChapterSidebarOpen}
+                onToggleChapterSidebar={() => setIsChapterSidebarOpen(open => !open)}
+                isInsightsSidebarOpen={isInsightsSidebarOpen}
+                onToggleInsightsSidebar={() => setIsInsightsSidebarOpen(open => !open)}
                 onToggleSettings={() => setShowSettings(!showSettings)}
                 onShowChapterNav={() => setShowChapterNav(true)}
                 onClose={onClose}
@@ -339,6 +352,8 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                     currentChapterIndex={currentChapterIndex}
                     bookmarks={bookmarks}
                     onSelectChapter={setCurrentChapter}
+                    isOpen={isChapterSidebarOpen}
+                    onClose={() => setIsChapterSidebarOpen(false)}
                 />
                 {/* Scrollable Content */}
                 <main
@@ -435,18 +450,17 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                     </div>
                 </main>
                 <ReaderCharactersPanel
-                    characters={activeCharacters}
                     insights={readerInsights}
+                    isOpen={isInsightsSidebarOpen}
+                    onClose={() => setIsInsightsSidebarOpen(false)}
                     wordQuery={wordQuery}
                     onWordQueryChange={setWordQuery}
                     onLookupWord={lookupWord}
                     isWordLookupLoading={isWordLookupLoading}
                     wordLookupError={wordLookupError}
                     wordInsight={wordInsight}
-                    bookSuggestions={bookSuggestions}
-                    isSuggestionsLoading={isSuggestionsLoading}
-                    suggestionFilter={suggestionFilter}
-                    onSuggestionFilterChange={setSuggestionFilter}
+                    wordSuggestions={wordSuggestions}
+                    recentWords={recentWords}
                 />
             </div>
 

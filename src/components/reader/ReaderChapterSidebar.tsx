@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookmarkCheck, Sparkles } from 'lucide-react';
+import { BookmarkCheck, ChevronLeft, Sparkles } from 'lucide-react';
 import type { Chapter } from '../../types/cinematifier';
 
 interface ReaderChapterSidebarProps {
@@ -7,6 +7,8 @@ interface ReaderChapterSidebarProps {
     currentChapterIndex: number;
     bookmarks: number[];
     onSelectChapter: (index: number) => void;
+    isOpen: boolean;
+    onClose: () => void;
 }
 
 export const ReaderChapterSidebar: React.FC<ReaderChapterSidebarProps> = ({
@@ -14,11 +16,25 @@ export const ReaderChapterSidebar: React.FC<ReaderChapterSidebarProps> = ({
     currentChapterIndex,
     bookmarks,
     onSelectChapter,
+    isOpen,
+    onClose,
 }) => {
     return (
-        <aside className="cine-chapter-nav-sidebar" aria-label="Chapter navigation">
+        <aside
+            className={`cine-chapter-nav-sidebar ${isOpen ? '' : 'is-closed'}`}
+            aria-label="Chapter navigation"
+        >
             <div className="cine-chapter-nav-header">
                 <h3 className="cine-chapter-nav-title">Chapters</h3>
+                <button
+                    type="button"
+                    className="cine-sidebar-close"
+                    onClick={onClose}
+                    aria-label="Hide chapter sidebar"
+                    title="Hide chapter sidebar"
+                >
+                    <ChevronLeft size={16} />
+                </button>
             </div>
             <div className="cine-chapter-list">
                 {chapters.map((chapter, i) => (

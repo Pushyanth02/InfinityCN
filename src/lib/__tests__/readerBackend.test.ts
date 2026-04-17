@@ -99,6 +99,8 @@ describe('readerBackend analytics', () => {
         expect(summary?.averageWordsPerMinute).toBe(150);
         expect(summary?.estimatedMinutesRemaining).toBe(10);
         expect((summary?.todayReadingMinutes ?? 0) > 0).toBe(true);
+        expect(summary?.cinematicDepthScore).toBe(0);
+        expect(summary?.cinematicRhythm).toBe('Measured');
     });
 
     it('counts separated sessions when telemetry samples have long idle gaps', () => {

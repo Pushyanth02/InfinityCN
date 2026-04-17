@@ -56,6 +56,12 @@
     background: rgba(220, 38, 38, 0.15);
 }
 
+.cine-sidebar-toggle {
+    width: 34px;
+    height: 34px;
+    border-radius: var(--radius-full);
+}
+
 /* Book title in reader header */
 .cine-title {
     font-family: var(--font-headline);

@@ -4,14 +4,12 @@ import path from 'path';
 // Define old path to new path mapping
 // Ensure the mapping represents your actual refactor rules.
 const map = {
-    // Update this to contain all 60 of your specific components. Here is an example schema:  'src/components/CinematifierApp.tsx': 'src/app/App.tsx',    'src/ui/ErrorBoundary.tsx': 'src/app/error-boundary.tsx',
-    'src/store/cinematifierStore.ts': 'src/app/store.ts',
-    'src/styles.css': 'src/assets/styles/global-styles.css',
-    'src/css/variables.css': 'src/assets/styles/global-vars.css',
+    // Phase 1: Settings Components
     'src/components/APIKeyInput.tsx': 'src/features/settings/components/ApiKeyInput.tsx',
     'src/components/CinematifierSettings.tsx': 'src/features/settings/components/AppSettings.tsx',
-    'src/lib/cinematifierDb.ts': 'src/shared/utils/localDb.ts',
-    // Note: For a real production migration, EVERY file moved must be added here.
+    'src/components/ProviderCard.tsx': 'src/features/settings/components/ProviderCard.tsx',
+    'src/components/ProviderSection.tsx': 'src/features/settings/components/ProviderSection.tsx',
+    'src/components/PreferencesSection.tsx': 'src/features/settings/components/PreferencesSection.tsx'
 };
 
 const updateImports = (newPath, fileMap) => {

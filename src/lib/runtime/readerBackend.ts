@@ -6,6 +6,8 @@ const SESSION_BREAK_MS = 20 * 60 * 1000;
 
 type TelemetryStore = Record<string, ReaderTelemetrySnapshot[]>;
 
+type CinematicRhythm = 'Measured' | 'Balanced' | 'Propulsive' | 'Frenetic';
+
 export interface ReaderTelemetrySnapshot {
     bookId: string;
     chapterNumber: number;
@@ -27,6 +29,13 @@ export interface ReaderAnalyticsSummary {
     cinematicCueCount: number;
     cinematicAverageTension: number;
     cinematicDominantEmotion?: EmotionCategory;
+    cinematicDepthScore: number;
+    cinematicRhythm: CinematicRhythm;
+    cinematicEmotionRange: number;
+    cinematicTensionSwing: number;
+    cinematicTransitionCount: number;
+    cinematicSfxCount: number;
+    cinematicDialogueRatio: number;
 }
 
 let hydrated = false;
@@ -44,6 +53,28 @@ function getStorage(): Storage | null {
 
 function clamp(value: number, min: number, max: number): number {
     return Math.max(min, Math.min(max, value));
+}
+
+function average(values: number[]): number {
+    if (values.length === 0) return 0;
+    return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function standardDeviation(values: number[]): number {
+    if (values.length < 2) return 0;
+
+    const mean = average(values);
+    const variance =
+        values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length;
+
+    return Math.sqrt(variance);
+}
+
+function resolveCinematicRhythm(score: number): CinematicRhythm {
+    if (score < 40) return 'Measured';
+    if (score < 62) return 'Balanced';
+    if (score < 80) return 'Propulsive';
+    return 'Frenetic';
 }
 
 function sanitizeSnapshot(raw: ReaderTelemetrySnapshot): ReaderTelemetrySnapshot {
@@ -215,12 +246,30 @@ export function getReaderAnalyticsSummary(
     const todayReadingMinutes = Math.round((todaySnapshots.length * 45) / 60);
 
     const currentChapter = getCurrentChapter(book, progress);
-    const blockTensionValues = (currentChapter?.cinematifiedBlocks ?? [])
+    const chapterBlocks = currentChapter?.cinematifiedBlocks ?? [];
+    const blockTensionValues = chapterBlocks
         .map(block => block.tensionScore)
         .filter((value): value is number => typeof value === 'number');
-    const blockEmotions = (currentChapter?.cinematifiedBlocks ?? [])
+    const blockEmotions = chapterBlocks
         .map(block => block.emotion)
         .filter((value): value is EmotionCategory => Boolean(value));
+
+    const timingScores = chapterBlocks
+        .map(block => {
+            switch (block.timing) {
+                case 'slow':
+                    return 30;
+                case 'normal':
+                    return 52;
+                case 'quick':
+                    return 74;
+                case 'rapid':
+                    return 92;
+                default:
+                    return null;
+            }
+        })
+        .filter((value): value is number => typeof value === 'number');
 
     const cinematicAverageTension =
         blockTensionValues.length > 0
@@ -230,10 +279,49 @@ export function getReaderAnalyticsSummary(
               )
             : 0;
 
+    const cinematicTensionSwing =
+        blockTensionValues.length > 0
+            ? Math.max(...blockTensionValues) - Math.min(...blockTensionValues)
+            : 0;
+
     const cinematicSceneCount =
         currentChapter?.renderPlan?.scenes.length ?? currentChapter?.cinematizedScenes?.length ?? 0;
     const cinematicCueCount =
-        currentChapter?.renderPlan?.cues.length ?? currentChapter?.cinematifiedBlocks.length ?? 0;
+        currentChapter?.renderPlan?.cues.length ?? chapterBlocks.length ?? 0;
+
+    const cinematicTransitionCount = chapterBlocks.filter(
+        block => block.type === 'transition' || Boolean(block.transition),
+    ).length;
+
+    const cinematicSfxCount = chapterBlocks.filter(
+        block => block.type === 'sfx' || Boolean(block.sfx),
+    ).length;
+
+    const dialogueBlockCount = chapterBlocks.filter(
+        block => block.type === 'dialogue' || block.type === 'inner_thought',
+    ).length;
+
+    const cinematicDialogueRatio =
+        chapterBlocks.length > 0 ? Math.round((dialogueBlockCount / chapterBlocks.length) * 100) : 0;
+
+    const cinematicEmotionRange = new Set(blockEmotions).size;
+    const cueDensity = cinematicSceneCount > 0 ? cinematicCueCount / cinematicSceneCount : 0;
+    const tensionVariance = standardDeviation(blockTensionValues);
+    const inferredRhythmScore =
+        timingScores.length > 0 ? average(timingScores) : clamp(35 + cueDensity * 14, 0, 100);
+    const cinematicRhythm = resolveCinematicRhythm(inferredRhythmScore);
+
+    const cinematicDepthScore = clamp(
+        Math.round(
+            clamp(cinematicSceneCount * 11, 0, 28) +
+                clamp(cinematicCueCount * 3.1, 0, 24) +
+                clamp(cinematicEmotionRange * 5.5, 0, 16) +
+                clamp(cinematicTensionSwing * 0.24 + tensionVariance * 0.42, 0, 20) +
+                clamp((cinematicTransitionCount + cinematicSfxCount) * 1.9, 0, 12),
+        ),
+        0,
+        100,
+    );
 
     return {
         wordsReadEstimate,
@@ -247,6 +335,13 @@ export function getReaderAnalyticsSummary(
         cinematicCueCount,
         cinematicAverageTension,
         cinematicDominantEmotion: computeDominantEmotion(blockEmotions),
+        cinematicDepthScore,
+        cinematicRhythm,
+        cinematicEmotionRange,
+        cinematicTensionSwing,
+        cinematicTransitionCount,
+        cinematicSfxCount,
+        cinematicDialogueRatio,
     };
 }
 

@@ -18,6 +18,8 @@ import {
     Play,
     Square,
     Download,
+    ChevronLeft,
+    ChevronRight,
 } from 'lucide-react';
 import type { ReaderMode, Book } from '../../types/cinematifier';
 
@@ -35,6 +37,10 @@ interface ReaderHeaderProps {
     onToggleAmbientSound: () => void;
     isAutoScrolling: boolean;
     onToggleAutoScroll: () => void;
+    isChapterSidebarOpen: boolean;
+    onToggleChapterSidebar: () => void;
+    isInsightsSidebarOpen: boolean;
+    onToggleInsightsSidebar: () => void;
     onToggleSettings: () => void;
     onShowChapterNav: () => void;
     onClose: () => void;
@@ -55,6 +61,10 @@ export const ReaderHeader: React.FC<ReaderHeaderWithRefProps> = ({
     onToggleAmbientSound,
     isAutoScrolling,
     onToggleAutoScroll,
+    isChapterSidebarOpen,
+    onToggleChapterSidebar,
+    isInsightsSidebarOpen,
+    onToggleInsightsSidebar,
     onToggleSettings,
     onShowChapterNav,
     onClose,
@@ -108,6 +118,32 @@ export const ReaderHeader: React.FC<ReaderHeaderWithRefProps> = ({
             </div>
 
             <div className="cine-header-right">
+                <button
+                    className={`cine-btn--icon cine-sidebar-toggle cine-sidebar-toggle--chapter ${isChapterSidebarOpen ? 'cine-btn--active' : ''}`}
+                    onClick={onToggleChapterSidebar}
+                    title={isChapterSidebarOpen ? 'Hide chapter sidebar' : 'Show chapter sidebar'}
+                    aria-label={
+                        isChapterSidebarOpen ? 'Hide chapter sidebar' : 'Show chapter sidebar'
+                    }
+                    aria-pressed={isChapterSidebarOpen}
+                >
+                    {isChapterSidebarOpen ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
+                </button>
+                <button
+                    className={`cine-btn--icon cine-sidebar-toggle cine-sidebar-toggle--insights ${isInsightsSidebarOpen ? 'cine-btn--active' : ''}`}
+                    onClick={onToggleInsightsSidebar}
+                    title={isInsightsSidebarOpen ? 'Hide insights sidebar' : 'Show insights sidebar'}
+                    aria-label={
+                        isInsightsSidebarOpen ? 'Hide insights sidebar' : 'Show insights sidebar'
+                    }
+                    aria-pressed={isInsightsSidebarOpen}
+                >
+                    {isInsightsSidebarOpen ? (
+                        <ChevronRight size={20} />
+                    ) : (
+                        <ChevronLeft size={20} />
+                    )}
+                </button>
                 <button
                     className={`cine-btn--icon ${isAmbientSoundEnabled ? 'cine-btn--active' : ''}`}
                     onClick={onToggleAmbientSound}

@@ -1,13 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    fetchReaderBookSuggestions,
     lookupReaderWordInsight,
-    type ReaderBookSuggestion,
-    type ReaderContentType,
+    searchReaderWordCompletions,
     type ReaderWordInsight,
 } from '../lib/runtime/readerApis';
 
-export type ReaderSuggestionFilter = ReaderContentType | 'all';
+const MIN_WORD_LOOKUP_LENGTH = 2;
+const AUTO_LOOKUP_DEBOUNCE_MS = 360;
+const SUGGESTION_DEBOUNCE_MS = 140;
+const MAX_RECENT_WORDS = 8;
 
 interface UseReaderDiscoveryResult {
     wordQuery: string;
@@ -16,90 +17,149 @@ interface UseReaderDiscoveryResult {
     isWordLookupLoading: boolean;
     wordLookupError: string | null;
     wordInsight: ReaderWordInsight | null;
-    bookSuggestions: ReaderBookSuggestion[];
-    isSuggestionsLoading: boolean;
-    suggestionFilter: ReaderSuggestionFilter;
-    setSuggestionFilter: (value: ReaderSuggestionFilter) => void;
+    wordSuggestions: string[];
+    recentWords: string[];
 }
 
-export function useReaderDiscovery(bookTitle: string | undefined): UseReaderDiscoveryResult {
-    const [wordQuery, setWordQuery] = useState('');
+function normalizeLookupToken(value: string): string {
+    return value.trim().toLowerCase();
+}
+
+export function useReaderDiscovery(): UseReaderDiscoveryResult {
+    const [wordQuery, setWordQueryState] = useState('');
     const [wordInsight, setWordInsight] = useState<ReaderWordInsight | null>(null);
     const [wordLookupError, setWordLookupError] = useState<string | null>(null);
     const [isWordLookupLoading, setIsWordLookupLoading] = useState(false);
+    const [wordSuggestions, setWordSuggestions] = useState<string[]>([]);
+    const [recentWords, setRecentWords] = useState<string[]>([]);
 
-    const [bookSuggestions, setBookSuggestions] = useState<ReaderBookSuggestion[]>([]);
-    const [isSuggestionsLoading, setIsSuggestionsLoading] = useState(false);
-    const [suggestionFilter, setSuggestionFilter] = useState<ReaderSuggestionFilter>('all');
+    const queryRef = useRef(wordQuery);
+    const requestTokenRef = useRef(0);
 
-    const normalizedBookTitle = useMemo(() => bookTitle?.trim() ?? '', [bookTitle]);
-    const suggestionTypes = useMemo<ReaderContentType[] | undefined>(() => {
-        if (suggestionFilter === 'all') return undefined;
-        return [suggestionFilter];
-    }, [suggestionFilter]);
+    useEffect(() => {
+        queryRef.current = wordQuery;
+    }, [wordQuery]);
 
-    const lookupWord = useCallback(
-        async (explicitWord?: string) => {
-            const requestedWord = (explicitWord ?? wordQuery).trim();
-            if (!requestedWord) {
-                setWordLookupError('Enter a word to look up.');
-                setWordInsight(null);
+    const setWordQuery = useCallback((value: string) => {
+        setWordQueryState(value);
+        if (!value.trim()) {
+            setWordLookupError(null);
+            setWordSuggestions([]);
+        }
+    }, []);
+
+    const rememberWord = useCallback((value: string) => {
+        const normalized = value.trim();
+        if (!normalized) return;
+
+        setRecentWords(previous => {
+            const next = [
+                normalized,
+                ...previous.filter(word => normalizeLookupToken(word) !== normalizeLookupToken(normalized)),
+            ];
+            return next.slice(0, MAX_RECENT_WORDS);
+        });
+    }, []);
+
+    const runLookup = useCallback(
+        async (rawWord: string, mode: 'manual' | 'auto') => {
+            const requestedWord = rawWord.trim();
+            if (requestedWord.length < MIN_WORD_LOOKUP_LENGTH) {
+                if (mode === 'manual') {
+                    setWordLookupError('Type at least 2 letters to look up a word.');
+                }
                 return;
             }
 
+            const requestToken = ++requestTokenRef.current;
             setIsWordLookupLoading(true);
-            setWordLookupError(null);
+            if (mode === 'manual') {
+                setWordLookupError(null);
+            }
 
             try {
                 const result = await lookupReaderWordInsight(requestedWord);
+                if (requestToken !== requestTokenRef.current) {
+                    return;
+                }
+
                 if (!result) {
-                    setWordInsight(null);
-                    setWordLookupError('No lexical data found for that word.');
+                    if (mode === 'manual') {
+                        setWordLookupError('No lexical data found for that word.');
+                    }
                     return;
                 }
 
                 setWordInsight(result);
                 setWordLookupError(null);
+                rememberWord(result.word);
             } catch {
-                setWordInsight(null);
-                setWordLookupError('Word lookup failed. Try again in a moment.');
+                if (requestToken !== requestTokenRef.current) {
+                    return;
+                }
+
+                if (mode === 'manual') {
+                    setWordLookupError('Word lookup failed. Try again in a moment.');
+                }
             } finally {
-                setIsWordLookupLoading(false);
+                if (requestToken === requestTokenRef.current) {
+                    setIsWordLookupLoading(false);
+                }
             }
         },
-        [wordQuery],
+        [rememberWord],
+    );
+
+    const lookupWord = useCallback(
+        async (explicitWord?: string) => {
+            await runLookup(explicitWord ?? queryRef.current, 'manual');
+        },
+        [runLookup],
     );
 
     useEffect(() => {
-        if (!normalizedBookTitle) {
-            setBookSuggestions([]);
+        const requestedWord = wordQuery.trim();
+        if (requestedWord.length < MIN_WORD_LOOKUP_LENGTH) {
+            setWordSuggestions([]);
             return;
         }
 
         let cancelled = false;
-        setIsSuggestionsLoading(true);
+        const timer = window.setTimeout(() => {
+            void (async () => {
+                const suggestions = await searchReaderWordCompletions(requestedWord);
+                if (cancelled) {
+                    return;
+                }
 
-        void fetchReaderBookSuggestions(normalizedBookTitle, {
-            includeTypes: suggestionTypes,
-            limit: 10,
-        })
-            .then(suggestions => {
-                if (cancelled) return;
-                setBookSuggestions(suggestions);
-            })
-            .catch(() => {
-                if (cancelled) return;
-                setBookSuggestions([]);
-            })
-            .finally(() => {
-                if (cancelled) return;
-                setIsSuggestionsLoading(false);
-            });
+                setWordSuggestions(suggestions);
+            })();
+        }, SUGGESTION_DEBOUNCE_MS);
 
         return () => {
             cancelled = true;
+            window.clearTimeout(timer);
         };
-    }, [normalizedBookTitle, suggestionTypes]);
+    }, [wordQuery]);
+
+    useEffect(() => {
+        const requestedWord = wordQuery.trim();
+        if (requestedWord.length < MIN_WORD_LOOKUP_LENGTH) {
+            return;
+        }
+
+        if (normalizeLookupToken(wordInsight?.word ?? '') === normalizeLookupToken(requestedWord)) {
+            return;
+        }
+
+        const timer = window.setTimeout(() => {
+            void runLookup(requestedWord, 'auto');
+        }, AUTO_LOOKUP_DEBOUNCE_MS);
+
+        return () => {
+            window.clearTimeout(timer);
+        };
+    }, [wordInsight?.word, wordQuery, runLookup]);
 
     return {
         wordQuery,
@@ -108,9 +168,7 @@ export function useReaderDiscovery(bookTitle: string | undefined): UseReaderDisc
         isWordLookupLoading,
         wordLookupError,
         wordInsight,
-        bookSuggestions,
-        isSuggestionsLoading,
-        suggestionFilter,
-        setSuggestionFilter,
+        wordSuggestions,
+        recentWords,
     };
 }

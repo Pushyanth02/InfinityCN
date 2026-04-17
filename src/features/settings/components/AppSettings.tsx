@@ -19,10 +19,10 @@ import {
     Search,
     Shield,
 } from 'lucide-react';
-import { useCinematifierStore } from '../store/cinematifierStore';
-import { useAIConnectionTest } from '../hooks';
-import type { AIConnectionStatus } from '../types/cinematifier';
-import type { AIProvider } from '../lib/ai/types';
+import { useCinematifierStore } from '../../../store/cinematifierStore';
+import { useAIConnectionTest } from '../../../hooks';
+import type { AIConnectionStatus } from '../../../types/cinematifier';
+import type { AIProvider } from '../../../lib/ai/types';
 
 type Provider = AIProvider;
 
