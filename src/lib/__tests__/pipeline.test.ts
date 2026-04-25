@@ -15,8 +15,8 @@ import {
     TextCleaningStage,
     ParagraphReconstructionStage,
     OfflineCinematificationStage,
-} from '../cinematifier/pipeline';
-import type { PipelineStage, PipelineContext } from '../cinematifier/pipeline';
+} from '../engine/cinematifier/pipeline';
+import type { PipelineStage, PipelineContext } from '../engine/cinematifier/pipeline';
 
 describe('CinematificationPipeline', () => {
     // ─── Stage Composition ──────────────────────────────────

@@ -5,23 +5,31 @@
  * - Provider interface
  * - OpenAI / Gemini / Claude adapters
  * - fallback provider sequencing
- * - retry with exponential backoff
- * - request caching and inflight deduplication
+ * - retry with exponential backoff (via RetryPolicy)
+ * - request caching (via AIResponseCache) and inflight deduplication (via RequestDeduplicator)
  * - cost-aware routing and budget guardrails
  * - streaming fallback between providers
+ *
+ * Consolidation: cache, dedup, and retry are now delegated to requestPipeline.ts
+ * components instead of maintaining parallel implementations.
  */
 
 import { AI_MAX_RETRY_DELAY_MS } from '../constants';
-import { getCacheKey, getCached, setCache } from './cache';
+import {
+    AIResponseCache,
+    RequestDeduplicator,
+    createCacheKey,
+} from './requestPipeline';
 import {
     estimateProviderCallCostUsd,
     isWithinCostBudget,
     sortProvidersByEstimatedCost,
 } from './costControl';
-import { classifyError, withRetry } from './errors';
+import { classifyError } from './errors';
 import { callAI, prepareAICall } from './providers';
 import type { PreparedAICall } from './providers';
-import { getRateLimiter, streamAI } from './streaming';
+import { getRateLimiter } from './rateLimiterRegistry';
+import { streamAI } from './streaming';
 import { estimateTokens } from './tokenFlow';
 import type { AIConfig } from './types';
 
@@ -102,7 +110,19 @@ function dedupeProviders(providers: AIManagerProvider[]): AIManagerProvider[] {
 export class AIManager {
     private readonly providers = new Map<AIManagerProvider, Provider>();
     private readonly defaultProviderOrder: AIManagerProvider[];
-    private readonly inflightRequests = new Map<string, Promise<string>>();
+
+    /**
+     * Unified cache — replaces the old simple LRU from cache.ts.
+     * Supports TTL, LRU eviction, scene-level dedup, and hit/miss stats.
+     */
+    private readonly cache = new AIResponseCache();
+
+    /**
+     * Unified deduplicator — replaces the old inline inflightRequests Map.
+     * Supports both request-level and scene-level dedup with stats.
+     */
+    private readonly deduplicator = new RequestDeduplicator();
+
     private estimatedSpendUsd = 0;
     private actualSpendUsd = 0;
 
@@ -133,6 +153,14 @@ export class AIManager {
         };
     }
 
+    private buildCacheKey(prompt: string, providerName: AIManagerProvider, model: string): string {
+        return createCacheKey({
+            provider: providerName,
+            model,
+            prompt,
+        });
+    }
+
     private prepareProviderCall(
         prompt: string,
         config: AIConfig,
@@ -140,7 +168,7 @@ export class AIManager {
     ): { providerConfig: AIConfig; prepared: PreparedAICall; cacheKey: string } {
         const providerConfig = this.createProviderConfig(config, providerName);
         const prepared = prepareAICall(prompt, providerConfig);
-        const cacheKey = getCacheKey(prompt, prepared.provider, prepared.model);
+        const cacheKey = this.buildCacheKey(prompt, providerName, prepared.model);
 
         return {
             providerConfig,
@@ -225,6 +253,23 @@ export class AIManager {
         this.actualSpendUsd = 0;
     }
 
+    /** Get cache stats for diagnostics. */
+    getCacheStats() {
+        return this.cache.getStats();
+    }
+
+    /** Get dedup stats for diagnostics. */
+    getDedupStats() {
+        return this.deduplicator.getStats();
+    }
+
+    /** Clear all caches and reset stats. */
+    resetCache(): void {
+        this.cache.clear();
+        this.cache.resetStats();
+        this.deduplicator.resetStats();
+    }
+
     async generate(
         prompt: string,
         config: AIConfig,
@@ -274,24 +319,12 @@ export class AIManager {
                 continue;
             }
 
+            // ── Cache check (unified AIResponseCache) ────────────────────
             if (useCache) {
-                const cached = getCached(cacheKey);
+                const cached = this.cache.get(cacheKey);
                 if (cached !== null) {
                     return {
                         text: cached,
-                        providerUsed: providerName,
-                        attemptedProviders: [...attemptedProviders, providerName],
-                        cacheHit: true,
-                        estimatedCostUsd: 0,
-                        actualCostUsd: 0,
-                    };
-                }
-
-                const inflight = this.inflightRequests.get(cacheKey);
-                if (inflight) {
-                    const text = await inflight;
-                    return {
-                        text,
                         providerUsed: providerName,
                         attemptedProviders: [...attemptedProviders, providerName],
                         cacheHit: true,
@@ -303,19 +336,32 @@ export class AIManager {
 
             attemptedProviders.push(providerName);
 
-            const requestPromise = withRetry(
-                () => provider.generate(prompt, providerConfig),
-                providerName,
-                maxRetries,
-                baseDelayMs,
-            );
-
-            if (useCache) {
-                this.inflightRequests.set(cacheKey, requestPromise);
-            }
-
+            // ── Dedup + Retry execution ──────────────────────────────────
             try {
-                const text = await requestPromise;
+                const { result: text, deduplicated } = await this.deduplicator.execute(
+                    cacheKey,
+                    async () => {
+                        // Retry loop inlined (replaces withRetry)
+                        let lastError: unknown;
+                        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+                            try {
+                                return await provider.generate(prompt, providerConfig);
+                            } catch (err) {
+                                lastError = err;
+                                const classified = classifyError(err, providerName);
+                                if (!classified.retryable || attempt >= maxRetries) {
+                                    throw classified;
+                                }
+                                const rawDelay =
+                                    classified.retryAfterMs ??
+                                    baseDelayMs * Math.pow(2, attempt);
+                                const delay = Math.min(rawDelay, AI_MAX_RETRY_DELAY_MS);
+                                await sleep(delay);
+                            }
+                        }
+                        throw lastError;
+                    },
+                );
 
                 if (!text.trim()) {
                     throw new Error(`Empty response from provider: ${providerName}`);
@@ -329,25 +375,25 @@ export class AIManager {
                 );
                 this.recordCost(estimatedCostUsd, actualCostUsd);
 
+                // Cache on success (unified AIResponseCache)
                 if (useCache) {
-                    setCache(cacheKey, text, prepared.provider);
+                    this.cache.set(cacheKey, text, {
+                        provider: prepared.provider,
+                        model: prepared.model,
+                    });
                 }
 
                 return {
                     text,
                     providerUsed: providerName,
                     attemptedProviders,
-                    cacheHit: false,
+                    cacheHit: deduplicated,
                     estimatedCostUsd,
                     actualCostUsd,
                 };
             } catch (error) {
                 const message = error instanceof Error ? error.message : String(error);
                 providerErrors.push(`${providerName}: ${message}`);
-            } finally {
-                if (useCache) {
-                    this.inflightRequests.delete(cacheKey);
-                }
             }
         }
 
@@ -403,8 +449,9 @@ export class AIManager {
                 continue;
             }
 
+            // ── Cache check (unified AIResponseCache) ────────────────────
             if (useCache) {
-                const cached = getCached(cacheKey);
+                const cached = this.cache.get(cacheKey);
                 if (cached !== null) {
                     yield cached;
                     return;
@@ -438,8 +485,12 @@ export class AIManager {
                     );
                     this.recordCost(estimatedCostUsd, actualCostUsd);
 
+                    // Cache on success (unified AIResponseCache)
                     if (useCache) {
-                        setCache(cacheKey, output, prepared.provider);
+                        this.cache.set(cacheKey, output, {
+                            provider: prepared.provider,
+                            model: prepared.model,
+                        });
                     }
 
                     return;

@@ -114,6 +114,25 @@ export {
 } from './chapterEngine';
 export type { ChapterEngineOptions } from './chapterEngine';
 
+// ─── Text Processing Engine ────────────────────────────────
+export {
+    processText,
+    reconstructParagraphs as reconstructParagraphsStructured,
+    detectDialogue,
+    segmentScenes as segmentScenesStructured,
+    cleanOCRArtifacts,
+} from './textProcessingEngine';
+export type {
+    NarrativeDocument,
+    ProcessedParagraph,
+    DetectedScene,
+    TextFragment,
+    FragmentType,
+    SceneBreakReason,
+    DocumentStats,
+    TextProcessingOptions,
+} from './textProcessingEngine';
+
 // ─── Full System Pipeline ──────────────────────────────────
 export {
     runFullSystemPipeline,

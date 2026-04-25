@@ -9,8 +9,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { retrieveRelevantContext } from '../embeddings';
-import type { ChunkEmbedding } from '../embeddings';
+import { retrieveRelevantContext } from '../ai/embeddings';
+import type { ChunkEmbedding } from '../ai/embeddings';
 
 // ─── Test helpers ─────────────────────────────────────────────────────────────
 

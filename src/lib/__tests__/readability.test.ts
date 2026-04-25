@@ -9,7 +9,7 @@ import {
     splitWords,
     analyzeReadability,
     getDifficultyLabel,
-} from '../cinematifier/readability';
+} from '../engine/cinematifier/readability';
 
 // ─── countSyllables ────────────────────────────────────────
 

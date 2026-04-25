@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { detectOriginalModeScenes, segmentScenesUniversal } from '../cinematifier/sceneDetection';
+import { detectOriginalModeScenes, segmentScenesUniversal } from '../engine/cinematifier/sceneDetection';
 
 describe('segmentScenesUniversal (Prompt 2B)', () => {
     it('splits scenes on time shifts', () => {

@@ -14,3 +14,4 @@ export { ReaderHeader } from './ReaderHeader';
 export { ReaderSettingsPanel } from './ReaderSettingsPanel';
 export { ReaderFooter } from './ReaderFooter';
 export { CinematicRenderer } from './CinematicRenderer';
+export { VirtualizedContent } from './VirtualizedContent';

@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { deobfuscateLegacy, isLegacyEncryption } from '../crypto';
+import { deobfuscateLegacy, isLegacyEncryption } from '../security/crypto';
 
 // ─── deobfuscateLegacy ────────────────────────────────────────────────────────
 

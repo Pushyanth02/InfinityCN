@@ -18,6 +18,56 @@
 
 .cine-block {
     position: relative;
+    transition: box-shadow 0.6s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.6s ease;
+}
+
+/* ── Emotion Glows ── */
+.cine-block[data-emotion="anger"],
+.cine-block[data-emotion="fury"],
+.cine-block[data-emotion="rage"],
+.cine-block[data-emotion="tension"] {
+    box-shadow: -20px 0 40px -20px rgba(239, 68, 68, 0.25);
+}
+.cine-block--dialogue[data-emotion="anger"],
+.cine-block--dialogue[data-emotion="fury"],
+.cine-block--dialogue[data-emotion="rage"],
+.cine-block--dialogue[data-emotion="tension"] {
+    border-left-color: #ef4444;
+}
+
+.cine-block[data-emotion="sadness"],
+.cine-block[data-emotion="melancholy"],
+.cine-block[data-emotion="sorrow"] {
+    box-shadow: -20px 0 40px -20px rgba(59, 130, 246, 0.25);
+}
+.cine-block--dialogue[data-emotion="sadness"],
+.cine-block--dialogue[data-emotion="melancholy"],
+.cine-block--dialogue[data-emotion="sorrow"] {
+    border-left-color: #3b82f6;
+}
+
+.cine-block[data-emotion="joy"],
+.cine-block[data-emotion="happiness"],
+.cine-block[data-emotion="triumph"],
+.cine-block[data-emotion="revelation"] {
+    box-shadow: -20px 0 40px -20px rgba(234, 179, 8, 0.25);
+}
+.cine-block--dialogue[data-emotion="joy"],
+.cine-block--dialogue[data-emotion="happiness"],
+.cine-block--dialogue[data-emotion="triumph"],
+.cine-block--dialogue[data-emotion="revelation"] {
+    border-left-color: #eab308;
+}
+
+.cine-block[data-emotion="fear"],
+.cine-block[data-emotion="terror"],
+.cine-block[data-emotion="panic"] {
+    box-shadow: -20px 0 40px -20px rgba(168, 85, 247, 0.25);
+}
+.cine-block--dialogue[data-emotion="fear"],
+.cine-block--dialogue[data-emotion="terror"],
+.cine-block--dialogue[data-emotion="panic"] {
+    border-left-color: #a855f7;
 }
 
 .cine-paragraph {
@@ -47,7 +97,10 @@
 
 .cine-action {
     margin: 0;
-    color: #e8e6e1;
+    color: var(--on-surface, #e8e6e1);
+    font-family: var(--font-body);
+    font-size: clamp(1.05rem, 1rem + 0.3vw, 1.2rem);
+    line-height: 1.65;
     text-align: justify;
 }
 
@@ -86,9 +139,10 @@
 }
 
 .cine-dialogue {
-    font-size: clamp(1.1rem, 1.02rem + 0.35vw, 1.24rem);
-    line-height: 1.72;
-    color: var(--cine-text-primary);
+    font-family: var(--font-body);
+    font-size: clamp(1.1rem, 1.02rem + 0.35vw, 1.25rem);
+    line-height: 1.75;
+    color: var(--on-surface, var(--cine-text-primary));
 }
 
 .cine-quote {

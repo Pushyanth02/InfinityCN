@@ -9,7 +9,7 @@
 import React from 'react';
 import { Film, Sparkles, BookOpen, Zap, FileText, CheckCircle, AlertCircle } from 'lucide-react';
 import type { ProcessingProgress } from '../types/cinematifier';
-import { getOfflineQuote, getProcessingQuote, type Quote } from '../lib/quotableApi';
+import { getOfflineQuote, getProcessingQuote, type Quote } from '../lib/runtime/quotableApi';
 
 interface ProcessingStep {
     id: string;

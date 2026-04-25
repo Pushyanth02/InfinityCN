@@ -16,7 +16,7 @@ import type {
     ReadingProgress,
 } from '../types/cinematifier';
 import type { AIConfig, AIProviderName } from '../lib/ai/index';
-import { encrypt, decrypt, deobfuscateLegacy, isLegacyEncryption } from '../lib/crypto';
+import { encrypt, decrypt, deobfuscateLegacy, isLegacyEncryption } from '../lib/security/crypto';
 
 // ─── API Key Encryption ──────────────────────────────────────────────────────
 // Uses AES-GCM encryption via SubtleCrypto with a device-derived key.

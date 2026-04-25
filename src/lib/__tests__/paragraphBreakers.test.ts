@@ -3,7 +3,7 @@ import {
     chooseParagraphBreakerResult,
     rebuildParagraphsWithBreakerApis,
     runParagraphBreakerApis,
-} from '../cinematifier/paragraphBreakers';
+} from '../engine/cinematifier/paragraphBreakers';
 
 function canonical(text: string): string {
     return text.replace(/\s+/g, '');

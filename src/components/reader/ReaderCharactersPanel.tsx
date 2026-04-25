@@ -3,18 +3,12 @@ import { ChevronRight } from 'lucide-react';
 import type { ReaderAnalyticsSummary } from '../../lib/runtime/readerBackend';
 import type { ReaderWordInsight } from '../../lib/runtime/readerApis';
 
+import { useReaderDiscovery } from '../../hooks';
+
 interface ReaderCharactersPanelProps {
     insights: ReaderAnalyticsSummary | null;
     isOpen: boolean;
     onClose: () => void;
-    wordQuery: string;
-    onWordQueryChange: (value: string) => void;
-    onLookupWord: (explicitWord?: string) => Promise<void>;
-    isWordLookupLoading: boolean;
-    wordLookupError: string | null;
-    wordInsight: ReaderWordInsight | null;
-    wordSuggestions: string[];
-    recentWords: string[];
 }
 
 function formatMinutes(minutes: number): string {
@@ -30,15 +24,17 @@ export const ReaderCharactersPanel: React.FC<ReaderCharactersPanelProps> = ({
     insights,
     isOpen,
     onClose,
-    wordQuery,
-    onWordQueryChange,
-    onLookupWord,
-    isWordLookupLoading,
-    wordLookupError,
-    wordInsight,
-    wordSuggestions,
-    recentWords,
 }) => {
+    const {
+        wordQuery,
+        setWordQuery,
+        lookupWord,
+        isWordLookupLoading,
+        wordLookupError,
+        wordInsight,
+        wordSuggestions,
+        recentWords,
+    } = useReaderDiscovery();
     const meanings = wordInsight?.meanings.slice(0, 4) ?? [];
     const sourceLabel = wordInsight?.sources.join(' + ') ?? null;
 
@@ -160,13 +156,13 @@ export const ReaderCharactersPanel: React.FC<ReaderCharactersPanelProps> = ({
                     className="cine-word-lens-form"
                     onSubmit={event => {
                         event.preventDefault();
-                        void onLookupWord();
+                        void lookupWord();
                     }}
                 >
                     <input
                         className="cine-word-lens-input"
                         value={wordQuery}
-                        onChange={event => onWordQueryChange(event.target.value)}
+                        onChange={event => setWordQuery(event.target.value)}
                         placeholder="Lookup a word"
                         aria-label="Lookup a word"
                         autoComplete="off"
@@ -193,8 +189,8 @@ export const ReaderCharactersPanel: React.FC<ReaderCharactersPanelProps> = ({
                                     className="cine-word-tag"
                                     type="button"
                                     onClick={() => {
-                                        onWordQueryChange(word);
-                                        void onLookupWord(word);
+                                        setWordQuery(word);
+                                        void lookupWord(word);
                                     }}
                                 >
                                     {word}
@@ -214,8 +210,8 @@ export const ReaderCharactersPanel: React.FC<ReaderCharactersPanelProps> = ({
                                     className="cine-word-tag"
                                     type="button"
                                     onClick={() => {
-                                        onWordQueryChange(word);
-                                        void onLookupWord(word);
+                                        setWordQuery(word);
+                                        void lookupWord(word);
                                     }}
                                 >
                                     {word}

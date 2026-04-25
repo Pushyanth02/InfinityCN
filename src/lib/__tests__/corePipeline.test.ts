@@ -7,7 +7,7 @@ import {
     cinematizeScene,
     validateOutput,
     runCorePipeline,
-} from '../cinematifier/corePipeline';
+} from '../engine/cinematifier/corePipeline';
 
 describe('corePipeline (Prompt 2A)', () => {
     it('rebuildParagraphs reconstructs paragraph boundaries', () => {

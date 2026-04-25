@@ -7,7 +7,7 @@ import {
     analyzeSentiment,
     analyzeSentimentFlow,
     scoreToEmotion,
-} from '../cinematifier/sentimentTracker';
+} from '../engine/cinematifier/sentimentTracker';
 
 // ─── scoreToEmotion ────────────────────────────────────────
 

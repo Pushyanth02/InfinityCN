@@ -61,6 +61,11 @@ export function classifyError(err: unknown, provider: string): AIError {
     return new AIError(msg, 'unknown', provider, false);
 }
 
+/**
+ * @deprecated Use RetryPolicy from requestPipeline.ts instead.
+ * RetryPolicy provides jitter, event hooks, and provider fallback.
+ * This function is preserved for backward compatibility only.
+ */
 export async function withRetry<T>(
     fn: () => Promise<T>,
     provider: string,

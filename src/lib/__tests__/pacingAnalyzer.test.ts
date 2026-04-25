@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { analyzePacing } from '../cinematifier/pacingAnalyzer';
+import { analyzePacing } from '../engine/cinematifier/pacingAnalyzer';
 import type { CinematicBlock } from '../../types/cinematifier';
 
 // ─── Helpers ────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { cinematifyText, validateAICinematification } from '../cinematifier/aiEngine';
+import { cinematifyText, validateAICinematification } from '../engine/cinematifier/aiEngine';
 import * as aiModule from '../ai';
 import type { AIConfig } from '../ai';
 import * as embeddingsModule from '../ai/embeddings';

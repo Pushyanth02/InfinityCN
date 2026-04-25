@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { computeTextStatistics, getTopWords } from '../textStatistics';
+import { computeTextStatistics, getTopWords } from '../processing/textStatistics';
 
 // ─── computeTextStatistics ─────────────────────────────────
 

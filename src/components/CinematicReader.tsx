@@ -5,35 +5,37 @@
  * Features Netflix-inspired dark cinematic UI with ambient effects.
  *
  * Custom hooks (extracted to src/hooks/):
- *   - useReadingProgress   — Progress init, time tracking, chapter marking
- *   - useAmbientAudio      — Web Audio synthesis + emotion sync
- *   - useAutoScroll         — Tension-based auto-scroll pacing
- *   - useChapterProcessing  — On-demand chapter cinematification
+ *   - useReaderState        — Consolidated reader state (book, settings, actions)
+ *   - useReadingProgress    — Progress init, time tracking, chapter marking
+ *   - useAmbientAudio       — Web Audio synthesis + emotion sync
+ *   - useAutoScroll          — Tension-based auto-scroll pacing
+ *   - useChapterProcessing   — On-demand chapter cinematification
  *
  * Sub-components (extracted to reader/):
- *   - CinematicBlockView — Animated block renderer
- *   - OriginalTextView   — Plain text view
- *   - EmotionHeatmap     — Tension heatmap
- *   - ChapterNav         — Chapter navigation sidebar
- *   - ReaderHeader       — Header bar with controls
- *   - ReaderSettingsPanel — Settings dropdown
- *   - ReaderFooter       — Chapter navigation footer
+ *   - CinematicRenderer    — Pacing-aware + virtualized block renderer
+ *   - OriginalTextView     — Scene-aware + virtualized plain text view
+ *   - EmotionHeatmap       — Tension heatmap
+ *   - ChapterNav           — Chapter navigation sidebar
+ *   - ReaderHeader         — Header bar with controls
+ *   - ReaderSettingsPanel  — Settings dropdown
+ *   - ReaderFooter         — Chapter navigation footer
  */
 
 import React, { useRef, useEffect, useState, lazy, Suspense } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { Film, Sparkles } from 'lucide-react';
-import { useCinematifierStore } from '../store/cinematifierStore';
 import type { ReaderMode } from '../types/cinematifier';
 
-// Extracted custom hooks
+// Consolidated reader state
+import { useReaderState } from '../hooks/useReaderState';
+
+// Other custom hooks
 import {
     useReadingProgress,
     useAmbientAudio,
     useAutoScroll,
     useChapterProcessing,
     useReaderAnalytics,
-    useReaderDiscovery,
 } from '../hooks';
 
 // Extracted sub-components
@@ -76,22 +78,29 @@ interface CinematicReaderProps {
 
 export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => {
     const chapterNavTriggerRef = useRef<HTMLButtonElement>(null);
-    const book = useCinematifierStore(s => s.book);
-    const readerMode = useCinematifierStore(s => s.readerMode);
-    const currentChapterIndex = useCinematifierStore(s => s.currentChapterIndex);
-    const fontSize = useCinematifierStore(s => s.fontSize);
-    const lineSpacing = useCinematifierStore(s => s.lineSpacing);
-    const immersionLevel = useCinematifierStore(s => s.immersionLevel);
-    const dyslexiaFont = useCinematifierStore(s => s.dyslexiaFont);
-    const darkMode = useCinematifierStore(s => s.darkMode);
-    const aiProvider = useCinematifierStore(s => s.aiProvider);
-    const setReaderMode = useCinematifierStore(s => s.setReaderMode);
-    const setCurrentChapter = useCinematifierStore(s => s.setCurrentChapter);
-    const setFontSize = useCinematifierStore(s => s.setFontSize);
-    const setLineSpacing = useCinematifierStore(s => s.setLineSpacing);
-    const setImmersionLevel = useCinematifierStore(s => s.setImmersionLevel);
-    const toggleDyslexiaFont = useCinematifierStore(s => s.toggleDyslexiaFont);
-    const toggleDarkMode = useCinematifierStore(s => s.toggleDarkMode);
+
+    // Consolidated state — replaces 15+ individual store selectors
+    const reader = useReaderState();
+    const {
+        book,
+        currentChapter,
+        currentChapterIndex,
+        blocks,
+        readerMode,
+        fontSize,
+        lineSpacing,
+        immersionLevel,
+        darkMode,
+        dyslexiaFont,
+        aiProvider,
+        setReaderMode,
+        setCurrentChapter,
+        setFontSize,
+        setLineSpacing,
+        setImmersionLevel,
+        toggleDarkMode,
+        toggleDyslexiaFont,
+    } = reader;
 
     const [showSettings, setShowSettings] = useState(false);
     const [showChapterNav, setShowChapterNav] = useState(false);
@@ -108,8 +117,9 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
         cinematified: 0,
     });
     const previousModeRef = useRef<ReaderMode>(readerMode);
+    const lastScrollYRef = useRef(0);
+    const [isHeaderHidden, setIsHeaderHidden] = useState(false);
 
-    const currentChapter = book?.chapters[currentChapterIndex];
     // ─── Custom Hooks ──────────────────────────────────────────
     const { readingProgress, bookmarks, isBookmarked, toggleBookmark } = useReadingProgress();
     const { isAmbientSoundEnabled, toggleAmbientSound } = useAmbientAudio(
@@ -130,23 +140,13 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
         readerMode,
         contentRef,
     });
-    const {
-        wordQuery,
-        setWordQuery,
-        lookupWord,
-        isWordLookupLoading,
-        wordLookupError,
-        wordInsight,
-        wordSuggestions,
-        recentWords,
-    } = useReaderDiscovery();
 
     const activeStreamBlocks = currentChapter
         ? sceneState?.(currentChapter.id)?.accumulatedBlocks
         : undefined;
 
     // During active processing, use whichever array is larger (store might have pre-existing blocks)
-    let blocksToRender = currentChapter?.cinematifiedBlocks ?? [];
+    let blocksToRender = blocks;
     if (
         isProcessingChapter &&
         activeStreamBlocks &&
@@ -229,13 +229,26 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
         };
     }, [readerMode]);
 
-    // Continuously track the current mode's scroll ratio.
+    // Continuously track the current mode's scroll ratio and handle auto-hide header.
     useEffect(() => {
         const node = contentRef.current;
         if (!node) return;
 
         const onScroll = () => {
+            const currentScrollY = node.scrollTop;
             modeScrollRatioRef.current[readerMode] = computeScrollRatio(node);
+            
+            // Auto-hide header logic
+            if (currentScrollY > 100) {
+                if (currentScrollY > lastScrollYRef.current + 10) {
+                    setIsHeaderHidden(true); // Scrolling down
+                } else if (currentScrollY < lastScrollYRef.current - 10) {
+                    setIsHeaderHidden(false); // Scrolling up
+                }
+            } else {
+                setIsHeaderHidden(false); // Near top
+            }
+            lastScrollYRef.current = currentScrollY;
         };
 
         onScroll();
@@ -321,6 +334,7 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                 onShowChapterNav={() => setShowChapterNav(true)}
                 onClose={onClose}
                 chapterNavTriggerRef={chapterNavTriggerRef}
+                isHidden={isHeaderHidden}
             />
 
             {/* Settings Panel */}
@@ -406,22 +420,23 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                                         currentChapter.originalModeText ??
                                         currentChapter.originalText
                                     }
+                                    scenes={currentChapter.originalModeScenes}
+                                    containerRef={contentRef}
                                 />
                             </div>
                         ) : blocksToRender && blocksToRender.length > 0 ? (
                             <div className="cine-blocks-wrapper">
-                                <div className="cine-blocks">
-                                    <CinematicRenderer
-                                        blocks={blocksToRender}
-                                        immersionLevel={immersionLevel}
-                                    />
-                                    {isProcessingChapter && (
-                                        <div className="cine-processing cine-processing-inline">
-                                            <Sparkles size={16} className="cine-processing-icon" />
-                                            <p>Generating…</p>
-                                        </div>
-                                    )}
-                                </div>
+                                <CinematicRenderer
+                                    blocks={blocksToRender}
+                                    immersionLevel={immersionLevel}
+                                    containerRef={contentRef}
+                                />
+                                {isProcessingChapter && (
+                                    <div className="cine-processing cine-processing-inline">
+                                        <Sparkles size={16} className="cine-processing-icon" />
+                                        <p>Generating…</p>
+                                    </div>
+                                )}
                             </div>
                         ) : !isProcessingChapter ? (
                             <div className="cine-blocks-wrapper">
@@ -453,14 +468,6 @@ export const CinematicReader: React.FC<CinematicReaderProps> = ({ onClose }) => 
                     insights={readerInsights}
                     isOpen={isInsightsSidebarOpen}
                     onClose={() => setIsInsightsSidebarOpen(false)}
-                    wordQuery={wordQuery}
-                    onWordQueryChange={setWordQuery}
-                    onLookupWord={lookupWord}
-                    isWordLookupLoading={isWordLookupLoading}
-                    wordLookupError={wordLookupError}
-                    wordInsight={wordInsight}
-                    wordSuggestions={wordSuggestions}
-                    recentWords={recentWords}
                 />
             </div>
 

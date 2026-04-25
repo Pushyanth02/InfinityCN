@@ -276,13 +276,13 @@ export interface CinematificationResult {
         processingTimeMs: number;
     };
     /** Readability metrics (populated when analytics stages are used) */
-    readability?: import('../lib/cinematifier/readability').ReadabilityMetrics;
-    /** Sentiment flow analysis (populated when analytics stages are used) */
-    sentiment?: import('../lib/cinematifier/sentimentTracker').SentimentFlowResult;
+    readability?: import('../lib/engine/cinematifier/readability').ReadabilityMetrics;
+    /** Emotion/sentiment flow (populated when analytics stages are used) */
+    sentiment?: import('../lib/engine/cinematifier/sentimentTracker').SentimentFlowResult;
     /** Pacing analysis (populated when analytics stages are used) */
-    pacing?: import('../lib/cinematifier/pacingAnalyzer').PacingMetrics;
+    pacing?: import('../lib/engine/cinematifier/pacingAnalyzer').PacingMetrics;
     /** Text statistics (populated when analytics stages are used) */
-    textStats?: import('../lib/textStatistics').TextStatistics;
+    textStats?: import('../lib/processing/textStatistics').TextStatistics;
     /** Detected narrative mode (populated by NarrativeAnalysisStage) */
     narrativeMode?: 'normal' | 'flashback' | 'dream' | 'memory';
     /** Detected POV character name (populated by NarrativeAnalysisStage) */

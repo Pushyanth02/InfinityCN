@@ -21,7 +21,7 @@ import {
     deriveSceneTitle,
     segmentChapters,
 } from '../cinematifier';
-import { computeTextStatistics } from '../textStatistics';
+import { computeTextStatistics } from '../processing/textStatistics';
 
 // ─── Helpers ───────────────────────────────────────────────
 
@@ -376,11 +376,11 @@ describe('computeTextStatistics — new metrics', () => {
 
 // ─── Pipeline Stages ──────────────────────────────────────────────
 
-import type { PipelineContext } from '../cinematifier/pipeline';
+import type { PipelineContext } from '../engine/cinematifier/pipeline';
 
 describe('NarrativeAnalysisStage', () => {
     it('detects POV character in pipeline context', async () => {
-        const { NarrativeAnalysisStage } = await import('../cinematifier/pipeline');
+        const { NarrativeAnalysisStage } = await import('../engine/cinematifier/pipeline');
         const stage = new NarrativeAnalysisStage();
         const context: PipelineContext = {
             text: 'Sarah walked slowly through the mist.\n\nThe night was cold.',
@@ -395,7 +395,7 @@ describe('NarrativeAnalysisStage', () => {
     });
 
     it('detects flashback narrative mode', async () => {
-        const { NarrativeAnalysisStage } = await import('../cinematifier/pipeline');
+        const { NarrativeAnalysisStage } = await import('../engine/cinematifier/pipeline');
         const stage = new NarrativeAnalysisStage();
         const context: PipelineContext = {
             text: 'She remembered when life was simpler.\n\nThose days were gone.',
@@ -410,7 +410,7 @@ describe('NarrativeAnalysisStage', () => {
     });
 
     it('defaults to normal narrative mode', async () => {
-        const { NarrativeAnalysisStage } = await import('../cinematifier/pipeline');
+        const { NarrativeAnalysisStage } = await import('../engine/cinematifier/pipeline');
         const stage = new NarrativeAnalysisStage();
         const context: PipelineContext = {
             text: 'The sun was shining brightly.\n\nBirds chirped in the trees.',
@@ -427,7 +427,7 @@ describe('NarrativeAnalysisStage', () => {
 
 describe('SceneSegmentationStage', () => {
     it('segments text into scenes with titles', async () => {
-        const { SceneSegmentationStage } = await import('../cinematifier/pipeline');
+        const { SceneSegmentationStage } = await import('../engine/cinematifier/pipeline');
         const stage = new SceneSegmentationStage();
         const context: PipelineContext = {
             text: 'The village was quiet.\n\nSuddenly the ground shook.',
@@ -445,7 +445,7 @@ describe('SceneSegmentationStage', () => {
     });
 
     it('creates multiple scenes at break signals', async () => {
-        const { SceneSegmentationStage } = await import('../cinematifier/pipeline');
+        const { SceneSegmentationStage } = await import('../engine/cinematifier/pipeline');
         const stage = new SceneSegmentationStage();
         const context: PipelineContext = {
             text: 'He arrived at the gate.\n\nHours later he was inside.',
@@ -462,7 +462,7 @@ describe('SceneSegmentationStage', () => {
 
 describe('Enriched offline pipeline', () => {
     it('includes NarrativeAnalysis and SceneSegmentation stages', async () => {
-        const { CinematificationPipeline } = await import('../cinematifier/pipeline');
+        const { CinematificationPipeline } = await import('../engine/cinematifier/pipeline');
         const pipeline = CinematificationPipeline.createEnrichedOfflinePipeline();
         const names = pipeline.getStageNames();
         expect(names).toContain('Narrative Analysis');
@@ -470,7 +470,7 @@ describe('Enriched offline pipeline', () => {
     });
 
     it('produces narrativeMode and scenes in result', async () => {
-        const { CinematificationPipeline } = await import('../cinematifier/pipeline');
+        const { CinematificationPipeline } = await import('../engine/cinematifier/pipeline');
         const pipeline = CinematificationPipeline.createEnrichedOfflinePipeline();
         const result = await pipeline.execute(
             'Sarah walked slowly through the dark forest.\n\nSuddenly the trees parted.',

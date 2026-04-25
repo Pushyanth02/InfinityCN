@@ -3,25 +3,18 @@
  *
  * Delegates to isolated provider classes for streaming. Preserves the
  * original `streamAI()` signature and `getRateLimiter()` export.
+ *
+ * Rate limiting now delegates to the shared rateLimiterRegistry to ensure
+ * streaming and non-streaming paths share the same per-provider state.
  */
 
 import type { AIConfig } from './types';
-import { MODEL_PRESETS } from './presets';
-import { RateLimiter } from './rateLimiter';
 import { prepareAICall } from './providers';
 import { getProvider } from './providers/index';
+import { getRateLimiter } from './rateLimiterRegistry';
 
-// ─── RATE LIMITER (shared with callAI via getRateLimiter) ──
-
-const rateLimiters = new Map<string, RateLimiter>();
-
-export function getRateLimiter(provider: string): RateLimiter {
-    if (!rateLimiters.has(provider)) {
-        const preset = MODEL_PRESETS[provider] || { rateLimitRPM: 60, rateLimitTPM: 60_000 };
-        rateLimiters.set(provider, new RateLimiter(preset.rateLimitRPM, preset.rateLimitTPM));
-    }
-    return rateLimiters.get(provider)!;
-}
+// Re-export getRateLimiter from the shared registry for backwards compat
+export { getRateLimiter } from './rateLimiterRegistry';
 
 // ─── STREAMING ENTRY POINT ────────────────────────────────────────────────────
 
@@ -32,6 +25,9 @@ export function getRateLimiter(provider: string): RateLimiter {
  * Delegates to the provider's stream() method via the provider registry.
  */
 export async function* streamAI(prompt: string, config: AIConfig): AsyncGenerator<string> {
+    if (config.provider === 'none') {
+        throw new Error('AI provider is not configured. Open AI Settings to choose a provider before streaming.');
+    }
     const prepared = prepareAICall(prompt, config);
     const provider = prepared.provider;
 

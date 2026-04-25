@@ -3,7 +3,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { clearProcessingQuoteCache, getOfflineQuote, getProcessingQuote } from '../quotableApi';
+import { clearProcessingQuoteCache, getOfflineQuote, getProcessingQuote } from '../runtime/quotableApi';
 
 // ─── getOfflineQuote ───────────────────────────────────────
 

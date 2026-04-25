@@ -1,15 +1,146 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import type { CinematicBlock } from '../../types/cinematifier';
+/**
+ * CinematicRenderer.tsx — Pacing-Aware Block Renderer
+ *
+ * Renders CinematicBlocks with:
+ *   - Dynamic pacing-based spacing (via usePacingEngine)
+ *   - Virtualized rendering for long chapters (via VirtualizedContent)
+ *   - Scene dividers at detected scene boundaries
+ *   - Progressive loading for non-virtualized chapters
+ *
+ * The renderer wraps each block in a pacing-styled container that applies
+ * spacing, opacity, and letter-spacing computed from the block's timing,
+ * tension, and intensity metadata.
+ */
+
+import React, { useMemo } from 'react';
+import type { CinematicBlock, ImmersionLevel } from '../../types/cinematifier';
 import { CinematicBlockView } from './CinematicBlockView';
+import { VirtualizedContent } from './VirtualizedContent';
+import type { VirtualItem } from './VirtualizedContent';
+import { usePacingEngine } from '../../hooks/usePacingEngine';
 
 interface CinematicRendererProps {
     blocks: CinematicBlock[];
-    immersionLevel: 'minimal' | 'balanced' | 'cinematic';
+    immersionLevel: ImmersionLevel;
+    /** Scroll container ref for virtualization */
+    containerRef?: React.RefObject<HTMLElement | null>;
 }
 
-const INITIAL_RENDER_BLOCKS = 120;
-const RENDER_BATCH_SIZE = 80;
-const LOAD_AHEAD_MARGIN = '500px 0px';
+// ─── Height Estimation ─────────────────────────────────────────────────────────
+
+function estimateBlockHeight(block: CinematicBlock): number {
+    const contentLen = block.content.length;
+    const baseHeight = 24; // min height per block
+
+    switch (block.type) {
+        case 'beat':
+        case 'sfx':
+            return baseHeight + 20;
+        case 'transition':
+        case 'title_card':
+        case 'chapter_header':
+            return baseHeight + 40;
+        case 'dialogue':
+            return baseHeight + Math.ceil(contentLen / 60) * 22 + (block.speaker ? 20 : 0);
+        default:
+            return baseHeight + Math.ceil(contentLen / 70) * 22;
+    }
+}
+
+// ─── Scene Divider ─────────────────────────────────────────────────────────────
+
+const SceneDivider = React.memo(function SceneDivider() {
+    return (
+        <div className="cine-scene-divider" aria-hidden>
+            <div className="cine-scene-divider__line" />
+            <div className="cine-scene-divider__dot" />
+            <div className="cine-scene-divider__line" />
+        </div>
+    );
+});
+
+// ─── Component ─────────────────────────────────────────────────────────────────
+
+export const CinematicRenderer: React.FC<CinematicRendererProps> = React.memo(
+    function CinematicRenderer({ blocks, immersionLevel, containerRef }) {
+        const pacingStyles = usePacingEngine(blocks, immersionLevel);
+
+        // Build virtual items with pacing styles baked in
+        const virtualItems: VirtualItem[] = useMemo(() => {
+            const items: VirtualItem[] = [];
+
+            for (let i = 0; i < blocks.length; i++) {
+                const block = blocks[i];
+                const pacing = pacingStyles[i];
+
+                // Insert scene divider before scene breaks
+                if (pacing.isSceneBreak) {
+                    items.push({
+                        key: `divider-${block.id}`,
+                        content: <SceneDivider />,
+                        estimatedHeight: 48,
+                    });
+                }
+
+                const blockStyle: React.CSSProperties = {
+                    marginBlock: pacing.marginBlock,
+                    letterSpacing: pacing.letterSpacing,
+                    opacity: pacing.opacity,
+                };
+
+                const wrapperClasses = [
+                    'cine-paragraph',
+                    `cine-paragraph--${getParagraphType(block)}`,
+                    pacing.pacingClass,
+                ].filter(Boolean).join(' ');
+
+                items.push({
+                    key: block.id,
+                    content: (
+                        <div
+                            className={wrapperClasses}
+                            data-paragraph-type={getParagraphType(block)}
+                            style={blockStyle}
+                        >
+                            <CinematicBlockView
+                                block={block}
+                                index={i}
+                                immersionLevel={immersionLevel}
+                            />
+                        </div>
+                    ),
+                    estimatedHeight: estimateBlockHeight(block),
+                });
+            }
+
+            return items;
+        }, [blocks, pacingStyles, immersionLevel]);
+
+        // Use virtualized rendering if container ref is provided
+        if (containerRef) {
+            return (
+                <VirtualizedContent
+                    items={virtualItems}
+                    containerRef={containerRef}
+                    className="cine-blocks"
+                    overscan={20}
+                    threshold={80}
+                />
+            );
+        }
+
+        // Fallback: render all items directly (no virtualization)
+        return (
+            <div className="cine-blocks">
+                {virtualItems.map(item => (
+                    <React.Fragment key={item.key}>{item.content}</React.Fragment>
+                ))}
+            </div>
+        );
+    },
+);
+
+// ─── Helpers ───────────────────────────────────────────────────────────────────
 
 function getParagraphType(
     block: CinematicBlock,
@@ -20,88 +151,3 @@ function getParagraphType(
     if ((block.tensionScore ?? 0) >= 70) return 'tension';
     return 'action';
 }
-
-function getBlockSpacing(block: CinematicBlock): string {
-    if (block.type === 'title_card' || block.type === 'transition') return '2rem';
-    if (block.type === 'dialogue') return '1.25rem';
-    if (block.type === 'inner_thought') return '1.5rem';
-    if ((block.tensionScore ?? 0) >= 80) return '1.75rem';
-    return '1rem';
-}
-
-export const CinematicRenderer: React.FC<CinematicRendererProps> = React.memo(
-    function CinematicRenderer({ blocks, immersionLevel }) {
-        const [visibleCount, setVisibleCount] = useState(() =>
-            Math.min(blocks.length, INITIAL_RENDER_BLOCKS),
-        );
-        const loadMoreRef = React.useRef<HTMLDivElement | null>(null);
-
-        useEffect(() => {
-            const timer = window.setTimeout(() => {
-                setVisibleCount(prev => {
-                    if (blocks.length <= INITIAL_RENDER_BLOCKS) return blocks.length;
-                    return Math.min(blocks.length, Math.max(prev, INITIAL_RENDER_BLOCKS));
-                });
-            }, 0);
-
-            return () => window.clearTimeout(timer);
-        }, [blocks.length]);
-
-        useEffect(() => {
-            if (visibleCount >= blocks.length) return;
-
-            const sentinel = loadMoreRef.current;
-            if (!sentinel) return;
-
-            if (typeof IntersectionObserver === 'undefined') {
-                const timer = window.setTimeout(() => {
-                    setVisibleCount(prev => Math.min(blocks.length, prev + RENDER_BATCH_SIZE));
-                }, 32);
-                return () => window.clearTimeout(timer);
-            }
-
-            const observer = new IntersectionObserver(
-                entries => {
-                    if (entries[0]?.isIntersecting) {
-                        setVisibleCount(prev => Math.min(blocks.length, prev + RENDER_BATCH_SIZE));
-                    }
-                },
-                {
-                    root: null,
-                    rootMargin: LOAD_AHEAD_MARGIN,
-                    threshold: 0,
-                },
-            );
-
-            observer.observe(sentinel);
-            return () => observer.disconnect();
-        }, [visibleCount, blocks.length]);
-
-        const visibleBlocks = useMemo(() => blocks.slice(0, visibleCount), [blocks, visibleCount]);
-
-        return (
-            <>
-                {visibleBlocks.map((block, i) => {
-                    const paragraphType = getParagraphType(block);
-                    return (
-                        <div
-                            key={block.id}
-                            className={`cine-paragraph cine-paragraph--${paragraphType}`}
-                            data-paragraph-type={paragraphType}
-                            style={{ marginBlock: getBlockSpacing(block) }}
-                        >
-                            <CinematicBlockView
-                                block={block}
-                                index={i}
-                                immersionLevel={immersionLevel}
-                            />
-                        </div>
-                    );
-                })}
-                {visibleCount < blocks.length && (
-                    <div ref={loadMoreRef} aria-hidden="true" style={{ height: 1 }} />
-                )}
-            </>
-        );
-    },
-);

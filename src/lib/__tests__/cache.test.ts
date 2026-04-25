@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getCacheKey, getCached, setCache } from '../ai/cache';
+import { getCacheKey, getCached, setCache } from '../ai';
 import { AI_CACHE_TTL_MS } from '../constants';
 
 describe('AI cache system', () => {

@@ -8,6 +8,7 @@
 import React, { useState, useCallback, lazy, Suspense } from 'react';
 import { Film, Settings, X, Sparkles, AlertCircle, Moon, Sun, BookOpen } from 'lucide-react';
 import { useCinematifierStore } from '../store/cinematifierStore';
+import { useShallow } from 'zustand/shallow';
 import { useBookHydration, useFileProcessing } from '../hooks';
 
 // Extracted sub-components
@@ -25,15 +26,29 @@ const CinematifierSettings = lazy(() =>
 // ─── Main App Component ────────────────────────────────────
 
 export const CinematifierApp: React.FC = () => {
-    const book = useCinematifierStore(s => s.book);
-    const isProcessing = useCinematifierStore(s => s.isProcessing);
-    const processingProgress = useCinematifierStore(s => s.processingProgress);
-    const error = useCinematifierStore(s => s.error);
-    const aiProvider = useCinematifierStore(s => s.aiProvider);
-    const darkMode = useCinematifierStore(s => s.darkMode);
-    const setError = useCinematifierStore(s => s.setError);
-    const toggleDarkMode = useCinematifierStore(s => s.toggleDarkMode);
-    const reset = useCinematifierStore(s => s.reset);
+    const {
+        book,
+        isProcessing,
+        processingProgress,
+        error,
+        aiProvider,
+        darkMode,
+        setError,
+        toggleDarkMode,
+        reset,
+    } = useCinematifierStore(
+        useShallow(s => ({
+            book: s.book,
+            isProcessing: s.isProcessing,
+            processingProgress: s.processingProgress,
+            error: s.error,
+            aiProvider: s.aiProvider,
+            darkMode: s.darkMode,
+            setError: s.setError,
+            toggleDarkMode: s.toggleDarkMode,
+            reset: s.reset,
+        }))
+    );
 
     const [showSettings, setShowSettings] = useState(false);
     const [showReader, setShowReader] = useState(false);

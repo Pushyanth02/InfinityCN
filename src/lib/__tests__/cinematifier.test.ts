@@ -29,7 +29,7 @@ import {
     createReadingProgress,
     extractOverallMetadata,
 } from '../cinematifier';
-import { rebuildParagraphs } from '../cinematifier/textProcessing';
+import { rebuildParagraphs } from '../engine/cinematifier/textProcessing';
 import type { ChapterSegment } from '../../types/cinematifier';
 
 describe('parseCinematifiedText', () => {

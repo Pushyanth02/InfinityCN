@@ -35,7 +35,7 @@ vi.mock('../../lib/cinematifierDb', () => ({
 }));
 
 // Mock crypto to avoid Web Crypto API (not meaningful in jsdom for key derivation)
-vi.mock('../../lib/crypto', () => ({
+vi.mock('../../lib/security/crypto', () => ({
     encrypt: vi.fn().mockResolvedValue('encrypted'),
     decrypt: vi.fn().mockResolvedValue(''),
     deobfuscateLegacy: vi.fn().mockReturnValue(''),

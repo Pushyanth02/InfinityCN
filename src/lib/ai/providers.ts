@@ -225,6 +225,8 @@ export function capitalizeProvider(provider: string): string {
 
 // ─── BASE ROUTER — DELEGATES TO PROVIDER CLASSES ─────────────────────────────
 
+const sharedKeyManager = new KeyManager();
+
 /**
  * Main provider dispatch. Delegates to the isolated provider class for the
  * configured provider. Preserves the original `callAI()` signature exactly.
@@ -236,8 +238,7 @@ export async function callAI(
 ): Promise<string> {
     const prepared = preparedCall ?? prepareAICall(prompt, config);
     const provider = prepared.provider;
-    const keyManager = new KeyManager();
-    keyManager.assertBackendOnlyUsage(provider, API_PROXY_URL);
+    sharedKeyManager.assertBackendOnlyUsage(provider, API_PROXY_URL);
 
     // Delegate to isolated provider class
     const providerInstance = getProvider(provider);

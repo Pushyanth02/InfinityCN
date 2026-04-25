@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { detectFormat, ACCEPTED_EXTENSIONS, extractPDFText } from '../pdfWorker';
+import { detectFormat, ACCEPTED_EXTENSIONS, extractPDFText } from '../processing/pdfWorker';
 
 // ─── Test helpers ─────────────────────────────────────────────────────────────
 
