@@ -46,8 +46,11 @@ export function useReaderDiscovery(): UseReaderDiscoveryResult {
 
     const setWordQuery = useCallback((value: string) => {
         setWordQueryState(value);
-        if (value.trim().length < MIN_WORD_LOOKUP_LENGTH) {
+        const trimmedValue = value.trim();
+        if (trimmedValue.length === 0) {
             setWordLookupError(null);
+        }
+        if (trimmedValue.length < MIN_WORD_LOOKUP_LENGTH) {
             setWordSuggestionError(null);
             setIsWordSuggestionLoading(false);
             setWordSuggestions([]);

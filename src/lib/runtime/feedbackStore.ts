@@ -73,7 +73,7 @@ export function submitUserFeedback(input: SubmitFeedbackInput): UserFeedbackEntr
         id: `feedback-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
         category: input.category,
         message,
-        context: context ? context : undefined,
+        context: context || undefined,
         createdAt: Date.now(),
     };
 

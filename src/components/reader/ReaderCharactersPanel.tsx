@@ -1,6 +1,7 @@
 import React from 'react';
 import { ChevronRight } from 'lucide-react';
 import type { ReaderAnalyticsSummary } from '../../lib/runtime/readerBackend';
+import type { FeedbackCategory } from '../../lib/runtime/feedbackStore';
 
 import { useReaderDiscovery, useReaderFeedback } from '../../hooks';
 
@@ -8,6 +9,10 @@ interface ReaderCharactersPanelProps {
     insights: ReaderAnalyticsSummary | null;
     isOpen: boolean;
     onClose: () => void;
+}
+
+function isFeedbackCategory(value: string): value is FeedbackCategory {
+    return value === 'bug' || value === 'ux' || value === 'feature' || value === 'other';
 }
 
 function formatMinutes(minutes: number): string {
@@ -345,9 +350,12 @@ export const ReaderCharactersPanel: React.FC<ReaderCharactersPanelProps> = ({
                         id="reader-feedback-category"
                         className="cine-feedback-select"
                         value={feedbackCategory}
-                        onChange={event =>
-                            setFeedbackCategory(event.target.value as typeof feedbackCategory)
-                        }
+                        onChange={event => {
+                            const value = event.target.value;
+                            if (isFeedbackCategory(value)) {
+                                setFeedbackCategory(value);
+                            }
+                        }}
                     >
                         <option value="ux">UX</option>
                         <option value="bug">Bug</option>
