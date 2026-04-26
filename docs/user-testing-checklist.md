@@ -57,3 +57,11 @@
 ---
 
 _Use this checklist during manual user testing sessions and to guide further UI/UX iteration._
+
+---
+
+## Documentation Map Reference
+
+- Master repository map: `/home/runner/work/InfinityCN/InfinityCN/README.md`
+- Planning overview: `/home/runner/work/InfinityCN/InfinityCN/.planning/PROJECT.md`, `/home/runner/work/InfinityCN/InfinityCN/.planning/ROADMAP.md`, `/home/runner/work/InfinityCN/InfinityCN/.planning/STATE.md`
+- Codebase map set: `/home/runner/work/InfinityCN/InfinityCN/.planning/codebase/STRUCTURE.md`, `/home/runner/work/InfinityCN/InfinityCN/.planning/codebase/ARCHITECTURE.md`, `/home/runner/work/InfinityCN/InfinityCN/.planning/codebase/INTEGRATIONS.md`

@@ -22,7 +22,7 @@
 
 ## 📁 Naming Conventions
 
-- **PascalCase:** React Components (`CinematicReader.tsx`), .NET Classes.
+- **PascalCase:** React components and TypeScript interfaces/classes.
 - **camelCase:** Hooks (`useAmbientAudio.ts`), variables, functions, and utility files.
 - **SCREAMING_SNAKE_CASE:** Global constants and environment variables.
 
@@ -34,8 +34,7 @@
 
 ## 🧪 Testing Standards
 
-- **Frontend:** Vitest for all logical units in `src/lib/cinematifier`.
-- **Backend:** NUnit or xUnit for .NET core services.
+- **Frontend:** Vitest for logical units and component behavior in `src/`.
 - **Verification:** Mandatory checks for valid/invalid/large inputs and failure scenarios.
 
 ## ⚙️ Git Workflow
@@ -47,3 +46,11 @@
 ---
 
 _Conventions audit: 2026-03-30_
+
+---
+
+## Documentation Map Reference
+
+- Master repository map: `/home/runner/work/InfinityCN/InfinityCN/README.md`
+- Planning overview: `/home/runner/work/InfinityCN/InfinityCN/.planning/PROJECT.md`, `/home/runner/work/InfinityCN/InfinityCN/.planning/ROADMAP.md`, `/home/runner/work/InfinityCN/InfinityCN/.planning/STATE.md`
+- Codebase map set: `/home/runner/work/InfinityCN/InfinityCN/.planning/codebase/STRUCTURE.md`, `/home/runner/work/InfinityCN/InfinityCN/.planning/codebase/ARCHITECTURE.md`, `/home/runner/work/InfinityCN/InfinityCN/.planning/codebase/INTEGRATIONS.md`
