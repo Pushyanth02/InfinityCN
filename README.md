@@ -38,6 +38,7 @@
 - **Bookmarks & Progress** — Track reading progress, bookmark chapters
 - **Expanded Story Discovery** — Related-title recommendations across novels, manga, manhwa, and manhua with source/type badges and sidebar filters
 - **Cinematic Depth Metrics** — Live scene/cue/tension/mood stats derived from chapter render plans
+- **Reader Feedback Loop** — In-reader feedback capture with local suggestion history for follow-up UX iteration
 
 ### AI Providers
 

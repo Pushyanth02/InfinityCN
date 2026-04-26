@@ -608,6 +608,15 @@
     color: var(--on-surface-variant);
 }
 
+.cine-word-lens-input:focus-visible,
+.cine-feedback-input:focus-visible,
+.cine-feedback-select:focus-visible,
+.cine-word-lens-button:focus-visible,
+.cine-word-tag:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
 .cine-word-lens-button {
     border: none;
     border-radius: var(--radius-sm);
@@ -735,6 +744,47 @@
 
 .cine-word-tag:hover {
     background: rgba(220, 38, 38, 0.2);
+}
+
+.cine-feedback-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-2);
+}
+
+.cine-feedback-select,
+.cine-feedback-input {
+    border: none;
+    border-radius: var(--radius-sm);
+    background: var(--surface-container);
+    color: var(--on-surface);
+    font-family: var(--font-label);
+    font-size: 0.78rem;
+}
+
+.cine-feedback-select {
+    padding: 8px 10px;
+}
+
+.cine-feedback-input {
+    padding: 9px 10px;
+    resize: vertical;
+    min-height: 72px;
+}
+
+.cine-feedback-list {
+    margin: 0;
+    padding-left: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.cine-feedback-item {
+    font-family: var(--font-label);
+    font-size: 0.72rem;
+    color: var(--on-surface-variant);
+    line-height: 1.4;
 }
 
 /* ═══════════════════════════════════════════════════════════

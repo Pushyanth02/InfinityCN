@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { enrichBookMetadataFromFreeApis, inferGenreFromSubjects } from '../runtime/freeApis';
+import {
+    enrichBookMetadataFromFreeApis,
+    inferGenreFromSubjects,
+    inferStoryFormatFromSubjects,
+} from '../runtime/freeApis';
 
 describe('freeApis', () => {
     beforeEach(() => {
@@ -11,6 +15,15 @@ describe('freeApis', () => {
         expect(inferGenreFromSubjects(['Science fiction stories', 'Space travel'])).toBe('sci_fi');
         expect(inferGenreFromSubjects(['Detective and mystery stories'])).toBe('mystery');
         expect(inferGenreFromSubjects(['Uncategorized topic'])).toBeUndefined();
+    });
+
+    it('classifies story format and falls back to unknown for mixed manga/manhwa tags', () => {
+        expect(inferStoryFormatFromSubjects(['Japanese manga', 'Shonen'])).toBe('manga');
+        expect(inferStoryFormatFromSubjects(['Korean webtoon manhwa series'])).toBe('manhwa');
+        expect(inferStoryFormatFromSubjects(['Chinese manhua comic'])).toBe('manhua');
+        expect(inferStoryFormatFromSubjects(['Manhwa adaptation', 'Manga spin-off'])).toBe(
+            'unknown',
+        );
     });
 
     it('merges metadata from Open Library, Google Books, Gutendex, and Wikipedia', async () => {
@@ -95,6 +108,7 @@ describe('freeApis', () => {
         expect(metadata?.subjects).toContain('Science fiction stories');
         expect(metadata?.subjects).toContain('Adventure stories');
         expect(metadata?.genre).toBe('sci_fi');
+        expect(metadata?.storyFormat).toBe('novel');
         expect(metadata?.sources).toContain('openlibrary');
         expect(metadata?.sources).toContain('googlebooks');
         expect(metadata?.sources).toContain('gutendex');

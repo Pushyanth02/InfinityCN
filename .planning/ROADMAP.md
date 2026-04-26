@@ -30,8 +30,10 @@
     - Added strategy-based paragraph APIs (sentence-cluster, dialogue-pivot, scene-cue).
 - [x] **Phase 2: Cinematic Depth Metrics**
     - Surfaced chapter-level scene/cue/tension/mood summaries in reader analytics.
-- [ ] **Phase 3: Extended Validation Sweep**
-    - Run expanded UX and edge-case tests on mixed-content sources.
+- [x] **Phase 3: Extended Validation Sweep**
+    - Hardened mixed-format classification and added reader UX regression coverage.
+    - Added persistent in-app feedback capture for suggestion tracking.
+    - Added release-readiness gates for mobile + filtered discovery workflows.
 
 ---
 
