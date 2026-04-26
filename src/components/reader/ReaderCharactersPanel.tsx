@@ -1,7 +1,6 @@
 import React from 'react';
 import { ChevronRight } from 'lucide-react';
 import type { ReaderAnalyticsSummary } from '../../lib/runtime/readerBackend';
-import type { ReaderWordInsight } from '../../lib/runtime/readerApis';
 
 import { useReaderDiscovery } from '../../hooks';
 
@@ -266,8 +265,8 @@ export const ReaderCharactersPanel: React.FC<ReaderCharactersPanelProps> = ({
                                             className="cine-word-tag"
                                             type="button"
                                             onClick={() => {
-                                                onWordQueryChange(word);
-                                                void onLookupWord(word);
+                                                setWordQuery(word);
+                                                void lookupWord(word);
                                             }}
                                         >
                                             {word}
@@ -286,8 +285,8 @@ export const ReaderCharactersPanel: React.FC<ReaderCharactersPanelProps> = ({
                                             className="cine-word-tag"
                                             type="button"
                                             onClick={() => {
-                                                onWordQueryChange(word);
-                                                void onLookupWord(word);
+                                                setWordQuery(word);
+                                                void lookupWord(word);
                                             }}
                                         >
                                             {word}
