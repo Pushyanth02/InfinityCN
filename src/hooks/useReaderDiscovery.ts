@@ -46,9 +46,10 @@ export function useReaderDiscovery(): UseReaderDiscoveryResult {
 
     const setWordQuery = useCallback((value: string) => {
         setWordQueryState(value);
-        if (!value.trim()) {
+        if (value.trim().length < MIN_WORD_LOOKUP_LENGTH) {
             setWordLookupError(null);
             setWordSuggestionError(null);
+            setIsWordSuggestionLoading(false);
             setWordSuggestions([]);
         }
     }, []);
@@ -125,8 +126,6 @@ export function useReaderDiscovery(): UseReaderDiscoveryResult {
     useEffect(() => {
         const requestedWord = wordQuery.trim();
         if (requestedWord.length < MIN_WORD_LOOKUP_LENGTH) {
-            setIsWordSuggestionLoading(false);
-            setWordSuggestionError(null);
             return;
         }
 

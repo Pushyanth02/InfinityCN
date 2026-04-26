@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
     listUserFeedback,
     submitUserFeedback,
@@ -24,11 +24,8 @@ export function useReaderFeedback(): UseReaderFeedbackResult {
     const [feedbackCategory, setFeedbackCategory] = useState<FeedbackCategory>('ux');
     const [feedbackError, setFeedbackError] = useState<string | null>(null);
     const [feedbackSuccess, setFeedbackSuccess] = useState<string | null>(null);
-    const [refreshIndex, setRefreshIndex] = useState(0);
-
-    const recentFeedback = useMemo(
-        () => listUserFeedback(MAX_FEEDBACK_HISTORY),
-        [refreshIndex],
+    const [recentFeedback, setRecentFeedback] = useState(() =>
+        listUserFeedback(MAX_FEEDBACK_HISTORY),
     );
 
     const submitFeedback = useCallback(
@@ -48,7 +45,7 @@ export function useReaderFeedback(): UseReaderFeedbackResult {
             setFeedbackMessage('');
             setFeedbackError(null);
             setFeedbackSuccess('Thanks! Your feedback was saved for follow-up.');
-            setRefreshIndex(current => current + 1);
+            setRecentFeedback(listUserFeedback(MAX_FEEDBACK_HISTORY));
         },
         [feedbackCategory, feedbackMessage],
     );
