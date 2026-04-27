@@ -20,9 +20,11 @@ import { ingestDocument, IngestionError } from '../lib/processing/documentIngest
 import type { Book, CharacterAppearance, ProcessingProgress } from '../types/cinematifier';
 
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+// Supported by the unified ingestDocument -> extractText pipeline.
 const SUPPORTED_EXTENSIONS = ['.pdf', '.txt', '.epub', '.docx', '.pptx'];
 const CINEMATIFY_PROGRESS_START = 68;
 const CINEMATIFY_PROGRESS_END = 98;
+const AVERAGE_READING_WPM = 220;
 
 function clampPercent(value: number): number {
     return Math.max(0, Math.min(100, value));
@@ -197,7 +199,7 @@ export function useFileProcessing(onComplete: () => void) {
                         isProcessed: false,
                         estimatedReadTime: Math.max(
                             1,
-                            Math.ceil(chapter.narrative.stats.totalWords / 220),
+                            Math.ceil(chapter.narrative.stats.totalWords / AVERAGE_READING_WPM),
                         ),
                     })),
                     totalWordCount: totalWords,

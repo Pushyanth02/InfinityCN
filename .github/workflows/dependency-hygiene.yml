@@ -5,6 +5,9 @@ on:
     - cron: '0 4 * * 1'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   lockfile-refresh-and-smoke-tests:
     runs-on: ubuntu-latest

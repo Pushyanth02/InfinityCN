@@ -207,11 +207,14 @@ type PositionedToken = {
 const PDF_LINE_Y_TOLERANCE = 3;
 const OCR_LOW_CONFIDENCE_THRESHOLD = 60;
 const MAX_OCR_PAGES = 5;
+const IMAGE_ONLY_MIN_EXTRACTED_CHARS = 100;
+const IMAGE_ONLY_OCR_PAGE_RATIO_THRESHOLD = 0.5;
 
-function getAdaptivePdfBatchSize(totalPages: number): number {
+function calculatePDFBatchSizeByMemory(totalPages: number): number {
+    const navWithMemory = navigator as Navigator & { deviceMemory?: number };
     const deviceMemory =
-        typeof navigator !== 'undefined' && typeof navigator.deviceMemory === 'number'
-            ? navigator.deviceMemory
+        typeof navigator !== 'undefined' && typeof navWithMemory.deviceMemory === 'number'
+            ? navWithMemory.deviceMemory
             : 4;
 
     if (deviceMemory <= 2) return totalPages > 250 ? 2 : 3;
@@ -458,7 +461,7 @@ const extractTextFromPDF = async (
         });
 
         const pages: string[] = new Array(pdf.numPages);
-        const batchSize = getAdaptivePdfBatchSize(pdf.numPages);
+        const batchSize = calculatePDFBatchSizeByMemory(pdf.numPages);
         let ocrPagesUsed = 0;
         let pagesProcessed = 0;
         let damagedPages = 0;
@@ -544,7 +547,11 @@ const extractTextFromPDF = async (
                                     lowConfidenceOcrPages / Math.max(1, ocrPagesUsed) >= 0.4,
                                 damagedPages,
                             });
-                            page.cleanup();
+                            try {
+                                page.cleanup();
+                            } catch (cleanupErr) {
+                                console.warn('[pdfWorker] page cleanup failed:', cleanupErr);
+                            }
                         }
                     }),
                 );
@@ -554,7 +561,10 @@ const extractTextFromPDF = async (
 
         const totalExtractedChars = pages.join('\n').trim().length;
         const ocrPageRatio = ocrPagesUsed / Math.max(1, pdf.numPages);
-        if (totalExtractedChars < 100 && ocrPageRatio >= 0.5) {
+        if (
+            totalExtractedChars < IMAGE_ONLY_MIN_EXTRACTED_CHARS &&
+            ocrPageRatio >= IMAGE_ONLY_OCR_PAGE_RATIO_THRESHOLD
+        ) {
             throw new Error(
                 'Image-only PDF detected. Most pages appear scanned with low extractable text.',
             );

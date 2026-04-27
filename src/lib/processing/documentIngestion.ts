@@ -113,6 +113,42 @@ function classifyError(error: unknown, stage: IngestionStage): IngestionError {
         });
     }
 
+    if (lower.includes('image-only pdf') || lower.includes('image based')) {
+        return new IngestionError({
+            code: 'IMAGE_ONLY_PDF',
+            stage,
+            message: msg,
+            userMessage:
+                'This PDF appears image-only. OCR recovered limited text; try a higher-quality scan or OCR-enabled export.',
+            recoverable: true,
+            cause: error,
+        });
+    }
+
+    if (lower.includes('xref') || lower.includes('cross-reference')) {
+        return new IngestionError({
+            code: 'MALFORMED_XREF',
+            stage,
+            message: msg,
+            userMessage:
+                'The PDF has a malformed cross-reference table (xref). Please re-export the file and retry.',
+            recoverable: false,
+            cause: error,
+        });
+    }
+
+    if (lower.includes('damaged page') || lower.includes('damaged pages')) {
+        return new IngestionError({
+            code: 'DAMAGED_PAGES',
+            stage,
+            message: msg,
+            userMessage:
+                'Some pages in this PDF are damaged. We recovered what we could; review extracted content before continuing.',
+            recoverable: true,
+            cause: error,
+        });
+    }
+
     if (lower.includes('encrypted') || lower.includes('drm') || lower.includes('password')) {
         return new IngestionError({
             code: 'ENCRYPTED_FILE',
@@ -248,6 +284,7 @@ const MIN_TEXT_LENGTH = 100;
 const MIN_WORD_COUNT = 20;
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
 const CHECKPOINT_KEY = 'infinitycn:ingestion-checkpoints:v1';
+const MAX_STORED_CHECKPOINTS = 10;
 const LOW_CONFIDENCE_OCR_RATIO_THRESHOLD = 0.35;
 const LOW_CONFIDENCE_OCR_CONFIDENCE_THRESHOLD = 65;
 
@@ -401,7 +438,7 @@ function readCheckpoint(file: File): IngestionCheckpoint | null {
     }
 }
 
-function writeCheckpoint(file: File, next: IngestionCheckpoint): void {
+function writeCheckpoint(next: IngestionCheckpoint): void {
     const storage = getStorage();
     if (!storage) return;
     try {
@@ -409,7 +446,10 @@ function writeCheckpoint(file: File, next: IngestionCheckpoint): void {
         const checkpoints = raw ? (JSON.parse(raw) as IngestionCheckpoint[]) : [];
         const filtered = checkpoints.filter(item => item.key !== next.key);
         filtered.unshift(next);
-        storage.setItem(CHECKPOINT_KEY, JSON.stringify(filtered.slice(0, 10)));
+        storage.setItem(
+            CHECKPOINT_KEY,
+            JSON.stringify(filtered.slice(0, MAX_STORED_CHECKPOINTS)),
+        );
     } catch {
         // no-op
     }
@@ -432,7 +472,7 @@ function clearCheckpoint(file: File): void {
     }
 }
 
-function splitBySceneFallback(text: string): ChapterSegment[] {
+function detectChaptersByStructuralMarkers(text: string): ChapterSegment[] {
     const markers = text.split(/\n\s*(?:scene|part)\s+[\divxlcdm]+[:.\- ]/iu).filter(Boolean);
     if (markers.length < 2) return [];
     let offset = 0;
@@ -472,7 +512,6 @@ export async function ingestDocument(
     let lowConfidenceExtraction = false;
     let damagedPages = 0;
     let chapterDetectionFailures = 0;
-    let userAborted = false;
     const stageStartedAt = new Map<IngestionStage, number>();
     const stageDurationMs: Partial<Record<IngestionStage, number>> = {};
     const minTextLength = options.minTextLength ?? MIN_TEXT_LENGTH;
@@ -485,12 +524,7 @@ export async function ingestDocument(
     stageDurationMs.validating = Math.round(performance.now() - (stageStartedAt.get('validating') ?? 0));
     emitProgress(options.onProgress, 'validating', 100, 'File validated.', { format });
 
-    try {
-        checkAborted(options.signal);
-    } catch (err) {
-        userAborted = true;
-        throw err;
-    }
+    checkAborted(options.signal);
 
     // ── Stage 2: Extract Text ────────────────────────────────
     stageStartedAt.set('extracting', performance.now());
@@ -529,7 +563,7 @@ export async function ingestDocument(
             };
 
             rawText = await extractText(file, extractionCallback);
-            writeCheckpoint(file, {
+            writeCheckpoint({
                 key: checkpointKeyForFile(file),
                 format,
                 rawText,
@@ -541,12 +575,7 @@ export async function ingestDocument(
     }
     stageDurationMs.extracting = Math.round(performance.now() - (stageStartedAt.get('extracting') ?? 0));
 
-    try {
-        checkAborted(options.signal);
-    } catch (err) {
-        userAborted = true;
-        throw err;
-    }
+    checkAborted(options.signal);
 
     // ── Quality Gate: Minimum Text ───────────────────────────
     validateExtractedText(rawText, minTextLength);
@@ -573,12 +602,7 @@ export async function ingestDocument(
     emitProgress(options.onProgress, 'cleaning', 100, 'Artifacts removed.', { format });
     stageDurationMs.cleaning = Math.round(performance.now() - (stageStartedAt.get('cleaning') ?? 0));
 
-    try {
-        checkAborted(options.signal);
-    } catch (err) {
-        userAborted = true;
-        throw err;
-    }
+    checkAborted(options.signal);
 
     // ── Stage 4: Normalize ───────────────────────────────────
     stageStartedAt.set('normalizing', performance.now());
@@ -594,7 +618,7 @@ export async function ingestDocument(
 
     emitProgress(options.onProgress, 'normalizing', 100, 'Text normalized.', { format });
     stageDurationMs.normalizing = Math.round(performance.now() - (stageStartedAt.get('normalizing') ?? 0));
-    writeCheckpoint(file, {
+    writeCheckpoint({
         key: checkpointKeyForFile(file),
         format,
         rawText,
@@ -602,12 +626,7 @@ export async function ingestDocument(
         updatedAt: Date.now(),
     });
 
-    try {
-        checkAborted(options.signal);
-    } catch (err) {
-        userAborted = true;
-        throw err;
-    }
+    checkAborted(options.signal);
 
     // ── Stage 5: Detect Chapters ─────────────────────────────
     stageStartedAt.set('detecting_chapters', performance.now());
@@ -619,7 +638,7 @@ export async function ingestDocument(
         segments = segmentChapters(normalizedText);
         if (segments.length === 0) {
             chapterDetectionFailures++;
-            segments = splitBySceneFallback(normalizedText);
+            segments = detectChaptersByStructuralMarkers(normalizedText);
             chapterDetectionTier = 'scene_split';
         }
         if (segments.length === 0) {
@@ -635,7 +654,7 @@ export async function ingestDocument(
     } catch (err) {
         chapterDetectionFailures++;
         warnings.push(`Chapter detection failed: ${err instanceof Error ? err.message : String(err)}`);
-        const fallbackSegments = splitBySceneFallback(normalizedText);
+        const fallbackSegments = detectChaptersByStructuralMarkers(normalizedText);
         if (fallbackSegments.length > 0) {
             chapterDetectionTier = 'scene_split';
             segments = fallbackSegments;
@@ -663,12 +682,7 @@ export async function ingestDocument(
         performance.now() - (stageStartedAt.get('detecting_chapters') ?? 0),
     );
 
-    try {
-        checkAborted(options.signal);
-    } catch (err) {
-        userAborted = true;
-        throw err;
-    }
+    checkAborted(options.signal);
 
     // ── Stage 6: Process Text Through Engine ─────────────────
     stageStartedAt.set('processing_text', performance.now());
@@ -742,7 +756,6 @@ export async function ingestDocument(
         warnings.push(
             'Low-confidence extraction detected. Please verify text quality before chapter-level editing.',
         );
-        lowConfidenceExtraction = true;
     }
     if (damagedPages > 0) {
         warnings.push(
@@ -777,7 +790,7 @@ export async function ingestDocument(
             totalDurationMs,
             ocrUsageRate: ocrPageRatio,
             chapterDetectionFailures,
-            userAborted,
+            userAborted: false,
         },
         warnings,
     };
@@ -809,38 +822,3 @@ export function getSupportedFormats(): Array<{ extension: string; label: string;
         { extension: '.txt', label: 'Plain Text', mime: 'text/plain' },
     ];
 }
-    if (lower.includes('image-only pdf') || lower.includes('image based')) {
-        return new IngestionError({
-            code: 'IMAGE_ONLY_PDF',
-            stage,
-            message: msg,
-            userMessage:
-                'This PDF appears image-only. OCR recovered limited text; try a higher-quality scan or OCR-enabled export.',
-            recoverable: true,
-            cause: error,
-        });
-    }
-
-    if (lower.includes('xref') || lower.includes('cross-reference')) {
-        return new IngestionError({
-            code: 'MALFORMED_XREF',
-            stage,
-            message: msg,
-            userMessage:
-                'The PDF has a malformed cross-reference table (xref). Please re-export the file and retry.',
-            recoverable: false,
-            cause: error,
-        });
-    }
-
-    if (lower.includes('damaged page') || lower.includes('damaged pages')) {
-        return new IngestionError({
-            code: 'DAMAGED_PAGES',
-            stage,
-            message: msg,
-            userMessage:
-                'Some pages in this PDF are damaged. We recovered what we could; review extracted content before continuing.',
-            recoverable: true,
-            cause: error,
-        });
-    }
