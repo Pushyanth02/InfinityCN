@@ -51,9 +51,24 @@
 
 ## 8. Feedback Collection
 
-- [ ] Is there a way for users to submit feedback or report issues?
-- [ ] Are user suggestions tracked for future improvements?
+- [x] Is there a way for users to submit feedback or report issues?
+- [x] Are user suggestions tracked for future improvements?
+
+## 9. Release Readiness Gates (Required Before Feature Expansion)
+
+- [ ] Mobile UX verification complete for upload, processing, and reader flows.
+- [ ] Discovery filters verified for correctness across mixed source tags and edge responses.
+- [ ] Accessibility sweep completed (keyboard, ARIA, focus ring, contrast, modal behavior).
+- [ ] CI passes all gates: security audit, lint, type check, tests, and build.
 
 ---
 
 _Use this checklist during manual user testing sessions and to guide further UI/UX iteration._
+
+---
+
+## Documentation Map Reference
+
+- Master repository map: `/home/runner/work/InfinityCN/InfinityCN/README.md`
+- Planning overview: `/home/runner/work/InfinityCN/InfinityCN/.planning/PROJECT.md`, `/home/runner/work/InfinityCN/InfinityCN/.planning/ROADMAP.md`, `/home/runner/work/InfinityCN/InfinityCN/.planning/STATE.md`
+- Codebase map set: `/home/runner/work/InfinityCN/InfinityCN/.planning/codebase/STRUCTURE.md`, `/home/runner/work/InfinityCN/InfinityCN/.planning/codebase/ARCHITECTURE.md`, `/home/runner/work/InfinityCN/InfinityCN/.planning/codebase/INTEGRATIONS.md`

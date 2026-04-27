@@ -195,6 +195,9 @@ describe('ingestDocument', () => {
         expect(result.cleanedText).toBeTruthy();
         expect(result.processingTimeMs).toBeGreaterThanOrEqual(0);
         expect(result.warnings).toBeInstanceOf(Array);
+        expect(result.ocrQuality).toBeDefined();
+        expect(result.telemetry.totalDurationMs).toBeGreaterThanOrEqual(0);
+        expect(result.chapterDetectionTier).toBeDefined();
     });
 
     it('each chapter has structured narrative data', async () => {
@@ -298,5 +301,16 @@ describe('ingestDocument', () => {
         });
 
         expect(formats.has('txt')).toBe(true);
+    });
+
+    it('includes telemetry stage durations and OCR metrics in result', async () => {
+        const file = createMockFile('novel.txt', sampleExtractedText);
+        const result = await ingestDocument(file);
+
+        expect(result.telemetry.stageDurationMs).toBeDefined();
+        expect(result.telemetry.ocrUsageRate).toBeGreaterThanOrEqual(0);
+        expect(result.telemetry.ocrUsageRate).toBeLessThanOrEqual(1);
+        expect(result.ocrQuality.ocrPageRatio).toBeGreaterThanOrEqual(0);
+        expect(result.ocrQuality.ocrPageRatio).toBeLessThanOrEqual(1);
     });
 });

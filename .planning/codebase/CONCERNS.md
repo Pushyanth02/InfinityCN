@@ -7,12 +7,12 @@
 
 ---
 
-## 🚦 Hybrid Stack Complexity
+## 🚦 Browser Runtime Complexity
 
-The Node.js and .NET 9.0 hybrid solution requires significant coordination through RabbitMQ. This adds a layer of complexity for debugging and local development setup.
+The browser-first stack combines AI orchestration, local processing, and IndexedDB persistence in one client runtime. This adds complexity around memory, performance, and deterministic behavior for large documents.
 
-- **Risk:** Divergence in data serialization models between Node (TypeScript) and .NET (C#).
-- **Mitigation:** Unified schema definitions and thorough integration tests in `.NET`.
+- **Risk:** Long chapters and repeated AI calls can increase memory pressure and UI latency.
+- **Mitigation:** Chunked processing, caching, request limiting, and progressive rendering.
 
 ## 🏗️ Performance at Scale
 
@@ -28,13 +28,21 @@ Deterministic output from LLMs is not guaranteed.
 - **Risk:** AI returning malformed JSON or modifying story meaning during "cinematization."
 - **Mitigation:** Strict schema enforcement and retry logic with offline fallback (`Transformers.js`).
 
-## 💾 Offline Sync
+## 💾 Offline Data Consistency
 
-Synchronizing deep reading progress and processed book data reliably between multiple IndexedDB instances and the Redis cloud state.
+Synchronizing processed book data, reader analytics snapshots, and chapter progress across app sessions.
 
-- **Risk:** Race conditions during progress updates.
-- **Mitigation:** Optimistic UI updates with background synchronization.
+- **Risk:** Race conditions or stale snapshots during concurrent tab usage.
+- **Mitigation:** Local-first writes with deterministic merge rules and safe fallback reads.
 
 ---
 
 _Concerns audit: 2026-03-30_
+
+---
+
+## Documentation Map Reference
+
+- Master repository map: `/home/runner/work/InfinityCN/InfinityCN/README.md`
+- Planning overview: `/home/runner/work/InfinityCN/InfinityCN/.planning/PROJECT.md`, `/home/runner/work/InfinityCN/InfinityCN/.planning/ROADMAP.md`, `/home/runner/work/InfinityCN/InfinityCN/.planning/STATE.md`
+- Codebase map set: `/home/runner/work/InfinityCN/InfinityCN/.planning/codebase/STRUCTURE.md`, `/home/runner/work/InfinityCN/InfinityCN/.planning/codebase/ARCHITECTURE.md`, `/home/runner/work/InfinityCN/InfinityCN/.planning/codebase/INTEGRATIONS.md`

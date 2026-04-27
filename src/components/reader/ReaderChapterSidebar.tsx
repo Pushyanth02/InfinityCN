@@ -40,8 +40,10 @@ export const ReaderChapterSidebar: React.FC<ReaderChapterSidebarProps> = ({
                 {chapters.map((chapter, i) => (
                     <button
                         key={chapter.id}
+                        type="button"
                         className={`cine-chapter-item ${i === currentChapterIndex ? 'cine-chapter-item--active' : ''}`}
                         onClick={() => onSelectChapter(i)}
+                        aria-current={i === currentChapterIndex ? 'page' : undefined}
                     >
                         <span className="cine-chapter-item-number">Chapter {chapter.number}</span>
                         <span className="cine-chapter-item-title">{chapter.title}</span>

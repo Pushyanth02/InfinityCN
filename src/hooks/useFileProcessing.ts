@@ -8,58 +8,26 @@
 
 import { useCallback } from 'react';
 import { useCinematifierStore, getCinematifierAIConfig } from '../store/cinematifierStore';
-import { extractText } from '../lib/processing/pdfWorker';
-import { processBookAsync } from '../lib/processing/bookAsyncProcessor';
-import {
-    createJob,
-    updateProgress,
-    completeJob,
-    setJobSourceText,
-} from '../lib/processing/pdfJobs';
 import { saveBook } from '../lib/runtime/cinematifierDb';
 import { enrichBookMetadataFromFreeApis } from '../lib/runtime/freeApis';
 import {
-    segmentChapters,
-    extractTitle,
-    createBookFromSegments,
     cinematifyOffline,
     runFullSystemPipeline,
-    cleanExtractedText,
-    reconstructParagraphs,
     extractOverallMetadata,
 } from '../lib/cinematifier';
+import { ingestDocument, IngestionError } from '../lib/processing/documentIngestion';
 
 import type { Book, CharacterAppearance, ProcessingProgress } from '../types/cinematifier';
 
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
-const SUPPORTED_EXTENSIONS = ['.pdf', '.txt', '.epub'];
-const EXTRACTION_PROGRESS_START = 8;
-const EXTRACTION_PROGRESS_END = 46;
-const SEGMENTING_PROGRESS = 56;
-const CHUNK_PROCESS_PROGRESS_START = 48;
-const CHUNK_PROCESS_PROGRESS_END = SEGMENTING_PROGRESS - 2;
-const STRUCTURING_PROGRESS = 64;
+// Supported by the unified ingestDocument -> extractText pipeline.
+const SUPPORTED_EXTENSIONS = ['.pdf', '.txt', '.epub', '.docx', '.pptx'];
 const CINEMATIFY_PROGRESS_START = 68;
 const CINEMATIFY_PROGRESS_END = 98;
-
-function getAdaptivePdfChunkSize(textLength: number): number {
-    const base = Math.round(textLength / 180);
-    return Math.max(3500, Math.min(14000, base));
-}
-
-function getAdaptiveCheckpointInterval(chunkSize: number): number {
-    if (chunkSize >= 10000) return 4;
-    if (chunkSize >= 7000) return 3;
-    return 2;
-}
+const AVERAGE_READING_WPM = 220;
 
 function clampPercent(value: number): number {
     return Math.max(0, Math.min(100, value));
-}
-
-function mapProgress(localPercent: number, start: number, end: number): number {
-    const clampedLocal = clampPercent(localPercent);
-    return Math.round(start + ((end - start) * clampedLocal) / 100);
 }
 
 function isSupportedFile(file: File): boolean {
@@ -72,7 +40,7 @@ function validateInputFile(file: File): void {
         throw new Error('Invalid file: missing filename.');
     }
     if (!isSupportedFile(file)) {
-        throw new Error('Unsupported file format. Please upload PDF, TXT, or EPUB.');
+        throw new Error('Unsupported file format. Please upload PDF, TXT, EPUB, DOCX, or PPTX.');
     }
     if (file.size <= 0) {
         throw new Error('The selected file is empty.');
@@ -96,6 +64,9 @@ function isRetryableError(error: unknown): boolean {
 }
 
 function toUserFacingError(error: unknown): string {
+    if (error instanceof IngestionError) {
+        return error.userMessage;
+    }
     const message = error instanceof Error ? error.message : String(error);
     const lower = message.toLowerCase();
     if (lower.includes('429') || lower.includes('rate limit')) {
@@ -112,6 +83,25 @@ function toUserFacingError(error: unknown): string {
         return 'Network issue while processing. Please retry.';
     }
     return message || 'Failed to process file';
+}
+
+function toProcessingPhase(
+    stage: 'validating' | 'extracting' | 'cleaning' | 'normalizing' | 'detecting_chapters' | 'processing_text' | 'complete',
+): ProcessingProgress['phase'] {
+    switch (stage) {
+        case 'validating':
+            return 'uploading';
+        case 'extracting':
+        case 'cleaning':
+        case 'normalizing':
+            return 'extracting';
+        case 'detecting_chapters':
+            return 'segmenting';
+        case 'processing_text':
+            return 'structuring';
+        case 'complete':
+            return 'structuring';
+    }
 }
 
 async function retryAsync<T>(
@@ -164,13 +154,6 @@ export function useFileProcessing(onComplete: () => void) {
 
             try {
                 validateInputFile(file);
-                const isPDF = file.name.toLowerCase().endsWith('.pdf');
-                const pdfJob = isPDF ? createJob(file) : null;
-
-                const syncPdfJobProgress = (percent: number) => {
-                    if (!pdfJob) return;
-                    updateProgress(pdfJob.id, percent);
-                };
 
                 setProgress({
                     phase: 'uploading',
@@ -179,115 +162,49 @@ export function useFileProcessing(onComplete: () => void) {
                     percentComplete: 2,
                     message: `Preparing ${file.name}...`,
                 });
-                syncPdfJobProgress(2);
-
-                // Phase 1: Extract text from file
-                setProgress({
-                    phase: 'extracting',
-                    currentChapter: 0,
-                    totalChapters: 0,
-                    percentComplete: EXTRACTION_PROGRESS_START,
-                    message: 'Initializing extraction engine...',
-                });
-
-                let text = await retryAsync(() =>
-                    extractText(file, update => {
-                        const percent = mapProgress(
-                            update.percentComplete,
-                            EXTRACTION_PROGRESS_START,
-                            EXTRACTION_PROGRESS_END,
-                        );
-
-                        setProgress({
-                            phase: 'extracting',
-                            currentChapter: 0,
-                            totalChapters: 0,
-                            percentComplete: percent,
-                            message: update.message,
-                        });
-
-                        if (pdfJob && update.format === 'pdf') {
-                            syncPdfJobProgress(percent);
-                        }
-                    }),
-                );
-                if (isPDF) {
-                    text = cleanExtractedText(text);
-                }
-
-                // Process PDF text in resumable chunks so long books do not block UI.
-                if (isPDF && pdfJob) {
-                    setJobSourceText(pdfJob.id, text);
-                    const adaptiveChunkSize = getAdaptivePdfChunkSize(text.length);
-                    const checkpointInterval = getAdaptiveCheckpointInterval(adaptiveChunkSize);
-
-                    setProgress({
-                        phase: 'structuring',
-                        currentChapter: 0,
-                        totalChapters: 0,
-                        percentComplete: CHUNK_PROCESS_PROGRESS_START,
-                        message: 'Processing text chunks in background...',
-                    });
-                    syncPdfJobProgress(CHUNK_PROCESS_PROGRESS_START);
-
-                    text = await processBookAsync(pdfJob.id, {
-                        chunkSize: adaptiveChunkSize,
-                        checkpointInterval,
-                        progressStart: CHUNK_PROCESS_PROGRESS_START,
-                        progressEnd: CHUNK_PROCESS_PROGRESS_END,
-                        onProgress: percent => {
+                const ingestionResult = await retryAsync(() =>
+                    ingestDocument(file, {
+                        onProgress: update => {
                             setProgress({
-                                phase: 'structuring',
+                                phase: toProcessingPhase(update.stage),
                                 currentChapter: 0,
                                 totalChapters: 0,
-                                percentComplete: percent,
-                                message: `Processing text chunks (${percent}%)...`,
+                                percentComplete: clampPercent(update.percentComplete),
+                                message: update.message,
                             });
-                            syncPdfJobProgress(percent);
                         },
-                    });
-                } else {
-                    // Apply intelligent paragraph reconstruction for non-PDF documents.
-                    text = reconstructParagraphs(text);
-                }
+                    }),
+                );
 
-                if (!text || text.trim().length < 100) {
-                    throw new Error(
-                        'Could not extract enough text from the file (minimum 100 characters). The file may be empty, image-based, or encrypted.',
-                    );
-                }
-
-                // Phase 2: Segment into chapters
-                setProgress({
-                    phase: 'segmenting',
-                    currentChapter: 0,
-                    totalChapters: 0,
-                    percentComplete: SEGMENTING_PROGRESS,
-                    message: 'Detecting chapters...',
-                });
-                syncPdfJobProgress(SEGMENTING_PROGRESS);
-
-                const segments = segmentChapters(text);
-                if (segments.length === 0) {
-                    throw new Error('Could not detect readable chapters from the uploaded text.');
-                }
-
-                setProgress({
-                    phase: 'structuring',
-                    currentChapter: 0,
-                    totalChapters: segments.length,
-                    percentComplete: STRUCTURING_PROGRESS,
-                    message: `Building chapter map (${segments.length} chapters)...`,
-                });
-                syncPdfJobProgress(STRUCTURING_PROGRESS);
-
-                const fileNameTitle = file.name.replace(/\.(pdf|epub|docx|pptx|txt)$/i, '').trim();
-                const detectedTitle = extractTitle(text);
-                const bookTitle =
-                    detectedTitle !== 'Untitled Novel'
-                        ? detectedTitle
-                        : fileNameTitle || 'Untitled Novel';
-                const bookData = createBookFromSegments(segments, bookTitle);
+                const totalWords = ingestionResult.totalWords;
+                const now = Date.now();
+                const bookId = `book-${now}`;
+                const bookData = {
+                    id: bookId,
+                    title: ingestionResult.title,
+                    genre: 'other' as const,
+                    status: 'processing' as const,
+                    totalChapters: ingestionResult.chapters.length,
+                    processedChapters: 0,
+                    isPublic: false,
+                    chapters: ingestionResult.chapters.map((chapter, index) => ({
+                        id: `chapter-${now}-${index}`,
+                        bookId,
+                        number: index + 1,
+                        title: chapter.title || `Chapter ${index + 1}`,
+                        originalText: chapter.content,
+                        cinematifiedBlocks: [],
+                        status: 'pending' as const,
+                        wordCount: chapter.narrative.stats.totalWords,
+                        isProcessed: false,
+                        estimatedReadTime: Math.max(
+                            1,
+                            Math.ceil(chapter.narrative.stats.totalWords / AVERAGE_READING_WPM),
+                        ),
+                    })),
+                    totalWordCount: totalWords,
+                    createdAt: now,
+                };
 
                 const bookWithId: Book = {
                     ...bookData,
@@ -297,7 +214,7 @@ export function useFileProcessing(onComplete: () => void) {
                 setBook(bookWithId);
 
                 // Non-blocking metadata enrichment from free public APIs.
-                void enrichBookMetadataFromFreeApis({ title: bookTitle, timeoutMs: 2200 })
+                void enrichBookMetadataFromFreeApis({ title: ingestionResult.title, timeoutMs: 2200 })
                     .then(metadata => {
                         if (!metadata) return;
 
@@ -331,16 +248,7 @@ export function useFileProcessing(onComplete: () => void) {
                     updateChapter,
                     updateBook,
                     setProcessing,
-                    syncPdfJobProgress,
                 );
-
-                if (pdfJob) {
-                    const completedChapters = Math.max(0, totalChapters - summary.failedChapters);
-                    completeJob(
-                        pdfJob.id,
-                        `Processed ${completedChapters}/${totalChapters} chapters from ${file.name}`,
-                    );
-                }
 
                 if (summary.failedChapters > 0) {
                     const chapterLabel = summary.failedChapters === 1 ? 'chapter' : 'chapters';
@@ -349,6 +257,11 @@ export function useFileProcessing(onComplete: () => void) {
                             ? `Processing failed for all chapters. Please retry with another provider or run offline.`
                             : `Processed with warnings: ${summary.failedChapters} ${chapterLabel} failed and were marked for retry.`,
                     );
+                }
+                if (ingestionResult.warnings.length > 0) {
+                    const prefix = summary.failedChapters > 0 ? 'Also detected: ' : '';
+                    const warningMessage = `${prefix}${ingestionResult.warnings.join(' ')}`;
+                    setError(warningMessage);
                 }
 
                 if (summary.failedChapters < totalChapters) {

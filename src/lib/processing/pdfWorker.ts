@@ -86,6 +86,11 @@ export interface ExtractionProgress {
     message: string;
     pagesProcessed?: number;
     totalPages?: number;
+    ocrPagesUsed?: number;
+    ocrPageRatio?: number;
+    ocrAverageConfidence?: number;
+    lowConfidenceExtraction?: boolean;
+    damagedPages?: number;
 }
 
 export type ExtractionProgressCallback = (progress: ExtractionProgress) => void;
@@ -200,6 +205,23 @@ type PositionedToken = {
 };
 
 const PDF_LINE_Y_TOLERANCE = 3;
+const OCR_LOW_CONFIDENCE_THRESHOLD = 60;
+const MAX_OCR_PAGES = 5;
+const IMAGE_ONLY_MIN_EXTRACTED_CHARS = 100;
+const IMAGE_ONLY_OCR_PAGE_RATIO_THRESHOLD = 0.5;
+
+function calculatePDFBatchSizeByMemory(totalPages: number): number {
+    const navWithMemory = navigator as Navigator & { deviceMemory?: number };
+    const deviceMemory =
+        typeof navigator !== 'undefined' && typeof navWithMemory.deviceMemory === 'number'
+            ? navWithMemory.deviceMemory
+            : 4;
+
+    if (deviceMemory <= 2) return totalPages > 250 ? 2 : 3;
+    if (deviceMemory <= 4) return totalPages > 300 ? 3 : 5;
+    if (deviceMemory <= 8) return totalPages > 350 ? 5 : 8;
+    return totalPages > 450 ? 8 : 10;
+}
 
 function normalizeBoundaryLine(line: string): string {
     return line.trim().replace(/\d+/g, '__NUM__').replace(/\s+/g, ' ').toLowerCase();
@@ -439,80 +461,156 @@ const extractTextFromPDF = async (
         });
 
         const pages: string[] = new Array(pdf.numPages);
-
-        // Extract pages in batches of 10 for parallelism
-        const BATCH = 10;
-        const MAX_OCR_PAGES = 5; // Limit OCR attempts to avoid freezing on image-heavy PDFs
+        const batchSize = calculatePDFBatchSizeByMemory(pdf.numPages);
         let ocrPagesUsed = 0;
         let pagesProcessed = 0;
+        let damagedPages = 0;
+        let totalOcrConfidence = 0;
+        let lowConfidenceOcrPages = 0;
 
-        for (let start = 1; start <= pdf.numPages; start += BATCH) {
-            const end = Math.min(start + BATCH - 1, pdf.numPages);
+        for (let start = 1; start <= pdf.numPages; start += batchSize) {
+            const end = Math.min(start + batchSize - 1, pdf.numPages);
             const batch = [];
             for (let i = start; i <= end; i++) {
                 batch.push(
                     pdf.getPage(i).then(async page => {
-                        const content = await page.getTextContent();
-                        let pageText = extractOrderedPageText(content.items as PDFTextItem[]);
+                        try {
+                            const content = await page.getTextContent();
+                            let pageText = extractOrderedPageText(content.items as PDFTextItem[]);
 
-                        // OCR Fallback for scanned/image-based pages (limited scope)
-                        if (pageText.trim().length < 50 && ocrPagesUsed < MAX_OCR_PAGES) {
+                            // OCR Fallback for scanned/image-based pages (limited scope)
+                            if (pageText.trim().length < 50 && ocrPagesUsed < MAX_OCR_PAGES) {
+                                emitExtractionProgress(onProgress, {
+                                    format: 'pdf',
+                                    stage: 'ocr',
+                                    percentComplete: Math.round(
+                                        30 + ((i - 1) / Math.max(1, pdf.numPages)) * 55,
+                                    ),
+                                    message: `Running OCR on page ${i}...`,
+                                    pagesProcessed,
+                                    totalPages: pdf.numPages,
+                                    ocrPagesUsed,
+                                    ocrPageRatio: ocrPagesUsed / Math.max(1, pdf.numPages),
+                                });
+
+                                ocrPagesUsed++;
+                                try {
+                                    const Tesseract = await import('tesseract.js');
+                                    const viewport = page.getViewport({ scale: 1.5 });
+                                    const canvas = document.createElement('canvas');
+                                    const ctx = canvas.getContext('2d');
+                                    if (ctx) {
+                                        canvas.height = viewport.height;
+                                        canvas.width = viewport.width;
+                                        await page.render({ canvas, canvasContext: ctx, viewport })
+                                            .promise;
+                                        const dataUrl = canvas.toDataURL('image/png');
+                                        const result = await Tesseract.recognize(dataUrl, 'eng');
+                                        pageText = result.data.text;
+                                        const confidence = result.data.confidence ?? 0;
+                                        totalOcrConfidence += confidence;
+                                        if (confidence < OCR_LOW_CONFIDENCE_THRESHOLD) {
+                                            lowConfidenceOcrPages++;
+                                        }
+                                        // Release canvas memory
+                                        canvas.width = 0;
+                                        canvas.height = 0;
+                                    }
+                                } catch (ocrErr) {
+                                    console.warn('[pdfWorker] OCR failed on page', i, ':', ocrErr);
+                                }
+                            }
+
+                            pages[i - 1] = pageText;
+                        } catch (pageErr) {
+                            damagedPages++;
+                            console.warn('[pdfWorker] page extraction failed:', i, pageErr);
+                            pages[i - 1] = '';
+                        } finally {
+                            pagesProcessed++;
+                            const pageRatio = pagesProcessed / Math.max(1, pdf.numPages);
+                            const ocrPageRatio = ocrPagesUsed / Math.max(1, pdf.numPages);
+                            const ocrAverageConfidence =
+                                ocrPagesUsed > 0 ? totalOcrConfidence / ocrPagesUsed : undefined;
                             emitExtractionProgress(onProgress, {
                                 format: 'pdf',
-                                stage: 'ocr',
-                                percentComplete: Math.round(
-                                    30 + ((i - 1) / Math.max(1, pdf.numPages)) * 55,
-                                ),
-                                message: `Running OCR on page ${i}...`,
+                                stage: 'extracting',
+                                percentComplete: Math.round(30 + pageRatio * 55),
+                                message: `Extracted ${pagesProcessed} of ${pdf.numPages} pages...`,
                                 pagesProcessed,
                                 totalPages: pdf.numPages,
+                                ocrPagesUsed,
+                                ocrPageRatio,
+                                ocrAverageConfidence,
+                                lowConfidenceExtraction:
+                                    lowConfidenceOcrPages > 0 &&
+                                    lowConfidenceOcrPages / Math.max(1, ocrPagesUsed) >= 0.4,
+                                damagedPages,
                             });
-
-                            ocrPagesUsed++;
                             try {
-                                const Tesseract = await import('tesseract.js');
-                                const viewport = page.getViewport({ scale: 1.5 });
-                                const canvas = document.createElement('canvas');
-                                const ctx = canvas.getContext('2d');
-                                if (ctx) {
-                                    canvas.height = viewport.height;
-                                    canvas.width = viewport.width;
-                                    await page.render({ canvas, canvasContext: ctx, viewport })
-                                        .promise;
-                                    const dataUrl = canvas.toDataURL('image/png');
-                                    const result = await Tesseract.recognize(dataUrl, 'eng');
-                                    pageText = result.data.text;
-                                    // Release canvas memory
-                                    canvas.width = 0;
-                                    canvas.height = 0;
-                                }
-                            } catch (ocrErr) {
-                                console.warn('[pdfWorker] OCR failed on page', i, ':', ocrErr);
+                                page.cleanup();
+                            } catch (cleanupErr) {
+                                console.warn('[pdfWorker] page cleanup failed:', cleanupErr);
                             }
                         }
-
-                        pages[i - 1] = pageText;
-                        pagesProcessed++;
-                        const pageRatio = pagesProcessed / Math.max(1, pdf.numPages);
-                        emitExtractionProgress(onProgress, {
-                            format: 'pdf',
-                            stage: 'extracting',
-                            percentComplete: Math.round(30 + pageRatio * 55),
-                            message: `Extracted ${pagesProcessed} of ${pdf.numPages} pages...`,
-                            pagesProcessed,
-                            totalPages: pdf.numPages,
-                        });
                     }),
                 );
             }
             await Promise.all(batch);
         }
 
+        const totalExtractedChars = pages.join('\n').trim().length;
+        const ocrPageRatio = ocrPagesUsed / Math.max(1, pdf.numPages);
+        if (
+            totalExtractedChars < IMAGE_ONLY_MIN_EXTRACTED_CHARS &&
+            ocrPageRatio >= IMAGE_ONLY_OCR_PAGE_RATIO_THRESHOLD
+        ) {
+            throw new Error(
+                'Image-only PDF detected. Most pages appear scanned with low extractable text.',
+            );
+        }
+
+        if (damagedPages > 0) {
+            emitExtractionProgress(onProgress, {
+                format: 'pdf',
+                stage: 'extracting',
+                percentComplete: 88,
+                message: `Recovered with ${damagedPages} damaged page${damagedPages === 1 ? '' : 's'}.`,
+                pagesProcessed,
+                totalPages: pdf.numPages,
+                ocrPagesUsed,
+                ocrPageRatio,
+                ocrAverageConfidence:
+                    ocrPagesUsed > 0 ? totalOcrConfidence / ocrPagesUsed : undefined,
+                damagedPages,
+            });
+        }
+
         return pages;
     } catch (error) {
         console.error('[pdfWorker] extraction failed:', error);
+        const message = error instanceof Error ? error.message : String(error);
+        const lower = message.toLowerCase();
+        if (lower.includes('password') || lower.includes('encrypted')) {
+            throw new Error('Encrypted PDF detected. Please provide a decrypted file.', {
+                cause: error,
+            });
+        }
+        if (lower.includes('xref') || lower.includes('cross-reference')) {
+            throw new Error('Malformed xref table in PDF. The file structure is corrupted.', {
+                cause: error,
+            });
+        }
+        if (lower.includes('image-only pdf')) {
+            throw new Error(message, { cause: error });
+        }
+        if (lower.includes('invalidpdf') || lower.includes('formaterror') || lower.includes('malformed')) {
+            throw new Error('Corrupted PDF structure detected. Please re-export the PDF and retry.', {
+                cause: error,
+            });
+        }
         throw new Error(
-            'Failed to extract text. Please ensure the file is a valid, non-encrypted PDF.',
+            'Failed to extract text from PDF. Please ensure the file is valid and not corrupted.',
             { cause: error },
         );
     }
