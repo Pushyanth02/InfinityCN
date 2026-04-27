@@ -17,6 +17,12 @@ interface SubmitFeedbackInput {
     context?: string;
 }
 
+const FEEDBACK_CATEGORIES = ['bug', 'ux', 'feature', 'other'] as const;
+
+function isFeedbackCategory(value: unknown): value is FeedbackCategory {
+    return typeof value === 'string' && FEEDBACK_CATEGORIES.includes(value as FeedbackCategory);
+}
+
 function getStorage(): Storage | null {
     if (typeof window === 'undefined') return null;
     try {
@@ -40,6 +46,10 @@ function readFeedbackEntries(): UserFeedbackEntry[] {
         return parsed
             .filter(entry => entry && typeof entry === 'object')
             .filter(entry => typeof entry.message === 'string' && entry.message.trim().length > 0)
+            .map(entry => ({
+                ...entry,
+                category: isFeedbackCategory(entry.category) ? entry.category : 'other',
+            }))
             .slice(0, MAX_FEEDBACK_ITEMS);
     } catch {
         return [];

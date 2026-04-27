@@ -85,7 +85,7 @@ const STORY_FORMAT_KEYWORDS: Array<{ format: Exclude<StoryFormat, 'unknown'>; ke
         { format: 'manhwa', keywords: ['manhwa', 'webtoon', 'korean comic', 'k-comic'] },
         { format: 'manhua', keywords: ['manhua', 'chinese comic', 'hua man', 'dongman'] },
         { format: 'manga', keywords: ['manga', 'shonen', 'shoujo', 'shojo', 'seinen', 'josei'] },
-        { format: 'novel', keywords: ['novel', 'fiction', 'literature', 'prose'] },
+        { format: 'novel', keywords: ['novel', 'literature', 'prose'] },
     ];
 
 function normalizeTitle(value: string): string {
@@ -146,6 +146,18 @@ function pickFirstString(candidates: Array<string | undefined>): string | undefi
     for (const candidate of candidates) {
         const value = candidate?.trim();
         if (value) return value;
+    }
+    return undefined;
+}
+
+/**
+ * Pick the first concrete story format and intentionally skip "unknown"
+ * placeholders so fallback inference still has a chance to select a real format.
+ */
+function pickFirstStoryFormat(candidates: Array<StoryFormat | undefined>): StoryFormat | undefined {
+    for (const candidate of candidates) {
+        if (!candidate || candidate === 'unknown') continue;
+        return candidate;
     }
     return undefined;
 }
@@ -367,9 +379,8 @@ function mergeMetadata(results: Array<FreeBookMetadata | null>): FreeBookMetadat
                 | BookGenre
                 | undefined) ?? inferGenreFromSubjects(subjects),
         storyFormat:
-            (pickFirstString(orderedByPriority.map(entry => entry.storyFormat)) as
-                | StoryFormat
-                | undefined) ?? inferStoryFormatFromSubjects(subjects),
+            pickFirstStoryFormat(orderedByPriority.map(entry => entry.storyFormat)) ??
+            inferStoryFormatFromSubjects(subjects),
         sources: uniqueStrings(
             orderedByPriority.flatMap(entry => entry.sources),
         ) as MetadataSource[],
