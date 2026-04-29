@@ -26,6 +26,9 @@ jobs:
       - name: Refresh lockfile
         run: npm update --package-lock-only
 
+      - name: Reinstall from refreshed lockfile
+        run: npm ci
+
       - name: Security audit
         run: npm audit --audit-level=high
 

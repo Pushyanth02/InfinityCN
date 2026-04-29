@@ -563,12 +563,6 @@ export async function ingestDocument(
             };
 
             rawText = await extractText(file, extractionCallback);
-            writeCheckpoint({
-                key: checkpointKeyForFile(file),
-                format,
-                rawText,
-                updatedAt: Date.now(),
-            });
         } catch (err) {
             throw classifyError(err, 'extracting');
         }
@@ -579,6 +573,15 @@ export async function ingestDocument(
 
     // ── Quality Gate: Minimum Text ───────────────────────────
     validateExtractedText(rawText, minTextLength);
+
+    // Persist checkpoint only after the extracted text passes validation so
+    // retries for the same file do not keep reusing garbled/too-short text.
+    writeCheckpoint({
+        key: checkpointKeyForFile(file),
+        format,
+        rawText,
+        updatedAt: Date.now(),
+    });
 
     // ── Stage 3: Clean Artifacts ─────────────────────────────
     stageStartedAt.set('cleaning', performance.now());

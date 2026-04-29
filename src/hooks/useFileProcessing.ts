@@ -1,5 +1,5 @@
 /**
-        async (file: File, options: ProcessOptions = {}) => {
+ * useFileProcessing — File ingestion and processing hook
  *
  * Handles the full processing pipeline: text extraction → chapter
  * segmentation → cinematification (server or client path) → persistence.
@@ -250,18 +250,20 @@ export function useFileProcessing(onComplete: () => void) {
                     setProcessing,
                 );
 
-                if (summary.failedChapters > 0) {
+                if (summary.failedChapters > 0 || ingestionResult.warnings.length > 0) {
                     const chapterLabel = summary.failedChapters === 1 ? 'chapter' : 'chapters';
-                    setError(
-                        summary.failedChapters === totalChapters
-                            ? `Processing failed for all chapters. Please retry with another provider or run offline.`
-                            : `Processed with warnings: ${summary.failedChapters} ${chapterLabel} failed and were marked for retry.`,
-                    );
-                }
-                if (ingestionResult.warnings.length > 0) {
-                    const prefix = summary.failedChapters > 0 ? 'Also detected: ' : '';
-                    const warningMessage = `${prefix}${ingestionResult.warnings.join(' ')}`;
-                    setError(warningMessage);
+                    let errorMessage = '';
+                    if (summary.failedChapters > 0) {
+                        errorMessage =
+                            summary.failedChapters === totalChapters
+                                ? `Processing failed for all chapters. Please retry with another provider or run offline.`
+                                : `Processed with warnings: ${summary.failedChapters} ${chapterLabel} failed and were marked for retry.`;
+                    }
+                    if (ingestionResult.warnings.length > 0) {
+                        const prefix = errorMessage ? ' Also detected: ' : '';
+                        errorMessage += `${prefix}${ingestionResult.warnings.join(' ')}`;
+                    }
+                    setError(errorMessage);
                 }
 
                 if (summary.failedChapters < totalChapters) {
