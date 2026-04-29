@@ -58,7 +58,7 @@ export const ReaderCharactersPanel: React.FC<ReaderCharactersPanelProps> = ({
         <aside
             className={`cine-insights-sidebar ${isOpen ? '' : 'is-closed'}`}
             aria-label="Reader insights panel"
-            aria-hidden={!isOpen}
+            inert={!isOpen || undefined}
         >
             <div className="cine-insights-header">
                 <h2 className="cine-insights-title">Insights</h2>
