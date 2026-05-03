@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { enrichBookMetadataFromFreeApis, inferGenreFromSubjects } from '../runtime/freeApis';
+import {
+    enrichBookMetadataFromFreeApis,
+    inferGenreFromSubjects,
+    inferStoryFormatFromSubjects,
+} from '../runtime/freeApis';
 
 describe('freeApis', () => {
     beforeEach(() => {
@@ -13,10 +17,84 @@ describe('freeApis', () => {
         expect(inferGenreFromSubjects(['Uncategorized topic'])).toBeUndefined();
     });
 
+    it('classifies story format and falls back to unknown for mixed manga/manhwa tags', () => {
+        expect(inferStoryFormatFromSubjects(['Japanese manga', 'Shonen'])).toBe('manga');
+        expect(inferStoryFormatFromSubjects(['Korean webtoon manhwa series'])).toBe('manhwa');
+        expect(inferStoryFormatFromSubjects(['Chinese manhua comic'])).toBe('manhua');
+        expect(inferStoryFormatFromSubjects(['Science fiction manga'])).toBe('manga');
+        expect(inferStoryFormatFromSubjects(['Science fiction'])).toBe('unknown');
+        expect(inferStoryFormatFromSubjects(['Manhwa adaptation', 'Manga spin-off'])).toBe(
+            'unknown',
+        );
+    });
+
+    it('prefers concrete format when higher-priority source reports unknown', async () => {
+        const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+            const requestUrl = new URL(String(input));
+            if (requestUrl.hostname === 'openlibrary.org') {
+                return new Response(
+                    JSON.stringify({
+                        docs: [
+                            {
+                                title: 'Tower Story',
+                                author_name: ['Author One'],
+                                first_sentence: 'Opening line.',
+                                subject: ['Adventure stories'],
+                            },
+                        ],
+                    }),
+                    { status: 200, headers: { 'Content-Type': 'application/json' } },
+                );
+            }
+            if (
+                requestUrl.hostname === 'www.googleapis.com' &&
+                requestUrl.pathname === '/books/v1/volumes'
+            ) {
+                return new Response(
+                    JSON.stringify({
+                        items: [
+                            {
+                                volumeInfo: {
+                                    title: 'Tower Story',
+                                    authors: ['Author One'],
+                                    categories: ['Fantasy manga'],
+                                },
+                            },
+                        ],
+                    }),
+                    { status: 200, headers: { 'Content-Type': 'application/json' } },
+                );
+            }
+            if (requestUrl.hostname === 'gutendex.com') {
+                return new Response(JSON.stringify({ results: [] }), {
+                    status: 200,
+                    headers: { 'Content-Type': 'application/json' },
+                });
+            }
+            if (
+                requestUrl.hostname === 'en.wikipedia.org' &&
+                requestUrl.pathname.startsWith('/api/rest_v1/page/summary/')
+            ) {
+                return new Response('Not found', { status: 404 });
+            }
+            return new Response('Not found', { status: 404 });
+        });
+
+        vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+        const metadata = await enrichBookMetadataFromFreeApis({
+            title: 'Tower Story',
+            timeoutMs: 1800,
+        });
+
+        expect(metadata).not.toBeNull();
+        expect(metadata?.storyFormat).toBe('manga');
+    });
+
     it('merges metadata from Open Library, Google Books, Gutendex, and Wikipedia', async () => {
         const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-            const url = String(input);
-            if (url.includes('openlibrary.org')) {
+            const requestUrl = new URL(String(input));
+            if (requestUrl.hostname === 'openlibrary.org') {
                 return new Response(
                     JSON.stringify({
                         docs: [
@@ -33,7 +111,10 @@ describe('freeApis', () => {
                 );
             }
 
-            if (url.includes('googleapis.com/books/v1/volumes')) {
+            if (
+                requestUrl.hostname === 'www.googleapis.com' &&
+                requestUrl.pathname === '/books/v1/volumes'
+            ) {
                 return new Response(
                     JSON.stringify({
                         items: [
@@ -51,7 +132,7 @@ describe('freeApis', () => {
                 );
             }
 
-            if (url.includes('gutendex.com')) {
+            if (requestUrl.hostname === 'gutendex.com') {
                 return new Response(
                     JSON.stringify({
                         results: [
@@ -67,7 +148,10 @@ describe('freeApis', () => {
                 );
             }
 
-            if (url.includes('wikipedia.org/api/rest_v1/page/summary/')) {
+            if (
+                requestUrl.hostname === 'en.wikipedia.org' &&
+                requestUrl.pathname.startsWith('/api/rest_v1/page/summary/')
+            ) {
                 return new Response(
                     JSON.stringify({
                         title: 'Dune',
@@ -95,6 +179,7 @@ describe('freeApis', () => {
         expect(metadata?.subjects).toContain('Science fiction stories');
         expect(metadata?.subjects).toContain('Adventure stories');
         expect(metadata?.genre).toBe('sci_fi');
+        expect(metadata?.storyFormat).toBe('novel');
         expect(metadata?.sources).toContain('openlibrary');
         expect(metadata?.sources).toContain('googlebooks');
         expect(metadata?.sources).toContain('gutendex');

@@ -16,12 +16,12 @@
     - **Component Testing:** Verify the "Cinematic Reader" rendering and dynamic typography adjustments.
     - **Visual Audit:** Cross-phase visual audit of all implemented UI pillars.
 
-## 🏗️ Backend Testing (.NET)
+## ⚙️ Runtime & Pipeline Testing
 
-- **Framework:** NUnit and xUnit.
+- **Focus:** Runtime services (`src/lib/runtime`) and cinematification pipeline (`src/lib/engine/cinematifier`).
 - **Strategy:**
-    - **Core Integration:** Testing the document transformation pipeline between .NET and Node.js.
-    - **Mocking:** Intensive mocking of external AI providers to test logic isolation.
+    - **Core Integration:** Validate stage ordering and typed outputs from input cleanup through renderer planning.
+    - **Mocking:** Mock external APIs/providers to verify timeout, retry, and fallback behavior.
 
 ## 🧪 GSD Verification Requirements
 
@@ -35,3 +35,11 @@ Every phase of work must be tested against:
 ---
 
 _Testing audit: 2026-03-30_
+
+---
+
+## Documentation Map Reference
+
+- Master repository map: `/home/runner/work/InfinityCN/InfinityCN/README.md`
+- Planning overview: `/home/runner/work/InfinityCN/InfinityCN/.planning/PROJECT.md`, `/home/runner/work/InfinityCN/InfinityCN/.planning/ROADMAP.md`, `/home/runner/work/InfinityCN/InfinityCN/.planning/STATE.md`
+- Codebase map set: `/home/runner/work/InfinityCN/InfinityCN/.planning/codebase/STRUCTURE.md`, `/home/runner/work/InfinityCN/InfinityCN/.planning/codebase/ARCHITECTURE.md`, `/home/runner/work/InfinityCN/InfinityCN/.planning/codebase/INTEGRATIONS.md`

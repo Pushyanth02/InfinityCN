@@ -28,7 +28,9 @@ export const UploadZone: React.FC<UploadZoneProps> = ({
                 !isProcessing &&
                 (file.type === 'application/pdf' ||
                     file.name.endsWith('.txt') ||
-                    file.name.endsWith('.epub'))
+                    file.name.endsWith('.epub') ||
+                    file.name.endsWith('.docx') ||
+                    file.name.endsWith('.pptx'))
             ) {
                 onFileSelect(file);
             }
@@ -73,11 +75,11 @@ export const UploadZone: React.FC<UploadZoneProps> = ({
                 <input
                     ref={fileInputRef}
                     type="file"
-                    accept=".pdf,.txt,.epub"
+                    accept=".pdf,.txt,.epub,.docx,.pptx"
                     onChange={handleChange}
                     disabled={isProcessing}
                     className="upload-input-hidden"
-                    aria-label="Select a PDF, TXT, or EPUB file"
+                    aria-label="Select a PDF, TXT, EPUB, DOCX, or PPTX file"
                 />
                 <Upload size={16} aria-hidden="true" />
                 Browse files
@@ -96,12 +98,12 @@ export const UploadZone: React.FC<UploadZoneProps> = ({
             <input
                 ref={fileInputRef}
                 type="file"
-                accept=".pdf,.txt,.epub"
+                accept=".pdf,.txt,.epub,.docx,.pptx"
                 onChange={handleChange}
                 disabled={isProcessing}
                 className="upload-input-hidden"
                 id="manuscript-file-input"
-                aria-label="Select a PDF, TXT, or EPUB file"
+                aria-label="Select a PDF, TXT, EPUB, DOCX, or PPTX file"
             />
 
             {/* Icon */}
@@ -117,7 +119,7 @@ export const UploadZone: React.FC<UploadZoneProps> = ({
                 <p className="upload-headline">
                     {isDragging ? 'Drop it here' : 'Drop your manuscript'}
                 </p>
-                <p className="upload-subtext">PDF, TXT, or EPUB · up to 50 MB</p>
+                <p className="upload-subtext">PDF, TXT, EPUB, DOCX, or PPTX · up to 50 MB</p>
             </div>
 
             {/* CTA Button */}

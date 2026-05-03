@@ -15,7 +15,9 @@ interface UseReaderDiscoveryResult {
     setWordQuery: (value: string) => void;
     lookupWord: (explicitWord?: string) => Promise<void>;
     isWordLookupLoading: boolean;
+    isWordSuggestionLoading: boolean;
     wordLookupError: string | null;
+    wordSuggestionError: string | null;
     wordInsight: ReaderWordInsight | null;
     wordSuggestions: string[];
     recentWords: string[];
@@ -30,6 +32,8 @@ export function useReaderDiscovery(): UseReaderDiscoveryResult {
     const [wordInsight, setWordInsight] = useState<ReaderWordInsight | null>(null);
     const [wordLookupError, setWordLookupError] = useState<string | null>(null);
     const [isWordLookupLoading, setIsWordLookupLoading] = useState(false);
+    const [isWordSuggestionLoading, setIsWordSuggestionLoading] = useState(false);
+    const [wordSuggestionError, setWordSuggestionError] = useState<string | null>(null);
     const [wordSuggestions, setWordSuggestions] = useState<string[]>([]);
     const [recentWords, setRecentWords] = useState<string[]>([]);
 
@@ -42,8 +46,13 @@ export function useReaderDiscovery(): UseReaderDiscoveryResult {
 
     const setWordQuery = useCallback((value: string) => {
         setWordQueryState(value);
-        if (!value.trim()) {
+        const trimmedValue = value.trim();
+        if (trimmedValue.length === 0) {
             setWordLookupError(null);
+        }
+        if (trimmedValue.length < MIN_WORD_LOOKUP_LENGTH) {
+            setWordSuggestionError(null);
+            setIsWordSuggestionLoading(false);
             setWordSuggestions([]);
         }
     }, []);
@@ -126,12 +135,26 @@ export function useReaderDiscovery(): UseReaderDiscoveryResult {
         let cancelled = false;
         const timer = window.setTimeout(() => {
             void (async () => {
-                const suggestions = await searchReaderWordCompletions(requestedWord);
-                if (cancelled) {
-                    return;
-                }
+                setIsWordSuggestionLoading(true);
+                setWordSuggestionError(null);
+                try {
+                    const suggestions = await searchReaderWordCompletions(requestedWord);
+                    if (cancelled) {
+                        return;
+                    }
 
-                setWordSuggestions(suggestions);
+                    setWordSuggestions(suggestions);
+                } catch {
+                    if (cancelled) {
+                        return;
+                    }
+                    setWordSuggestions([]);
+                    setWordSuggestionError('Suggestions are unavailable right now.');
+                } finally {
+                    if (!cancelled) {
+                        setIsWordSuggestionLoading(false);
+                    }
+                }
             })();
         }, SUGGESTION_DEBOUNCE_MS);
 
@@ -168,7 +191,9 @@ export function useReaderDiscovery(): UseReaderDiscoveryResult {
         setWordQuery,
         lookupWord,
         isWordLookupLoading,
+        isWordSuggestionLoading,
         wordLookupError,
+        wordSuggestionError,
         wordInsight,
         wordSuggestions: visibleWordSuggestions,
         recentWords,
