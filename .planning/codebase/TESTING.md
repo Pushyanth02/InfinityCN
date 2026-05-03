@@ -1,37 +1,42 @@
-# Testing Strategy: InfinityCN
+# Testing Patterns
 
-## Comprehensive Validation
+**Analysis Date:** 2026-05-03
 
-**Analysis Date:** 2026-03-30
-**Standard:** Verify Every Phase
+## Test Framework
+
+**Runner:**
+- Vitest 4.1.4
+- Config: `vite.config.ts`
+
+**Assertion Library:**
+- `expect` global enhanced using `@testing-library/jest-dom/matchers`
+- Configured in `src/test/setup.ts`
+
+**Run Commands:**
+```bash
+npm run test              # Run tests inline
+npm run test:watch        # Watch mode
+npm run test:coverage     # Coverage
+```
+
+## Test File Organization
+
+**Location:**
+- Co-located in nested `__tests__` directories (e.g. `src/components/__tests__/`)
+
+**Naming:**
+- Matches parent name: `[SourceFile].test.tsx` or `[SourceFile].test.ts`
+
+## Test Environment
+
+- Runs using `jsdom`.
+- Global Window/DOM elements are mocked actively in `src/test/setup.ts` (e.g. `matchMedia`).
+
+## Assertion Pattern
+
+- React views verified with `@testing-library/react` wrappers.
+- State checks performed directly.
 
 ---
 
-## 🏛️ Frontend Testing (React)
-
-- **Framework:** Vitest 4.0.18.
-- **Tools:** `@testing-library/react` and `jsdom`.
-- **Strategy:**
-    - **Unit Testing:** Focus on core cinematifier logic in `src/lib/cinematifier` (segmentation, sentiment analysis, parsing).
-    - **Component Testing:** Verify the "Cinematic Reader" rendering and dynamic typography adjustments.
-    - **Visual Audit:** Cross-phase visual audit of all implemented UI pillars.
-
-## 🏗️ Backend Testing (.NET)
-
-- **Framework:** NUnit and xUnit.
-- **Strategy:**
-    - **Core Integration:** Testing the document transformation pipeline between .NET and Node.js.
-    - **Mocking:** Intensive mocking of external AI providers to test logic isolation.
-
-## 🧪 GSD Verification Requirements
-
-Every phase of work must be tested against:
-
-1. **Valid Input:** Standard use cases with normal story length.
-2. **Invalid Input:** Malformed files, unexpected JSON, or empty documents.
-3. **Large Input:** 100K+ word novels to ensure no memory leaks or UI lag.
-4. **Failure Scenarios:** Disconnected internet, AI timeout, or processing service crash.
-
----
-
-_Testing audit: 2026-03-30_
+*Testing analysis: 2026-05-03*

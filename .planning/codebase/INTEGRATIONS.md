@@ -1,50 +1,46 @@
-# System Integrations: InfinityCN
+# External Integrations
 
-## Core Connectivity Map
+**Analysis Date:** 2026-05-03
 
-**Analysis Date:** 2026-04-13
-**Environment:** Browser-first runtime with optional cloud AI providers
+## APIs & External Services
 
----
+**Backend-as-a-Service:**
+- Appwrite - Cloud sync and backend client
+  - SDK/Client: `appwrite`
+  - Location: `src/lib/runtime/appwrite.ts`
 
-## AI Provider Integrations
+**Analytics:**
+- Vercel Analytics & SpeedInsights - User metrics
+  - SDK/Client: `@vercel/analytics`, `@vercel/speed-insights`
+  - Instantiated dynamically in `src/main.tsx`
 
-- OpenAI
-- Anthropic
-- Gemini
-- Groq
-- DeepSeek
-- Ollama (local)
-- Chrome AI (Gemini Nano)
+## Data Storage
 
-Provider orchestration lives in `src/lib/ai/`.
+**Databases:**
+- Dexie (IndexedDB Wrapper) - Local storage execution
+  - Client: `dexie`
 
-## External Discovery + Metadata APIs
+**File Storage:**
+- Virtual Filesystem via browser APIs (loading files into Local Memory / Blob URLs)
 
-- Open Library
-- Google Books API
-- Gutendex
-- Jikan (Manga)
-- Kitsu (Manga/Manhwa/Manhua)
-- Wikipedia Summary API
-- DictionaryAPI + Datamuse (word lens)
-- DummyJSON Quotes + Quotable (processing quotes)
+**Caching:**
+- ServiceWorker via VitePWA (`vite.config.ts`) handles offline capability and font caching (Google fonts, gstatic).
 
-Runtime API modules live in `src/lib/runtime/`.
+## Authentication & Identity
 
-## Local Processing + Storage Integrations
+**Auth Provider:**
+- Unspecified globally, largely anonymous or leveraging Appwrite.
 
-- Dexie (IndexedDB) for persistent book and progress data.
-- localStorage for telemetry snapshots and encrypted configuration state.
-- pdfjs-dist, fflate, and Tesseract.js for ingestion and OCR.
-- Transformers.js for local embedding/offline pathways.
+## Monitoring & Observability
 
-## UI + Runtime Integration Boundaries
+**Error Tracking:**
+- Custom `ErrorBoundary` component in `src/main.tsx`. Unhandled promise rejections are logged to console.
 
-- Components: UI only (`src/components/`).
-- Hooks: orchestration (`src/hooks/`).
-- Business logic: runtime/engine modules (`src/lib/runtime`, `src/lib/engine`).
+## CI/CD & Deployment
+
+**Hosting:**
+- Optimized Web application deployed as Static Assets (built via Vite). Likely Vercel or similar given Vercel Analytics usage.
 
 ---
 
-_Integration audit: 2026-04-13_
+*Integration audit: 2026-05-03*

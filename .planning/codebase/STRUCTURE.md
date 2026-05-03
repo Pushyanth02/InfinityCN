@@ -1,42 +1,74 @@
-# Codebase Structure: InfinityCN
+# Codebase Structure
 
-## Global Architecture Map
+**Analysis Date:** 2026-05-03
 
-**Analysis Date:** 2026-04-13
-**Architecture:** Frontend-first modular runtime + engine pipeline
+## Directory Layout
+
+```
+[]/
+├── src/                # Root Source Logic
+│   ├── components/     # Reusable and Core React Components (ui, reader, etc.)
+│   ├── css/            # Global Styling Logic
+│   ├── features/       # Grouped domain logics (e.g. settings UI / behavior)
+│   ├── hooks/          # React Custom Hooks
+│   ├── lib/            # Independent Pure Code Modules (AI, Engine, Processing, Export)
+│   ├── store/          # Zustand State modules
+│   ├── test/           # Test initializations and Utilities
+│   └── types/          # Global TS typings
+├── app/                # Root Layout abstractions (if defined as custom paths via compiler)
+└── docs/               # Platform/project documentation context
+```
+
+## Directory Purposes
+
+**src/lib/:**
+- Purpose: Pure functional programming / core system abstractions decoupled from UI.
+- Contains: Extractors, AI bridges, pipeline streaming code.
+- Key files: `src/lib/processing/pdfWorker.ts`, `src/lib/rendering/renderBridge.ts`, `src/lib/runtime/appwrite.ts`.
+
+**src/components/ & src/features/:**
+- Purpose: Visual application and business interfaces.
+- Contains: TSX component files.
+
+**src/store/:**
+- Purpose: Application State Handlers.
+- Key files: Zustand store index definitions.
+
+## Key File Locations
+
+**Entry Points:**
+- `src/main.tsx`: Web DOM App registration.
+
+**Configuration:**
+- `vite.config.ts`: Modifies bundler chunks and PWA mappings.
+- `eslint.config.js`: Defines static analysis rules.
+
+## Naming Conventions
+
+**Files:**
+- PascalCase: `CinematifierApp.tsx` (React Components)
+- camelCase: `streamController.ts`, `pdfWorker.ts`, `requestPipeline.ts` (Logic, Scripts)
+
+**Directories:**
+- kebab-case/lowercase structure standard.
+
+## Where to Add New Code
+
+**New Feature (Visual / Form Logic):**
+- Primary code: `src/features/[feature]/`
+- Tests: `src/features/[feature]/__tests__/`
+
+**New Internal Module / Pipeline Process:**
+- Implementation: `src/lib/[module]/[file].ts`
+- Tests: `src/lib/[module]/__tests__/`
+
+## Special Directories
+
+**__tests__:**
+- Purpose: Co-located suite implementations verifying bounded domains.
+- Generated: No
+- Committed: Yes
 
 ---
 
-## Root Directory
-
-- `.planning/` — GSD protocol docs, roadmap, state, and architecture artifacts.
-- `docs/` — UX docs (wireframes, testing checklist).
-- `public/` — static assets and PWA files.
-- `src/` — application source.
-
-## Source Layout (`src/`)
-
-- `components/` — UI-only React components.
-    - `reader/` — reader-focused presentation components.
-- `hooks/` — orchestration hooks that bridge UI with runtime/engine APIs.
-- `lib/` — business logic and system services.
-    - `ai/` — provider orchestration, streaming, rate limiting, and caching.
-    - `engine/` — cinematification pipeline and deterministic text systems.
-        - `cinematifier/` — chapter engine, full-system pipeline, paragraph breakers, scene/narrative analysis.
-    - `processing/` — extraction and resumable async processing workflows.
-    - `runtime/` — reader/runtime services (renderer, telemetry, discovery APIs, metadata APIs).
-    - `security/` — crypto and migration-safe security utilities.
-- `store/` — persisted Zustand state.
-- `test/` — Vitest setup.
-- `types/` — shared type definitions.
-
-## Key Runtime + Engine Modules
-
-- `src/lib/runtime/readerApis.ts` — lexical lookup + multi-source story discovery (novel/manga/manhwa/manhua).
-- `src/lib/runtime/readerBackend.ts` — telemetry snapshots and reader cinematic depth analytics.
-- `src/lib/engine/cinematifier/paragraphBreakers.ts` — deterministic paragraph-breaker APIs.
-- `src/lib/engine/cinematifier/fullSystemPipeline.ts` — canonical orchestration from rebuilt text to render plan.
-
----
-
-_Structure audit: 2026-04-13_
+*Structure analysis: 2026-05-03*

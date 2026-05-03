@@ -1,64 +1,67 @@
-# System Architecture: InfinityCN
+# Architecture
 
-## Cinematifier Engine Flow
+**Analysis Date:** 2026-05-03
 
-**Analysis Date:** 2026-04-13
-**Pattern:** Input -> Pipeline -> Structured Data -> Runtime -> UI
+## Pattern Overview
+
+**Overall:** Offline-First Modular SPA
+
+**Key Characteristics:**
+- Heavy client-side processing (PDF parsing, OCR, AI execution) utilizing dynamic chunked imports and Web Workers.
+- Persistent local data combined with cloud sync (Appwrite, Dexie).
+- Strict separation of core processing logic, external interaction, state management, and React UI components.
+
+## Layers
+
+**UI Components:**
+- Location: `src/components` and `src/features`
+- Contains: React TSX files (`CinematifierApp.tsx`, `ProcessingOverlay.tsx`).
+- Depends on: Local custom hooks, Zustand stores.
+- Used by: React rendering root.
+
+**Store (State Management):**
+- Location: `src/store`
+- Contains: Zustand states configuring the application interface and pipeline processing states.
+- Depends on: App types.
+
+**Libraries / Core Logic:**
+- Location: `src/lib` (`ai`, `cinematifier`, `engine`, `export`, `processing`, `rendering`, `runtime`, `security`)
+- Contains: Core processing algorithms, request pipelines (`requestPipeline.ts`), and engine handling.
+- Depends on: Heavy external data APIs (`pdfjs-dist`, `@xenova/transformers`, `tesseract.js`).
+
+## Data Flow
+
+**Cinematification Stream:**
+
+1. Input provided from UI.
+2. Routed to `src/lib/processing/textProcessingEngine.ts` to convert PDF/Doc logic to text.
+3. Handled via `src/lib/engine/cinematifier` and `src/lib/ai/providers` orchestrating prompts or local embedding creation.
+4. Output directed into `src/lib/rendering/renderBridge.ts` syncing with the React component layer.
+
+**State Management:**
+- Zustand handles unidirectional state propagation into React without props drilling.
+
+## Key Abstractions
+
+**Processing Engines:**
+- Operations isolated into robust controllers (`streamController.ts`, `requestPipeline.ts`, `exportPipeline.ts`).
+- Examples: `src/lib/processing/pdfWorker.ts`.
+- Pattern: Worker process pattern / Adapter routing.
+
+## Entry Points
+
+**React Application Boot:**
+- Location: `src/main.tsx`
+- Responsibilities: Validates root element, checks Appwrite connectivity, and attaches performance insights lazy loading. Wraps in strict mode and top-level error boundaries.
+
+## Error Handling
+
+**Strategy:** Global Error Boundaries & Unhandled Promise interceptions.
+
+**Patterns:**
+- `<ErrorBoundary>` mapping across complete generic application space.
+- Specific library faults and AI parsing errors are intercepted and pushed to metrics or console logging to avoid fatal loops.
 
 ---
 
-## 1. Input Layer
-
-The system accepts PDF/EPUB/DOCX/PPTX/TXT and extracts normalized text.
-
-- `src/lib/processing/pdfWorker.ts` handles extraction and OCR fallback.
-- `src/lib/processing/bookAsyncProcessor.ts` handles chunked processing for long documents.
-
-## 2. Canonical Processing Pipeline
-
-The chapter pipeline order is strict and must not be bypassed:
-
-1. **Text Input**
-2. **Paragraph Rebuilder**
-3. **Scene Segmentation**
-4. **Narrative Analysis**
-5. **Cinematization**
-6. **Renderer**
-
-Implementation anchors:
-
-- `src/lib/engine/cinematifier/chapterEngine.ts`
-- `src/lib/engine/cinematifier/fullSystemPipeline.ts`
-- `src/lib/engine/cinematifier/pipeline.ts`
-
-## 3. Structured Output Layer
-
-Pipeline output is normalized into typed entities:
-
-- Cinematic blocks
-- Scene groups
-- Narrative metadata
-- Render plan cues/scenes
-- Stage trace timing
-
-Primary types live in `src/types/cinematifier.ts`.
-
-## 4. Runtime Layer
-
-Runtime modules expose app-facing service APIs:
-
-- `src/lib/runtime/renderer.ts` for render-plan building.
-- `src/lib/runtime/readerBackend.ts` for telemetry and cinematic depth analytics.
-- `src/lib/runtime/readerApis.ts` for lexical and story discovery APIs.
-
-## 5. UI Layer
-
-React components remain presentation-first:
-
-- Components render state and callbacks only.
-- Hooks orchestrate runtime/engine interactions.
-- Business logic remains outside component files.
-
----
-
-_Architecture audit: 2026-04-13_
+*Architecture analysis: 2026-05-03*

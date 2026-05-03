@@ -1,41 +1,70 @@
-# Technology Stack: InfinityCN
+# Technology Stack
 
-## The Cinematifier Engine
+**Analysis Date:** 2026-05-03
 
-**Analysis Date:** 2026-04-13
-**Version:** 15.0.0
+## Languages
+
+**Primary:**
+- TypeScript 6.0.3 - Core logic and UI components
+- React 19.2.5 - Frontend framework
+
+**Secondary:**
+- CSS - Styling (`styles.css`, `cinematifier.css`)
+
+## Runtime
+
+**Environment:**
+- Node.js >=22.12.0 (for tooling & build, as well as dev server)
+- Browser - Target environment (ESNext)
+
+**Package Manager:**
+- npm >=8.0.0
+
+## Frameworks
+
+**Core:**
+- React 19.2.5 - View library
+- Vite 8.0.8 - Build tool and Dev Server
+
+**Testing:**
+- Vitest 4.1.4 - Test runner
+- React Testing Library 16.3.2 - Component testing
+
+**State Management:**
+- Zustand 5.0.12 - Global state and stores
+
+## Key Dependencies
+
+**Machine Learning & Processing:**
+- `@xenova/transformers` 2.17.2 - Local AI embeddings and models
+- `onnxruntime-web` 1.24.3 - ML inference engine
+- `tesseract.js` 7.0.0 - OCR processing
+- `pdfjs-dist` 5.6.205 - PDF extraction
+- `fflate` 0.8.2 - File extraction (EPUB/DOCX)
+
+**Infrastructure & DB:**
+- `appwrite` 24.2.0 - Backend client
+- `dexie` 4.4.2 - Offline-first IndexedDB wrapper
+
+**UI & Animation:**
+- `framer-motion` 12.38.0 - UI animations
+- `lucide-react` 1.8.0 - Icon set
+
+## Configuration
+
+**Environment:**
+- Loaded via Vite built-in support (`import.meta.env`).
+
+**Build:**
+- `vite.config.ts` - Defines test structure, PWA generation, and specific manual chunks for heavy dependencies (PDF.js, ONNX, Tesseract).
+- `eslint.config.js` - Flat ESLint configuration.
+- `tsconfig.json`
+
+## Platform Requirements
+
+**Design Context:**
+- Offline-first web application running fully entirely in-browser, lazy loading extensive web assembly models securely.
 
 ---
 
-## 💻 Frontend Core
-
-- **Framework:** React 19.2.4 (Strict Mode enabled)
-- **Tooling:** Vite 8.x (building for modern web and PWA)
-- **State:** Zustand 5.0.11 (Atomic and fast global state management)
-- **Database:** Dexie 4.3.0 (IndexedDB source of truth for the reader)
-- **UI & Animations:** Framer Motion 12.35.2 (High-purity, fluid narrative transitions)
-- **Icons:** Lucide React
-
-## 🚀 Native ML & AI
-
-- **Transformers.js:** Browser-resident ML for embeddings and offline assist paths.
-- **Tesseract.js:** Optical character recognition for physical document scanning.
-- **PDF.js:** Client-side extraction of raw story data.
-- **AI Providers:** OpenAI, Anthropic, Gemini, Groq, DeepSeek, Ollama, and Chrome AI.
-
-## 🌐 External API Integrations
-
-- **Story Discovery:** Open Library, Google Books, Gutendex, Jikan, Kitsu.
-- **Word Lens:** DictionaryAPI + Datamuse.
-- **Metadata Enrichment:** Wikipedia summary API.
-- **Quotes:** DummyJSON + Quotable with offline fallback.
-
-## ⚙️ Testing & Quality
-
-- **Vitest:** Primary testing framework for the React application and core pipeline logic.
-- **Testing Library:** DOM verification for narrative elements.
-- **Husky & Lint-Staged:** Pre-commit enforcement of "Clean Code" rules.
-
----
-
-_Stack audit: 2026-04-13_
+*Stack analysis: 2026-05-03*

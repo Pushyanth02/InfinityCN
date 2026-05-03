@@ -1,49 +1,49 @@
-# Coding Conventions: InfinityCN
+# Coding Conventions
 
-## Development & Quality Standards
+**Analysis Date:** 2026-05-03
 
-**Analysis Date:** 2026-03-30
-**Standard:** TypeScript Strict & Clean Code
+## Naming Patterns
+
+**Files:**
+- React components utilize `PascalCase.tsx`
+- TypeScript logic, utilities, configuration use `camelCase.ts` or `kebab-case.js`
+
+**Functions:**
+- Logic functionality favors `camelCase` for variables and actions.
+
+## Code Style
+
+**Formatting:**
+- Tool used: Prettier
+- Defines strict code alignment managed through `npm run format`.
+
+**Linting:**
+- Tool used: ESLint 10 (Flat config)
+- Plugins: `@eslint/js`, `typescript-eslint`, `eslint-plugin-react-hooks`, `eslint-plugin-react-refresh`.
+
+## Import Organization
+
+**Path Aliases:**
+- `@app/*` -> `./src/app`
+- `@features/*` -> `./src/features`
+- `@shared/*` -> `./src/shared`
+- `@assets/*` -> `./src/assets`
+
+## Error Handling
+
+**Patterns:**
+- Extensive usage of `try/catch` and Promise rejection capturing (`catch`). Global uncaught handling sits at `window.addEventListener('unhandledrejection')` in `main.tsx`.
+
+## Logging
+
+**Framework:** `console`
+- Primarily custom console calls with namespacing. Prefix patterns (e.g. `console.error('[Appwrite] Ping failed')`).
+
+## Function Design
+
+- Strong typing adherence. No `any` explicitly specified where strict `typescript-eslint` catches it.
+- Pure hooks implementation over component complexity where possible. 
 
 ---
 
-## 🏛️ General Principles
-
-- **Narrative First:** All code must improve pacing, emotional flow, or immersion.
-- **Cinematifier Core:** Follow the `Input -> Pipeline -> Structured Data -> Runtime -> UI` flow.
-- **Systems > Features:** Build reusable, modular systems.
-- **Clean Code:** Remove unused code, dead functions, and duplicate logic. Prefer clarity over cleverness.
-
-## ⌨️ TypeScript Styling
-
-- **Strict Mode:** No `any`. Explicit types required for all function signatures and complex objects.
-- **Zustand Stores:** Explicit interface definitions for all store state and actions.
-- **Interfaces over Types:** Use `interface` for object definitions, `type` for unions/aliases.
-
-## 📁 Naming Conventions
-
-- **PascalCase:** React Components (`CinematicReader.tsx`), .NET Classes.
-- **camelCase:** Hooks (`useAmbientAudio.ts`), variables, functions, and utility files.
-- **SCREAMING_SNAKE_CASE:** Global constants and environment variables.
-
-## 🎨 UI & UX Standards
-
-- **Typography:** Target `~720px` max width for text containers to ensure readability.
-- **Styles:** Vanilla CSS or CSS Modules with `cine-` prefix.
-- **Animations:** Fluid, subtle transitions via `framer-motion`.
-
-## 🧪 Testing Standards
-
-- **Frontend:** Vitest for all logical units in `src/lib/cinematifier`.
-- **Backend:** NUnit or xUnit for .NET core services.
-- **Verification:** Mandatory checks for valid/invalid/large inputs and failure scenarios.
-
-## ⚙️ Git Workflow
-
-- **GSD Protocol:** Follow `PLAN -> BUILD -> VERIFY -> CLEAN -> SHIP`.
-- **Atomic Commits:** Small, focused meaningful commits.
-- **Pre-commit Hooks:** Automatic linting and formatting via Husky.
-
----
-
-_Conventions audit: 2026-03-30_
+*Convention analysis: 2026-05-03*
