@@ -3,6 +3,7 @@ import type { BookGenre } from '../../types/cinematifier';
 const DEFAULT_TIMEOUT_MS = 2500;
 
 type MetadataSource = 'openlibrary' | 'gutendex' | 'googlebooks' | 'wikipedia';
+export type StoryFormat = 'novel' | 'manga' | 'manhwa' | 'manhua' | 'unknown';
 
 export interface FreeBookMetadata {
     title?: string;
@@ -10,6 +11,7 @@ export interface FreeBookMetadata {
     description?: string;
     subjects: string[];
     genre?: BookGenre;
+    storyFormat?: StoryFormat;
     sources: MetadataSource[];
 }
 
@@ -78,6 +80,14 @@ const GENRE_KEYWORDS: Array<{ genre: BookGenre; keywords: string[] }> = [
     { genre: 'adventure', keywords: ['adventure', 'quest', 'expedition', 'journey'] },
 ];
 
+const STORY_FORMAT_KEYWORDS: Array<{ format: Exclude<StoryFormat, 'unknown'>; keywords: string[] }> =
+    [
+        { format: 'manhwa', keywords: ['manhwa', 'webtoon', 'korean comic', 'k-comic'] },
+        { format: 'manhua', keywords: ['manhua', 'chinese comic', 'hua man', 'dongman'] },
+        { format: 'manga', keywords: ['manga', 'shonen', 'shoujo', 'shojo', 'seinen', 'josei'] },
+        { format: 'novel', keywords: ['novel', 'literature', 'prose'] },
+    ];
+
 function normalizeTitle(value: string): string {
     return value
         .toLowerCase()
@@ -140,6 +150,18 @@ function pickFirstString(candidates: Array<string | undefined>): string | undefi
     return undefined;
 }
 
+/**
+ * Pick the first concrete story format and intentionally skip "unknown"
+ * placeholders so fallback inference still has a chance to select a real format.
+ */
+function pickFirstStoryFormat(candidates: Array<StoryFormat | undefined>): StoryFormat | undefined {
+    for (const candidate of candidates) {
+        if (!candidate || candidate === 'unknown') continue;
+        return candidate;
+    }
+    return undefined;
+}
+
 function extractFirstSentence(firstSentence: OpenLibraryDoc['first_sentence']): string | undefined {
     if (!firstSentence) return undefined;
     if (typeof firstSentence === 'string') return firstSentence.trim() || undefined;
@@ -196,6 +218,36 @@ export function inferGenreFromSubjects(subjects: string[]): BookGenre | undefine
     return undefined;
 }
 
+export function inferStoryFormatFromSubjects(subjects: string[]): StoryFormat {
+    if (subjects.length === 0) return 'unknown';
+
+    const normalizedSubjects = subjects.map(subject => subject.toLowerCase());
+    const scores = new Map<Exclude<StoryFormat, 'unknown'>, number>();
+
+    for (const entry of STORY_FORMAT_KEYWORDS) {
+        const score = entry.keywords.reduce(
+            (count, keyword) =>
+                count +
+                (normalizedSubjects.some(subject => subject.includes(keyword)) ? 1 : 0),
+            0,
+        );
+
+        if (score > 0) {
+            scores.set(entry.format, score);
+        }
+    }
+
+    if (scores.size === 0) {
+        return 'unknown';
+    }
+
+    const sorted = [...scores.entries()].sort((a, b) => b[1] - a[1]);
+    const [bestFormat, bestScore] = sorted[0];
+    const hasTie = sorted.some(([format, score], index) => index > 0 && score === bestScore && format !== bestFormat);
+
+    return hasTie ? 'unknown' : bestFormat;
+}
+
 async function fetchOpenLibraryMetadata(
     title: string,
     timeoutMs: number,
@@ -213,6 +265,7 @@ async function fetchOpenLibraryMetadata(
         description: extractFirstSentence(doc.first_sentence),
         subjects,
         genre: inferGenreFromSubjects(subjects),
+        storyFormat: inferStoryFormatFromSubjects(subjects),
         sources: ['openlibrary'],
     };
 }
@@ -234,6 +287,7 @@ async function fetchGutendexMetadata(
         description: first.summaries?.[0]?.trim() || undefined,
         subjects,
         genre: inferGenreFromSubjects(subjects),
+        storyFormat: inferStoryFormatFromSubjects(subjects),
         sources: ['gutendex'],
     };
 }
@@ -256,6 +310,7 @@ async function fetchGoogleBooksMetadata(
         description: cleanDescription(first.description),
         subjects,
         genre: inferGenreFromSubjects(subjects),
+        storyFormat: inferStoryFormatFromSubjects(subjects),
         sources: ['googlebooks'],
     };
 }
@@ -285,6 +340,7 @@ async function fetchWikipediaMetadata(
         description,
         subjects,
         genre: inferGenreFromSubjects(subjects),
+        storyFormat: inferStoryFormatFromSubjects(subjects),
         sources: ['wikipedia'],
     };
 }
@@ -322,6 +378,9 @@ function mergeMetadata(results: Array<FreeBookMetadata | null>): FreeBookMetadat
             (pickFirstString(orderedByPriority.map(entry => entry.genre)) as
                 | BookGenre
                 | undefined) ?? inferGenreFromSubjects(subjects),
+        storyFormat:
+            pickFirstStoryFormat(orderedByPriority.map(entry => entry.storyFormat)) ??
+            inferStoryFormatFromSubjects(subjects),
         sources: uniqueStrings(
             orderedByPriority.flatMap(entry => entry.sources),
         ) as MetadataSource[],

@@ -30,9 +30,19 @@
     - Added strategy-based paragraph APIs (sentence-cluster, dialogue-pivot, scene-cue).
 - [x] **Phase 2: Cinematic Depth Metrics**
     - Surfaced chapter-level scene/cue/tension/mood summaries in reader analytics.
-- [ ] **Phase 3: Extended Validation Sweep**
-    - Run expanded UX and edge-case tests on mixed-content sources.
+- [x] **Phase 3: Extended Validation Sweep**
+    - Hardened mixed-format classification and added reader UX regression coverage.
+    - Added persistent in-app feedback capture for suggestion tracking.
+    - Added release-readiness gates for mobile + filtered discovery workflows.
 
 ---
 
 _Roadmap updated: 2026-04-13_
+
+---
+
+## Documentation Map Reference
+
+- Master repository map: `/home/runner/work/InfinityCN/InfinityCN/README.md`
+- Planning overview: `/home/runner/work/InfinityCN/InfinityCN/.planning/PROJECT.md`, `/home/runner/work/InfinityCN/InfinityCN/.planning/ROADMAP.md`, `/home/runner/work/InfinityCN/InfinityCN/.planning/STATE.md`
+- Codebase map set: `/home/runner/work/InfinityCN/InfinityCN/.planning/codebase/STRUCTURE.md`, `/home/runner/work/InfinityCN/InfinityCN/.planning/codebase/ARCHITECTURE.md`, `/home/runner/work/InfinityCN/InfinityCN/.planning/codebase/INTEGRATIONS.md`

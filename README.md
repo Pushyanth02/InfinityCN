@@ -38,6 +38,7 @@
 - **Bookmarks & Progress** — Track reading progress, bookmark chapters
 - **Expanded Story Discovery** — Related-title recommendations across novels, manga, manhwa, and manhua with source/type badges and sidebar filters
 - **Cinematic Depth Metrics** — Live scene/cue/tension/mood stats derived from chapter render plans
+- **Reader Feedback Loop** — In-reader feedback capture with local suggestion history for follow-up UX iteration
 
 ### AI Providers
 
@@ -97,6 +98,51 @@ The app integrates the following free APIs and algorithms that require **no API 
 - Expanded scene analysis metrics: dialogue ratio and emotional charge
 - Paragraph reconstruction supports sentence-cluster, dialogue-pivot, and scene-cue strategies with canonical-content fallback checks
 - Reader analytics exposes cinematic depth metrics (scene count, cue count, average tension, dominant mood)
+
+
+## Repository Documentation Map
+
+
+### Runtime pipeline map
+
+`Text/Input -> Cleanup -> Scene Segmentation -> Narrative Analysis -> Cinematization -> Streaming Renderer -> UI Update`
+
+Primary implementation anchors:
+
+- `/home/runner/work/InfinityCN/InfinityCN/src/lib/processing/pdfWorker.ts`
+- `/home/runner/work/InfinityCN/InfinityCN/src/lib/engine/cinematifier/chapterEngine.ts`
+- `/home/runner/work/InfinityCN/InfinityCN/src/lib/engine/cinematifier/fullSystemPipeline.ts`
+- `/home/runner/work/InfinityCN/InfinityCN/src/lib/runtime/renderer.ts`
+- `/home/runner/work/InfinityCN/InfinityCN/src/components/reader/CinematicRenderer.tsx`
+
+
+### Root docs
+
+- `/home/runner/work/InfinityCN/InfinityCN/README.md` — project overview, stack, scripts, and source layout
+- `/home/runner/work/InfinityCN/InfinityCN/docs/user-testing-checklist.md` — manual QA checklist
+- `/home/runner/work/InfinityCN/InfinityCN/docs/wireframes.md` — screen wireframes and interaction flow map
+
+### Planning docs (`.planning/`)
+
+- `/home/runner/work/InfinityCN/InfinityCN/.planning/PROJECT.md` — project vision, guardrails, success metrics
+- `/home/runner/work/InfinityCN/InfinityCN/.planning/ROADMAP.md` — milestone and phase tracking
+- `/home/runner/work/InfinityCN/InfinityCN/.planning/STATE.md` — current implementation state and blockers
+- `/home/runner/work/InfinityCN/InfinityCN/.planning/REQUIREMENTS.md` — milestone functional/technical requirements
+- `/home/runner/work/InfinityCN/InfinityCN/.planning/RULES.md` — global engineering and pipeline rules
+
+### Codebase map docs (`.planning/codebase/`)
+
+- `/home/runner/work/InfinityCN/InfinityCN/.planning/codebase/STACK.md` — framework and dependency map
+- `/home/runner/work/InfinityCN/InfinityCN/.planning/codebase/STRUCTURE.md` — folder/module structure map
+- `/home/runner/work/InfinityCN/InfinityCN/.planning/codebase/ARCHITECTURE.md` — layer and processing-flow map
+- `/home/runner/work/InfinityCN/InfinityCN/.planning/codebase/INTEGRATIONS.md` — external/internal integration map
+- `/home/runner/work/InfinityCN/InfinityCN/.planning/codebase/CONVENTIONS.md` — code and architecture conventions
+- `/home/runner/work/InfinityCN/InfinityCN/.planning/codebase/TESTING.md` — validation/testing strategy map
+- `/home/runner/work/InfinityCN/InfinityCN/.planning/codebase/CONCERNS.md` — technical risk/concern map
+
+### Instruction docs
+
+- `/home/runner/work/InfinityCN/InfinityCN/.github/copilot-instructions.md` — repository-level Copilot architecture and safety instructions
 
 ## Getting Started
 

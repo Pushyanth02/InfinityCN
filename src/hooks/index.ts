@@ -7,6 +7,7 @@ export { useFileProcessing } from './useFileProcessing';
 export { useAIConnectionTest } from './useAIConnectionTest';
 export { useReaderAnalytics } from './useReaderAnalytics';
 export { useReaderDiscovery } from './useReaderDiscovery';
+export { useReaderFeedback } from './useReaderFeedback';
 export { useRenderBridge } from './useRenderBridge';
 export { useReaderState } from './useReaderState';
 export { usePacingEngine, computePacingStyle, computeAllPacingStyles } from './usePacingEngine';

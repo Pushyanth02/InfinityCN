@@ -1,14 +1,18 @@
 import React from 'react';
 import { ChevronRight } from 'lucide-react';
 import type { ReaderAnalyticsSummary } from '../../lib/runtime/readerBackend';
-import type { ReaderWordInsight } from '../../lib/runtime/readerApis';
+import type { FeedbackCategory } from '../../lib/runtime/feedbackStore';
 
-import { useReaderDiscovery } from '../../hooks';
+import { useReaderDiscovery, useReaderFeedback } from '../../hooks';
 
 interface ReaderCharactersPanelProps {
     insights: ReaderAnalyticsSummary | null;
     isOpen: boolean;
     onClose: () => void;
+}
+
+function isFeedbackCategory(value: string): value is FeedbackCategory {
+    return value === 'bug' || value === 'ux' || value === 'feature' || value === 'other';
 }
 
 function formatMinutes(minutes: number): string {
@@ -30,11 +34,23 @@ export const ReaderCharactersPanel: React.FC<ReaderCharactersPanelProps> = ({
         setWordQuery,
         lookupWord,
         isWordLookupLoading,
+        isWordSuggestionLoading,
         wordLookupError,
+        wordSuggestionError,
         wordInsight,
         wordSuggestions,
         recentWords,
     } = useReaderDiscovery();
+    const {
+        feedbackMessage,
+        setFeedbackMessage,
+        feedbackCategory,
+        setFeedbackCategory,
+        feedbackError,
+        feedbackSuccess,
+        recentFeedback,
+        submitFeedback,
+    } = useReaderFeedback();
     const meanings = wordInsight?.meanings.slice(0, 4) ?? [];
     const sourceLabel = wordInsight?.sources.join(' + ') ?? null;
 
@@ -42,6 +58,7 @@ export const ReaderCharactersPanel: React.FC<ReaderCharactersPanelProps> = ({
         <aside
             className={`cine-insights-sidebar ${isOpen ? '' : 'is-closed'}`}
             aria-label="Reader insights panel"
+            inert={!isOpen || undefined}
         >
             <div className="cine-insights-header">
                 <h2 className="cine-insights-title">Insights</h2>
@@ -179,7 +196,24 @@ export const ReaderCharactersPanel: React.FC<ReaderCharactersPanelProps> = ({
 
                 {wordLookupError && <p className="cine-word-lens-error">{wordLookupError}</p>}
 
-                {wordSuggestions.length > 0 && (
+                {isWordSuggestionLoading && (
+                    <p className="cine-word-lens-caption" aria-live="polite">
+                        Loading suggestions…
+                    </p>
+                )}
+                {wordSuggestionError && (
+                    <p className="cine-word-lens-error" aria-live="polite">
+                        {wordSuggestionError}
+                    </p>
+                )}
+                {!isWordSuggestionLoading &&
+                    !wordSuggestionError &&
+                    wordQuery.trim().length >= 2 &&
+                    wordSuggestions.length === 0 && (
+                        <p className="cine-word-lens-caption">No suggestions found yet.</p>
+                    )}
+
+                {wordSuggestions.length > 0 && !isWordSuggestionLoading && (
                     <div className="cine-word-lens-supplement">
                         <p className="cine-word-lens-caption">Suggestions</p>
                         <div className="cine-word-lens-tags">
@@ -222,7 +256,7 @@ export const ReaderCharactersPanel: React.FC<ReaderCharactersPanelProps> = ({
                 )}
 
                 {wordInsight && (
-                    <div className="cine-word-lens-result">
+                    <div className="cine-word-lens-result" aria-live="polite">
                         <p className="cine-word-lens-title">
                             <strong>{wordInsight.word}</strong>
                             {wordInsight.phonetic && <span>{wordInsight.phonetic}</span>}
@@ -266,8 +300,8 @@ export const ReaderCharactersPanel: React.FC<ReaderCharactersPanelProps> = ({
                                             className="cine-word-tag"
                                             type="button"
                                             onClick={() => {
-                                                onWordQueryChange(word);
-                                                void onLookupWord(word);
+                                                setWordQuery(word);
+                                                void lookupWord(word);
                                             }}
                                         >
                                             {word}
@@ -286,8 +320,8 @@ export const ReaderCharactersPanel: React.FC<ReaderCharactersPanelProps> = ({
                                             className="cine-word-tag"
                                             type="button"
                                             onClick={() => {
-                                                onWordQueryChange(word);
-                                                void onLookupWord(word);
+                                                setWordQuery(word);
+                                                void lookupWord(word);
                                             }}
                                         >
                                             {word}
@@ -296,6 +330,75 @@ export const ReaderCharactersPanel: React.FC<ReaderCharactersPanelProps> = ({
                                 </div>
                             </div>
                         )}
+                    </div>
+                )}
+            </section>
+
+            <section className="cine-insight-section">
+                <h3 className="cine-insight-section-title">Feedback</h3>
+                <form
+                    className="cine-feedback-form"
+                    onSubmit={event => {
+                        event.preventDefault();
+                        submitFeedback('reader-insights');
+                    }}
+                >
+                    <label className="sr-only" htmlFor="reader-feedback-category">
+                        Feedback category
+                    </label>
+                    <select
+                        id="reader-feedback-category"
+                        className="cine-feedback-select"
+                        value={feedbackCategory}
+                        onChange={event => {
+                            const value = event.target.value;
+                            if (isFeedbackCategory(value)) {
+                                setFeedbackCategory(value);
+                            }
+                        }}
+                    >
+                        <option value="ux">UX</option>
+                        <option value="bug">Bug</option>
+                        <option value="feature">Feature request</option>
+                        <option value="other">Other</option>
+                    </select>
+                    <label className="sr-only" htmlFor="reader-feedback-message">
+                        Feedback message
+                    </label>
+                    <textarea
+                        id="reader-feedback-message"
+                        className="cine-feedback-input"
+                        value={feedbackMessage}
+                        onChange={event => setFeedbackMessage(event.target.value)}
+                        placeholder="Report a bug or suggest an improvement..."
+                        rows={3}
+                    />
+                    <button type="submit" className="cine-word-lens-button">
+                        Submit feedback
+                    </button>
+                </form>
+
+                {feedbackError && (
+                    <p className="cine-word-lens-error" aria-live="polite">
+                        {feedbackError}
+                    </p>
+                )}
+                {feedbackSuccess && (
+                    <p className="cine-word-lens-caption" aria-live="polite">
+                        {feedbackSuccess}
+                    </p>
+                )}
+
+                {recentFeedback.length > 0 && (
+                    <div className="cine-word-lens-supplement">
+                        <p className="cine-word-lens-caption">Recent submissions</p>
+                        <ul className="cine-feedback-list">
+                            {recentFeedback.map(item => (
+                                <li key={item.id} className="cine-feedback-item">
+                                    <strong>{item.category.toUpperCase()}:</strong> {item.message}
+                                </li>
+                            ))}
+                        </ul>
                     </div>
                 )}
             </section>

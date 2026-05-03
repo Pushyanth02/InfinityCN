@@ -41,6 +41,9 @@ export type IngestionErrorCode =
     | 'UNSUPPORTED_FORMAT'
     | 'LEGACY_FORMAT'
     | 'CORRUPTED_FILE'
+    | 'IMAGE_ONLY_PDF'
+    | 'MALFORMED_XREF'
+    | 'DAMAGED_PAGES'
     | 'ENCRYPTED_FILE'
     | 'EXTRACTION_FAILED'
     | 'OCR_FAILED'
@@ -110,6 +113,42 @@ function classifyError(error: unknown, stage: IngestionStage): IngestionError {
         });
     }
 
+    if (lower.includes('image-only pdf') || lower.includes('image based')) {
+        return new IngestionError({
+            code: 'IMAGE_ONLY_PDF',
+            stage,
+            message: msg,
+            userMessage:
+                'This PDF appears image-only. OCR recovered limited text; try a higher-quality scan or OCR-enabled export.',
+            recoverable: true,
+            cause: error,
+        });
+    }
+
+    if (lower.includes('xref') || lower.includes('cross-reference')) {
+        return new IngestionError({
+            code: 'MALFORMED_XREF',
+            stage,
+            message: msg,
+            userMessage:
+                'The PDF has a malformed cross-reference table (xref). Please re-export the file and retry.',
+            recoverable: false,
+            cause: error,
+        });
+    }
+
+    if (lower.includes('damaged page') || lower.includes('damaged pages')) {
+        return new IngestionError({
+            code: 'DAMAGED_PAGES',
+            stage,
+            message: msg,
+            userMessage:
+                'Some pages in this PDF are damaged. We recovered what we could; review extracted content before continuing.',
+            recoverable: true,
+            cause: error,
+        });
+    }
+
     if (lower.includes('encrypted') || lower.includes('drm') || lower.includes('password')) {
         return new IngestionError({
             code: 'ENCRYPTED_FILE',
@@ -175,6 +214,10 @@ export interface IngestionProgress {
     totalPages?: number;
     /** Whether OCR was triggered */
     ocrTriggered?: boolean;
+    ocrPageRatio?: number;
+    ocrAverageConfidence?: number;
+    lowConfidenceExtraction?: boolean;
+    damagedPages?: number;
 }
 
 export type IngestionProgressCallback = (progress: IngestionProgress) => void;
@@ -218,6 +261,19 @@ export interface IngestionResult {
     processingTimeMs: number;
     /** Whether OCR was used during extraction */
     ocrUsed: boolean;
+    ocrQuality: {
+        ocrPageRatio: number;
+        ocrAverageConfidence?: number;
+        lowConfidenceExtraction: boolean;
+    };
+    chapterDetectionTier: 'chapter_regex' | 'scene_split' | 'single_chapter_safe_mode';
+    telemetry: {
+        stageDurationMs: Partial<Record<IngestionStage, number>>;
+        totalDurationMs: number;
+        ocrUsageRate: number;
+        chapterDetectionFailures: number;
+        userAborted: boolean;
+    };
     /** Warnings accumulated during processing */
     warnings: string[];
 }
@@ -227,6 +283,10 @@ export interface IngestionResult {
 const MIN_TEXT_LENGTH = 100;
 const MIN_WORD_COUNT = 20;
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
+const CHECKPOINT_KEY = 'infinitycn:ingestion-checkpoints:v1';
+const MAX_STORED_CHECKPOINTS = 10;
+const LOW_CONFIDENCE_OCR_RATIO_THRESHOLD = 0.35;
+const LOW_CONFIDENCE_OCR_CONFIDENCE_THRESHOLD = 65;
 
 function validateFile(file: File): SupportedFormat {
     if (!file.name.trim()) {
@@ -343,6 +403,93 @@ function checkAborted(signal?: AbortSignal): void {
     }
 }
 
+type IngestionCheckpoint = {
+    key: string;
+    format: SupportedFormat;
+    rawText?: string;
+    normalizedText?: string;
+    updatedAt: number;
+};
+
+function getStorage(): Storage | null {
+    if (typeof window === 'undefined') return null;
+    try {
+        return window.localStorage;
+    } catch {
+        return null;
+    }
+}
+
+function checkpointKeyForFile(file: File): string {
+    return `${file.name}:${file.size}:${file.lastModified}`;
+}
+
+function readCheckpoint(file: File): IngestionCheckpoint | null {
+    const storage = getStorage();
+    if (!storage) return null;
+    try {
+        const raw = storage.getItem(CHECKPOINT_KEY);
+        if (!raw) return null;
+        const checkpoints = JSON.parse(raw) as IngestionCheckpoint[];
+        const key = checkpointKeyForFile(file);
+        return checkpoints.find(item => item.key === key) ?? null;
+    } catch {
+        return null;
+    }
+}
+
+function writeCheckpoint(next: IngestionCheckpoint): void {
+    const storage = getStorage();
+    if (!storage) return;
+    try {
+        const raw = storage.getItem(CHECKPOINT_KEY);
+        const checkpoints = raw ? (JSON.parse(raw) as IngestionCheckpoint[]) : [];
+        const filtered = checkpoints.filter(item => item.key !== next.key);
+        filtered.unshift(next);
+        storage.setItem(
+            CHECKPOINT_KEY,
+            JSON.stringify(filtered.slice(0, MAX_STORED_CHECKPOINTS)),
+        );
+    } catch {
+        // no-op
+    }
+}
+
+function clearCheckpoint(file: File): void {
+    const storage = getStorage();
+    if (!storage) return;
+    try {
+        const raw = storage.getItem(CHECKPOINT_KEY);
+        if (!raw) return;
+        const checkpoints = JSON.parse(raw) as IngestionCheckpoint[];
+        const key = checkpointKeyForFile(file);
+        storage.setItem(
+            CHECKPOINT_KEY,
+            JSON.stringify(checkpoints.filter(item => item.key !== key)),
+        );
+    } catch {
+        // no-op
+    }
+}
+
+function detectChaptersByStructuralMarkers(text: string): ChapterSegment[] {
+    const markers = text.split(/\n\s*(?:scene|part)\s+[\divxlcdm]+[:.\- ]/iu).filter(Boolean);
+    if (markers.length < 2) return [];
+    let offset = 0;
+    return markers.map((content, index) => {
+        const trimmed = content.trim();
+        const startIndex = text.indexOf(trimmed, offset);
+        const endIndex = startIndex + trimmed.length;
+        offset = endIndex;
+        return {
+            title: `Scene ${index + 1}`,
+            content: trimmed,
+            startIndex: Math.max(0, startIndex),
+            endIndex: Math.max(0, endIndex),
+        };
+    });
+}
+
 // ─── Main Pipeline ─────────────────────────────────────────────────────────────
 
 /**
@@ -360,47 +507,84 @@ export async function ingestDocument(
     const startTime = performance.now();
     const warnings: string[] = [];
     let ocrUsed = false;
+    let ocrPageRatio = 0;
+    let ocrAverageConfidence: number | undefined;
+    let lowConfidenceExtraction = false;
+    let damagedPages = 0;
+    let chapterDetectionFailures = 0;
+    const stageStartedAt = new Map<IngestionStage, number>();
+    const stageDurationMs: Partial<Record<IngestionStage, number>> = {};
     const minTextLength = options.minTextLength ?? MIN_TEXT_LENGTH;
+    const checkpoint = readCheckpoint(file);
 
     // ── Stage 1: Validate ────────────────────────────────────
+    stageStartedAt.set('validating', performance.now());
     emitProgress(options.onProgress, 'validating', 0, `Validating ${file.name}...`);
     const format = validateFile(file);
+    stageDurationMs.validating = Math.round(performance.now() - (stageStartedAt.get('validating') ?? 0));
     emitProgress(options.onProgress, 'validating', 100, 'File validated.', { format });
 
     checkAborted(options.signal);
 
     // ── Stage 2: Extract Text ────────────────────────────────
+    stageStartedAt.set('extracting', performance.now());
     emitProgress(options.onProgress, 'extracting', 0, 'Initializing extraction engine...', { format });
 
     let rawText: string;
-    try {
-        const extractionCallback: ExtractionProgressCallback = (update) => {
-            if (update.stage === 'ocr') ocrUsed = true;
-            emitProgress(
-                options.onProgress,
-                'extracting',
-                update.percentComplete,
-                update.message,
-                {
-                    format,
-                    pagesProcessed: update.pagesProcessed,
-                    totalPages: update.totalPages,
-                    ocrTriggered: ocrUsed,
-                },
-            );
-        };
+    if (checkpoint?.rawText && checkpoint.format === format) {
+        rawText = checkpoint.rawText;
+        emitProgress(options.onProgress, 'extracting', 100, 'Resumed extracted text from checkpoint.', {
+            format,
+        });
+    } else {
+        try {
+            const extractionCallback: ExtractionProgressCallback = (update) => {
+                if (update.stage === 'ocr') ocrUsed = true;
+                ocrPageRatio = update.ocrPageRatio ?? ocrPageRatio;
+                ocrAverageConfidence = update.ocrAverageConfidence ?? ocrAverageConfidence;
+                lowConfidenceExtraction = update.lowConfidenceExtraction ?? lowConfidenceExtraction;
+                damagedPages = update.damagedPages ?? damagedPages;
+                emitProgress(
+                    options.onProgress,
+                    'extracting',
+                    update.percentComplete,
+                    update.message,
+                    {
+                        format,
+                        pagesProcessed: update.pagesProcessed,
+                        totalPages: update.totalPages,
+                        ocrTriggered: ocrUsed,
+                        ocrPageRatio,
+                        ocrAverageConfidence,
+                        lowConfidenceExtraction,
+                        damagedPages,
+                    },
+                );
+            };
 
-        rawText = await extractText(file, extractionCallback);
-    } catch (err) {
-        throw classifyError(err, 'extracting');
+            rawText = await extractText(file, extractionCallback);
+        } catch (err) {
+            throw classifyError(err, 'extracting');
+        }
     }
+    stageDurationMs.extracting = Math.round(performance.now() - (stageStartedAt.get('extracting') ?? 0));
 
     checkAborted(options.signal);
 
     // ── Quality Gate: Minimum Text ───────────────────────────
     validateExtractedText(rawText, minTextLength);
 
+    // Persist checkpoint only after the extracted text passes validation so
+    // retries for the same file do not keep reusing garbled/too-short text.
+    writeCheckpoint({
+        key: checkpointKeyForFile(file),
+        format,
+        rawText,
+        updatedAt: Date.now(),
+    });
+
     // ── Stage 3: Clean Artifacts ─────────────────────────────
+    stageStartedAt.set('cleaning', performance.now());
     emitProgress(options.onProgress, 'cleaning', 0, 'Removing document artifacts...', { format });
 
     let cleanedText: string;
@@ -419,10 +603,12 @@ export async function ingestDocument(
     }
 
     emitProgress(options.onProgress, 'cleaning', 100, 'Artifacts removed.', { format });
+    stageDurationMs.cleaning = Math.round(performance.now() - (stageStartedAt.get('cleaning') ?? 0));
 
     checkAborted(options.signal);
 
     // ── Stage 4: Normalize ───────────────────────────────────
+    stageStartedAt.set('normalizing', performance.now());
     emitProgress(options.onProgress, 'normalizing', 0, 'Normalizing text...', { format });
 
     // The text processing engine handles normalization internally,
@@ -434,24 +620,56 @@ export async function ingestDocument(
         .trim();
 
     emitProgress(options.onProgress, 'normalizing', 100, 'Text normalized.', { format });
+    stageDurationMs.normalizing = Math.round(performance.now() - (stageStartedAt.get('normalizing') ?? 0));
+    writeCheckpoint({
+        key: checkpointKeyForFile(file),
+        format,
+        rawText,
+        normalizedText,
+        updatedAt: Date.now(),
+    });
 
     checkAborted(options.signal);
 
     // ── Stage 5: Detect Chapters ─────────────────────────────
+    stageStartedAt.set('detecting_chapters', performance.now());
     emitProgress(options.onProgress, 'detecting_chapters', 0, 'Detecting chapters...', { format });
 
     let segments: ChapterSegment[];
+    let chapterDetectionTier: IngestionResult['chapterDetectionTier'] = 'chapter_regex';
     try {
         segments = segmentChapters(normalizedText);
+        if (segments.length === 0) {
+            chapterDetectionFailures++;
+            segments = detectChaptersByStructuralMarkers(normalizedText);
+            chapterDetectionTier = 'scene_split';
+        }
+        if (segments.length === 0) {
+            chapterDetectionFailures++;
+            chapterDetectionTier = 'single_chapter_safe_mode';
+            segments = [{
+                title: 'Full Text',
+                content: normalizedText,
+                startIndex: 0,
+                endIndex: normalizedText.length,
+            }];
+        }
     } catch (err) {
+        chapterDetectionFailures++;
         warnings.push(`Chapter detection failed: ${err instanceof Error ? err.message : String(err)}`);
-        // Fallback: treat entire text as one chapter
+        const fallbackSegments = detectChaptersByStructuralMarkers(normalizedText);
+        if (fallbackSegments.length > 0) {
+            chapterDetectionTier = 'scene_split';
+            segments = fallbackSegments;
+        } else {
+            chapterDetectionTier = 'single_chapter_safe_mode';
         segments = [{
             title: 'Full Text',
             content: normalizedText,
             startIndex: 0,
             endIndex: normalizedText.length,
         }];
+        }
     }
 
     validateChapters(segments);
@@ -463,10 +681,14 @@ export async function ingestDocument(
         `Detected ${segments.length} chapter${segments.length === 1 ? '' : 's'}.`,
         { format },
     );
+    stageDurationMs.detecting_chapters = Math.round(
+        performance.now() - (stageStartedAt.get('detecting_chapters') ?? 0),
+    );
 
     checkAborted(options.signal);
 
     // ── Stage 6: Process Text Through Engine ─────────────────
+    stageStartedAt.set('processing_text', performance.now());
     emitProgress(options.onProgress, 'processing_text', 0, 'Processing narrative structure...', { format });
 
     const textOptions: TextProcessingOptions = {
@@ -520,10 +742,36 @@ export async function ingestDocument(
     const title = extractTitle(normalizedText);
 
     emitProgress(options.onProgress, 'complete', 100, 'Document ingestion complete.', { format });
+    stageDurationMs.processing_text = Math.round(
+        performance.now() - (stageStartedAt.get('processing_text') ?? 0),
+    );
+    stageDurationMs.complete = 0;
 
     if (ocrUsed) {
         warnings.push('OCR was used on some pages. Text quality may vary.');
     }
+    if (
+        ocrPageRatio >= LOW_CONFIDENCE_OCR_RATIO_THRESHOLD ||
+        (typeof ocrAverageConfidence === 'number' &&
+            ocrAverageConfidence < LOW_CONFIDENCE_OCR_CONFIDENCE_THRESHOLD) ||
+        lowConfidenceExtraction
+    ) {
+        warnings.push(
+            'Low-confidence extraction detected. Please verify text quality before chapter-level editing.',
+        );
+    }
+    if (damagedPages > 0) {
+        warnings.push(
+            `Recovered with ${damagedPages} damaged page${damagedPages === 1 ? '' : 's'}.`,
+        );
+    }
+    if (chapterDetectionTier !== 'chapter_regex') {
+        warnings.push(`Chapter detection fallback tier used: ${chapterDetectionTier}.`);
+    }
+
+    clearCheckpoint(file);
+
+    const totalDurationMs = Math.round(performance.now() - startTime);
 
     return {
         format,
@@ -532,8 +780,21 @@ export async function ingestDocument(
         chapters,
         cleanedText: normalizedText,
         fullNarrative,
-        processingTimeMs: Math.round(performance.now() - startTime),
+        processingTimeMs: totalDurationMs,
         ocrUsed,
+        ocrQuality: {
+            ocrPageRatio,
+            ocrAverageConfidence,
+            lowConfidenceExtraction,
+        },
+        chapterDetectionTier,
+        telemetry: {
+            stageDurationMs,
+            totalDurationMs,
+            ocrUsageRate: ocrPageRatio,
+            chapterDetectionFailures,
+            userAborted: false,
+        },
         warnings,
     };
 }
