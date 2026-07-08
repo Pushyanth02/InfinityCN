@@ -1,51 +1,87 @@
-# Logs
-logs
-*.log
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
+.pnpm-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
+# env files (can opt-in for committing if needed)
+.env*
 
-# TypeScript build info
-**/*.tsbuildinfo
-
-# .NET build artifacts
-dotnet/**/obj/
-dotnet/**/bin/
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-
+# vercel
 .vercel
 
-# Local Claude agent settings
-.claude/settings.local.json
+# e2e test output reports
+e2e-report.txt
+e2e-run.txt
+e2e-run2.txt
+e2e-run3.txt
+e2e-run4.txt
 
-# Graphify cache
-graphify-out/cache/
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+local-*
+.claude
+.z-ai-config
+*.log
+dev.log
+dev.out.log
+test
+prompt
 
-# Temp files
-tmpclaude-*
-*_tmp.txt
-*_output.txt
+server.log
+# Skills directory
+/skills/
 
-# Docker Compose overrides
-docker-compose.override.yml
+# build output — standalone (47k+ files, rebuilt on demand)
+.next/standalone/
 
-# Windows NUL device artifact
-nul
+# bun lockfiles — deterministic via bun.lock-binary
+bun.lock
 
+# auto-generated PID files from dev scripts
+.zscripts/dev.pid
+
+# file uploads (local storage)
+public/uploads/
+
+# SQLite database files (runtime data — must not be committed).
+# Prisma resolves `file:` URLs relative to CWD at runtime and relative to the
+# schema at CLI time, which is why both locations can appear.
+db/*.db
+db/*.db-shm
+db/*.db-wal
+db/*.db-journal
+prisma/db/*.db
+prisma/db/*.db-shm
+prisma/db/*.db-wal
+prisma/db/*.db-journal
+
+# database backups
+/backups/

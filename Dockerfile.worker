@@ -1,0 +1,36 @@
+# =============================================================================
+# Lemniscate Worker — Dockerfile
+# =============================================================================
+# Standalone worker service that polls SQLite for jobs and runs the pipeline.
+# Uses Bun for runtime performance.
+# =============================================================================
+
+FROM oven/bun:1-alpine AS runner
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV DATABASE_URL=file:/app/db/custom.db
+
+RUN addgroup --system --gid 1001 worker && \
+    adduser --system --uid 1001 worker
+
+# Copy the full source (worker imports from ../../src)
+COPY package.json ./
+COPY tsconfig.json ./
+COPY prisma ./prisma/
+COPY src ./src/
+COPY mini-services/lemniscate-worker ./mini-services/lemniscate-worker/
+
+RUN bun install --production && bunx prisma generate
+
+# Create db directory with correct permissions
+RUN mkdir -p ./db && chown -R worker:worker ./db
+
+USER worker
+
+EXPOSE 3003
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:3003/health || exit 1
+
+CMD ["bun", "mini-services/lemniscate-worker/index.ts"]

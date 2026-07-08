@@ -1,0 +1,305 @@
+// Lemniscate — Prisma Schema
+// Deterministic document-to-storytelling platform.
+// All processing is offline & rule-based (no LLMs).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Source documents
+// ---------------------------------------------------------------------------
+
+model Document {
+  id            String   @id @default(cuid())
+  originalName  String
+  storageName   String
+  mimeType      String
+  sizeBytes     Int
+  fileHash      String   @unique
+  status        String   @default("UPLOADED") // UPLOADED | EXTRACTED | PROCESSED | FAILED
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Deterministically detected document metadata (see lib/pipeline/metadata.ts).
+  // Populated during the EXTRACT stage so the library can display real titles.
+  title          String?  // detected canonical title (falls back to filename)
+  titleSource    String?  // embedded | heading | typography | chapter | filename
+  author         String?
+  subtitle       String?
+  series         String?
+  language       String?  // ISO-639-1 (best-effort)
+  wordCount      Int?
+  readingTimeMin Int?
+  chapterCount   Int      @default(0)
+  detectedMeta   String   @default("{}") // JSON: { chapters: [...], titleSource, ... }
+
+  rawText       RawText?
+  jobs          Job[]
+  narratives    Narrative[]
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Job {
+  id          String    @id @default(cuid())
+  documentId  String
+  mode        String    // ORIGINAL | CINEMATIFIED | BOTH
+  status      String    @default("QUEUED") // QUEUED | PROCESSING | COMPLETED | FAILED | CANCELLED | DEAD_LETTER
+  progress    Int       @default(0)        // 0..100
+  stage       String?                        // EXTRACT | SEGMENT | ORIGINAL | CINEMATIFY | FINALIZE
+  error       String?
+  priority    Int       @default(5)
+  createdAt   DateTime  @default(now())
+  startedAt   DateTime?
+  completedAt DateTime?
+  durationMs  Int?
+
+  document    Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  narratives  Narrative[]
+  logs        ProcessingLog[]
+
+  @@index([status])
+  @@index([documentId])
+  @@index([createdAt])
+}
+
+model RawText {
+  id          String   @id @default(cuid())
+  documentId  String   @unique
+  content     String
+  charCount   Int
+  wordCount   Int
+  lineCount   Int
+  language    String   @default("en")
+  encoding    String   @default("utf-8")
+  createdAt   DateTime @default(now())
+
+  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------------------------
+// Transformation outputs
+// ---------------------------------------------------------------------------
+
+model Narrative {
+  id           String   @id @default(cuid())
+  documentId   String
+  jobId        String
+  mode         String   // ORIGINAL | CINEMATIFIED
+  title        String
+  content      String   // markdown rendering of the narrative
+  plainText    String   // plain text version
+  wordCount    Int
+  charCount    Int
+  readingTimeMin Int
+  paragraphCount Int
+  sceneCount   Int      @default(0)
+  metadata     String   @default("{}") // JSON blob
+  createdAt    DateTime @default(now())
+
+  document     Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  job          Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  paragraphs   Paragraph[]
+  scenes       Scene[]
+  characters   Character[]
+  locations    Location[]
+  events       Event[]
+  arcs         NarrativeArc[]
+  peaks        EmotionalPeak[]
+  progress     ReadingProgress?
+  bookmarks    Bookmark[]
+
+  @@index([documentId])
+  @@index([mode])
+}
+
+model Paragraph {
+  id           String   @id @default(cuid())
+  narrativeId  String
+  index        Int
+  text         String
+  type         String   @default("NARRATION") // NARRATION | DIALOGUE | ACTION | TRANSITION | HEADING | THOUGHT
+  speaker      String?
+  rawText      String?
+  wordCount    Int
+  charCount    Int
+  startOffset  Int      @default(0)
+  endOffset    Int      @default(0)
+
+  narrative    Narrative @relation(fields: [narrativeId], references: [id], onDelete: Cascade)
+
+  @@index([narrativeId])
+}
+
+model Scene {
+  id            String   @id @default(cuid())
+  narrativeId   String
+  index         Int
+  title         String
+  summary       String
+  location      String?
+  timeOfDay     String?  // DAWN | MORNING | DAY | AFTERNOON | DUSK | NIGHT | UNKNOWN
+  mood          String?  // TENSE | CALM | JOYFUL | SOMBER | MYSTERIOUS | ROMANTIC | VIOLENT | HOPEFUL
+  tensionScore  Int      @default(0) // 0..100
+  emotionScore  Int      @default(0) // 0..100 (signed valence -100..100 normalized to 0..100)
+  // Narrative Intelligence Engine v2 — promoted scalar metrics.
+  momentumScore Int      @default(0) // 0..100 normalized momentum
+  arousalScore  Int      @default(0) // 0..100 emotional activation
+  valence       Int      @default(0) // -100..100 signed valence
+  structurePhase String? // EXPOSITION | INCITING_INCIDENT | RISING_ACTION | MIDPOINT | CLIMAX | FALLING_ACTION | RESOLUTION
+  startOffset   Int      @default(0)
+  endOffset     Int      @default(0)
+  charCount     Int      @default(0)
+  paragraphCount Int     @default(0)
+  dialogueRatio Float    @default(0) // 0..1
+  eventCount    Int      @default(0)
+
+  narrative     Narrative @relation(fields: [narrativeId], references: [id], onDelete: Cascade)
+  events        Event[]
+  peaks         EmotionalPeak[]
+
+  @@index([narrativeId])
+}
+
+model Character {
+  id            String   @id @default(cuid())
+  narrativeId   String
+  name          String
+  aliases       String   @default("[]") // JSON array
+  mentions      Int      @default(0)
+  firstAppearanceOffset Int @default(0)
+  role          String   @default("SUPPORTING") // PROTAGONIST | SUPPORTING | ANTAGONIST | MINOR
+  dialogueLines Int      @default(0)
+  description   String?
+  metadata      String   @default("{}") // JSON: { honorifics, gender, scenes }
+
+  // Narrative Intelligence Engine v2 — promoted scalar metrics.
+  importanceScore      Int @default(0) // 0..100 weighted importance
+  confidenceScore      Int @default(0) // 0..100 detection confidence
+  speakingCount        Int @default(0) // attributed dialogue lines
+  lastAppearanceOffset Int @default(0)
+
+  narrative     Narrative @relation(fields: [narrativeId], references: [id], onDelete: Cascade)
+
+  @@index([narrativeId])
+  @@index([name])
+}
+
+model Location {
+  id            String   @id @default(cuid())
+  narrativeId   String
+  name          String
+  mentions      Int      @default(0)
+  type          String   @default("GENERIC") // INDOOR | OUTDOOR | URBAN | NATURE | VEHICLE | GENERIC
+  firstAppearanceOffset Int @default(0)
+
+  narrative     Narrative @relation(fields: [narrativeId], references: [id], onDelete: Cascade)
+
+  @@index([narrativeId])
+}
+
+model Event {
+  id            String   @id @default(cuid())
+  narrativeId   String
+  sceneId       String?
+  index         Int
+  type          String   @default("ACTION") // ACTION | DIALOGUE | DISCOVERY | CONFLICT | RESOLUTION | TRANSITION
+  description   String
+  participants  String   @default("[]") // JSON array of character names
+  offset        Int      @default(0)
+  intensity     Int      @default(0) // 0..100
+
+  narrative     Narrative @relation(fields: [narrativeId], references: [id], onDelete: Cascade)
+  scene         Scene?    @relation(fields: [sceneId], references: [id], onDelete: SetNull)
+
+  @@index([narrativeId])
+  @@index([sceneId])
+}
+
+model NarrativeArc {
+  id            String   @id @default(cuid())
+  narrativeId   String
+  name          String
+  arcType       String   // INCITING | RISING | CLIMAX | FALLING | RESOLUTION
+  startSceneIdx Int      @default(0)
+  endSceneIdx   Int      @default(0)
+  intensity     Int      @default(0) // 0..100
+  summary       String
+
+  narrative     Narrative @relation(fields: [narrativeId], references: [id], onDelete: Cascade)
+
+  @@index([narrativeId])
+}
+
+model EmotionalPeak {
+  id            String   @id @default(cuid())
+  narrativeId   String
+  sceneId       String?
+  offset        Int      @default(0)
+  intensity     Int      @default(0) // 0..100
+  emotion       String   @default("NEUTRAL") // JOY | ANGER | FEAR | SADNESS | SURPRISE | DISGUST | LOVE | NEUTRAL
+  snippet       String
+
+  narrative     Narrative @relation(fields: [narrativeId], references: [id], onDelete: Cascade)
+  scene         Scene?    @relation(fields: [sceneId], references: [id], onDelete: SetNull)
+
+  @@index([narrativeId])
+}
+
+// ---------------------------------------------------------------------------
+// Processing telemetry
+// ---------------------------------------------------------------------------
+
+model ProcessingLog {
+  id          String   @id @default(cuid())
+  jobId       String
+  stage       String
+  level       String   @default("INFO") // INFO | WARN | ERROR | DEBUG
+  message     String
+  metadata    String   @default("{}") // JSON
+  timestamp   DateTime @default(now())
+
+  job         Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@index([timestamp])
+}
+
+// ---------------------------------------------------------------------------
+// Reading progress & bookmarks
+// ---------------------------------------------------------------------------
+
+model ReadingProgress {
+  id           String   @id @default(cuid())
+  narrativeId  String
+  scrollPct    Int      @default(0) // 0..100
+  sceneIndex   Int      @default(0) // last scene viewed (cinematified)
+  paragraphIdx Int      @default(0) // last paragraph index
+  updatedAt    DateTime @updatedAt
+
+  narrative    Narrative @relation(fields: [narrativeId], references: [id], onDelete: Cascade)
+
+  @@unique([narrativeId])
+}
+
+model Bookmark {
+  id           String   @id @default(cuid())
+  narrativeId  String
+  sceneIndex   Int?
+  paragraphIdx Int?
+  offset       Int
+  label        String?
+  note         String?
+  createdAt    DateTime @default(now())
+
+  narrative    Narrative @relation(fields: [narrativeId], references: [id], onDelete: Cascade)
+
+  @@index([narrativeId])
+}

@@ -1,0 +1,14 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Prompt Queue Release",
+      "trigger": "Stop",
+      "description": "Releases the prompt queue lock when a session stops, ensuring the queue is cleared for the next prompt.",
+      "action": {
+        "type": "command",
+        "command": "node -e \"const fs=require('fs'),path=require('path'),lockFile=path.join(process.cwd(),'.kiro','hooks','.prompt-queue.lock');try{if(fs.existsSync(lockFile)){fs.unlinkSync(lockFile);process.stdout.write('Queue lock released.');}}catch(e){}process.exit(0);\""
+      }
+    }
+  ]
+}

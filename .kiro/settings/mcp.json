@@ -1,0 +1,49 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "cmd",
+      "args": [
+        "/c", "npx", "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "C:\\GitHub\\Lemniscate",
+        "C:\\Users\\pushy\\Downloads",
+        "C:\\Users\\pushy\\Documents",
+        "C:\\Users\\pushy\\Desktop"
+      ]
+    },
+    "sequential-thinking": {
+      "command": "cmd",
+      "args": [
+        "/c", "npx", "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ]
+    },
+    "playwright": {
+      "command": "cmd",
+      "args": [
+        "/c", "npx", "-y",
+        "@playwright/mcp@latest"
+      ]
+    }
+  },
+  "powers": {
+    "mcpServers": {
+      "power-supabase-hosted-supabase": {
+        "url": "https://mcp.supabase.com/mcp",
+        "disabled": false,
+        "autoApprove": [
+          "apply_migration",
+          "get_advisors",
+          "generate_typescript_types"
+        ]
+      },
+      "power-postman-postman": {
+        "url": "https://mcp.postman.com/minimal",
+        "disabled": false
+      },
+      "power-context7-context7": {
+        "url": "https://mcp.context7.com/mcp"
+      }
+    }
+  }
+}

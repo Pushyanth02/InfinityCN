@@ -1,327 +1,281 @@
-# InfinityCN
+# Lemniscate
 
-**Version 15.0.0** | An AI-enhanced, offline-first reader that transforms novels into cinematic, immersive reading experiences. Upload PDF, EPUB, DOCX, PPTX, or TXT files and the app cinematifies them with SFX annotations, dramatic beats, scene transitions, and mood-based styling.
+> An advanced **document-to-storytelling** platform. Transform PDF, DOCX, and TXT files into readable, structured narratives through **deterministic, offline, classical-NLP** processing.
+>
+> ∞ — *No LLMs. No AI APIs. No generative models. Ever.*
 
-## Features
+---
 
-### Core Cinematification
+## Why Lemniscate?
 
-- **AI-Powered Transformation** — Converts text into screenplay-style content with SFX: annotations, BEAT/PAUSE markers, and CUT TO/FADE IN transitions
-- **Emotion & Tension Tracking** — Real-time emotion detection (joy, fear, sadness, suspense, anger, surprise) with tension scores (0-100)
-- **Semantic Context** — Uses embeddings (all-MiniLM-L6-v2) for long-range context continuity across chapters
-- **Structured JSON Output** — Engine produces and consumes structured NDJSON blocks for deterministic rendering
+Every other "document AI" tool ships your text to a third-party LLM. Lemniscate doesn't. It reconstructs paragraphs, detects scenes, characters, locations, events, narrative arcs, tension, and emotional peaks using **only** handcrafted linguistic rules, lexicons, statistical heuristics, and graph analysis.
 
-### Document Support
+- **Privacy-first** — all processing runs on your machine. Files never leave your deployment.
+- **Deterministic** — the same input always produces the same output. Reproducible and auditable.
+- **Self-hostable** — SQLite + Prisma + Socket.IO. Redis-ready for horizontal scaling.
+- **No AI** — zero neural models, zero API calls, zero telemetry.
 
-- **Multi-Format** — PDF, EPUB, DOCX, PPTX, TXT (up to 50MB)
-- **OCR Support** — Tesseract.js-powered character recognition for scanned PDFs (up to 5 pages)
-- **Smart Parsing** — Automatic chapter segmentation with paragraph reconstruction
-- **Lazy Loading** — Heavy dependencies (pdfjs, fflate, tesseract) load only when needed
+---
 
-### Text Processing & Analysis (Free, No API Keys Required)
+## Core Modes
 
-- **Readability Analysis** — Flesch-Kincaid Reading Ease/Grade Level, sentence complexity, vocabulary diversity
-- **Sentiment Tracking** — AFINN-inspired lexicon (~200+ words) with negation/intensifier handling and emotion flow
-- **Pacing Analysis** — Tension arc computation, flat/rushed zone detection, Shannon entropy for variety scoring
-- **Text Statistics** — Word/character/sentence/paragraph counting, reading time estimation, top word frequency analysis
-- **Scene Detection** — Heuristic scene break detection via location/character/time changes
-- **Paragraph Breaker APIs** — Strategy-based paragraph splitting (sentence-cluster, dialogue-pivot, scene-cue) with canonical content-preservation guards
-- **Book Metadata Enrichment** — Multi-source lookup (Open Library, Google Books, Gutendex, Wikipedia)
-- **Inspirational Quotes** — Free API quotes with deterministic offline fallback
+### ORIGINAL MODE
+Preserve source meaning. Repair formatting. Reconstruct proper paragraphs. Improve readability only.
 
-### Reader Experience
+- Smart-quote & whitespace repair
+- Line-break hyphenation repair (`exam-\nple` → `example`)
+- Paragraph reconstruction (re-merge mid-sentence breaks, split over-fused blocks)
+- Paragraph classification: `NARRATION` · `DIALOGUE` · `ACTION` · `TRANSITION` · `HEADING` · `THOUGHT`
+- Readability stats (Flesch-Kincaid, sentence/word/syllable metrics)
 
-- **Dual-Mode** — Toggle between Original and Cinematified text
-- **Immersion Levels** — Minimal (instant), Balanced, Cinematic (full animations)
-- **Accessibility** — Dyslexia-friendly font option, adjustable font size and line spacing
-- **Dark/Light Mode** — System-aware with manual toggle
-- **Bookmarks & Progress** — Track reading progress, bookmark chapters
-- **Expanded Story Discovery** — Related-title recommendations across novels, manga, manhwa, and manhua with source/type badges and sidebar filters
-- **Cinematic Depth Metrics** — Live scene/cue/tension/mood stats derived from chapter render plans
-- **Reader Feedback Loop** — In-reader feedback capture with local suggestion history for follow-up UX iteration
+### CINEMATIFIED MODE
+Detect scenes, characters, locations, events, narrative arcs, tension, and emotional peaks. Reconstruct content into cinematic storytelling. **Never invents facts. Never adds characters. Never alters chronology.**
 
-### AI Providers
+- **Scene detection** — boundaries from location/time/topic shifts, headings, transitions
+- **Character detection** — capitalized proper nouns, attribution verbs (`said Elizabeth`), honorifics, dialogue attribution; role classification (Protagonist / Antagonist / Supporting / Minor)
+- **Location detection** — gazetteer signals (indoor/outdoor/urban/nature/vehicle) + prepositional phrase capture
+- **Event detection** — verb-based action patterns: `ACTION` · `DIALOGUE` · `DISCOVERY` · `CONFLICT` · `RESOLUTION` · `TRANSITION`
+- **Narrative arcs** — signal-word density across scene zones: Inciting → Rising → Climax → Falling → Resolution
+- **Tension scoring** — violence + conflict lexicons + intensifiers + punctuation density
+- **Emotional peaks** — AFINN-style valence + Plutchik-inspired emotion categories with negation/intensifier handling
+- **Cinematic reconstruction** — `INT./EXT. LOCATION — TIME` scene headings, screenplay-style dialogue, transition cues derived from tension deltas
 
-- **7 Providers** — Gemini 2.5 Flash, OpenAI GPT-4o-mini, Claude 3.5 Sonnet, Groq Llama 3.3 70B, DeepSeek, Ollama (local), Chrome AI (Gemini Nano)
-- **Offline Fallback** — Fast algorithmic processing when no AI configured
-- **Streaming** — Real-time cinematification with block-by-block streaming
+---
 
-### Technical
+## Architecture
 
-- **Offline-First** — IndexedDB via Dexie + PWA service worker
-- **Composable Pipeline** — Modular stage-based processing (cleaning → reconstruction → analysis → cinematification → enrichment)
-- **Responsive** — 480px mobile to 1200px+ desktop
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         Browser (SPA)                           │
+│  Upload · Library · Processing Dashboard · Narrative Viewer    │
+│         socket.io-client → /?XTransformPort=3003               │
+└──────────────┬────────────────────────────────┬────────────────┘
+               │ HTTP (REST)                    │ WebSocket (realtime)
+               ▼                                ▼
+┌──────────────────────────┐       ┌──────────────────────────────┐
+│   Next.js 16 App (3000)  │       │  Lemniscate Worker (3003)    │
+│  - API routes            │       │  - Socket.IO server          │
+│  - Prisma → SQLite       │       │  - Job poller (800ms)        │
+│  - File storage          │       │  - Pipeline orchestrator     │
+└──────────┬───────────────┘       │    ├─ extract (pdf/docx/txt) │
+           │                       │    ├─ original transform     │
+           │  shared SQLite        │    └─ cinematified engine     │
+           └───────────────────────┤  - EventBus → Socket.IO      │
+                                   └──────────────┬───────────────┘
+                                                  │
+                              ┌───────────────────┴──────────────────┐
+                              │   Queue: SQLite `Job` table          │
+                              │   atomic CAS claim (updateMany)      │
+                              │   durable + restart-safe · no Redis  │
+                              └──────────────────────────────────────┘
+```
+
+### Request lifecycle
+
+1. User uploads a file → `POST /api/documents/upload`
+2. Next.js stores the file, hashes it, creates a `Document` + `Job` (status `QUEUED`) in SQLite
+3. The **worker service** polls for `QUEUED` jobs every 800ms, atomically claims one (CAS via `updateMany`)
+4. The worker runs the deterministic pipeline:
+   - **EXTRACT** — `pdf-parse` / `mammoth` / raw read → plain text
+   - **SEGMENT** — sentence segmentation, paragraph reconstruction
+   - **ORIGINAL** — formatting repair, paragraph classification
+   - **CINEMATIFY** — scene/character/location/event/arc/peak detection
+   - **FINALIZE** — persist all artifacts to SQLite
+5. Each stage publishes `ProgressEvent`s to the in-process `EventBus`
+6. The `EventBus` fans out to all Socket.IO clients subscribed to that `jobId`
+7. The browser's processing dashboard renders live progress + logs
+8. On completion, the user opens the narrative viewer (Original or Cinematified)
+
+### Production scaling
+
+The queue is backed by the SQLite `Job` table: the worker polls for `QUEUED`
+rows and claims one atomically with a compare-and-set (`updateMany` guarded by
+`status`). This is durable and restart-safe — stalled `PROCESSING` jobs are
+re-queued on boot. For single-node self-hosting (the primary use case) no
+external broker is required.
+
+Horizontal scaling beyond a single node would require moving off SQLite (e.g.
+Postgres or Turso via Prisma's swappable `datasource`) and, optionally, a
+Redis-backed queue + `lemniscate:events` pub/sub fan-out for multiple Socket.IO
+gateways. **These are not implemented today** — `REDIS_URL` is reserved for
+that future work.
+
+---
 
 ## Tech Stack
 
-| Layer      | Stack                                   |
-| ---------- | --------------------------------------- |
-| Framework  | React 19 + TypeScript 6                 |
-| Build      | Vite 8 (Rolldown) + vite-plugin-pwa     |
-| State      | Zustand (persisted)                     |
-| Storage    | Dexie (IndexedDB)                       |
-| Animation  | Framer Motion                           |
-| Icons      | Lucide React                            |
-| PDF        | pdfjs-dist                              |
-| OCR        | Tesseract.js                            |
-| Embeddings | @xenova/transformers (all-MiniLM-L6-v2) |
-| Testing    | Vitest + Testing Library                |
-| Linting    | ESLint + Prettier                       |
-| Hooks      | Husky + lint-staged                     |
-| CI/CD      | GitHub Actions                          |
+| Layer | Choice |
+|---|---|
+| Framework | Next.js 16 (App Router) + TypeScript 5 |
+| Styling | Tailwind CSS 4 + shadcn/ui (custom warm parchment theme) |
+| Database | Prisma ORM + SQLite (file-based, self-hosted) |
+| Realtime | Socket.IO (worker service, port 3003) |
+| Queue | SQLite `Job` table + atomic CAS claim (durable, restart-safe) |
+| Document parsing | `pdf-parse` (PDF), `mammoth` (DOCX), native (TXT) |
+| State | Zustand (client) + TanStack Query patterns |
+| NLP | **100% handcrafted** — no ML libraries |
 
-## Free APIs & Algorithms
-
-The app integrates the following free APIs and algorithms that require **no API keys**:
-
-| Feature                     | Implementation                                                 | Source                                                      |
-| --------------------------- | -------------------------------------------------------------- | ----------------------------------------------------------- |
-| PDF Text Extraction         | pdfjs-dist (Mozilla PDF.js)                                    | Bundled (lazy-loaded)                                       |
-| EPUB/DOCX/PPTX Extraction   | fflate + XML parsing                                           | Bundled (lazy-loaded)                                       |
-| Character Recognition (OCR) | Tesseract.js (WASM)                                            | Bundled (lazy-loaded)                                       |
-| Semantic Embeddings         | all-MiniLM-L6-v2 via ONNX.js                                   | Bundled (lazy-loaded)                                       |
-| Readability Scoring         | Flesch-Kincaid formulas                                        | Built-in algorithm                                          |
-| Sentiment Analysis          | AFINN-inspired lexicon                                         | Built-in algorithm                                          |
-| Pacing Analysis             | Tension arc + Shannon entropy                                  | Built-in algorithm                                          |
-| Text Statistics             | Word/sentence/paragraph metrics                                | Built-in algorithm                                          |
-| Scene Detection             | Location/time/structure heuristics                             | Built-in algorithm                                          |
-| Paragraph Breaker APIs      | Multi-strategy paragraph segmentation with confidence scoring  | Built-in algorithm                                          |
-| Book Metadata Enrichment    | Title/author/description enrichment                            | Open Library + Google Books + Gutendex + Wikipedia APIs     |
-| Reader Story Discovery      | Related title recommendations across novel/manga/manhwa/manhua | Open Library + Google Books + Gutendex + Jikan + Kitsu APIs |
-| Inspirational Quotes        | Multi-source quote retrieval + offline fallback                | DummyJSON Quotes API + Quotable API + built-in collection   |
-
-## Core Engine Enhancements
-
-- **Structured Block Output** — Refactored engine to produce and consume structured NDJSON/JSON blocks representing action, dialogue, inner thought, SFX, beat, transition, and title card elements.
-- **Tension-Aware Transitions** — Scene-to-scene transition selection (`CUT TO`, `DISSOLVE TO`, `SMASH CUT`, `FADE TO BLACK`) computed dynamically via tension delta analysis.
-- **Dynamic Camera Cues** — Automatically infers camera framing rules (`HANDHELD CLOSE`, `OVER THE SHOULDER`, `PUSH IN`, `WIDE ESTABLISHING`, `MEDIUM TRACKING`) based on tension, dialogue density, and readability.
-- **Offline API Fallbacks** — Complete integration of offline fallback engines and `navigator.onLine` checks for metadata lookup, quotes, and AI-generation.
-- **Visual Reading Immersion** — Removed legacy Ambient Sound and Auto Scroll playback behaviors to focus strictly on readable pacing and layout-driven flow.
-- **Extended Scene Analytics** — Dialogue ratio, emotional charge, and sentence complexity metrics are captured per-scene.
-- **Smart Reconstruction** — Paragraph reconstruction supporting sentence-cluster, dialogue-pivot, and scene-cue strategies with canonical-content fallback checks.
-- **Reader Depth Analytics** — Exposes live scene count, cue counts, average tension, and dominant mood derived directly from the chapter render plan.
-
-
-## Repository Documentation Map
-
-
-### Runtime pipeline map
-
-`Text/Input -> Cleanup -> Scene Segmentation -> Narrative Analysis -> Cinematization -> Streaming Renderer -> UI Update`
-
-Primary implementation anchors:
-
-- [pdfWorker.ts](file:///c:/GitHub/InfinityCN/src/lib/processing/pdfWorker.ts)
-- [chapterEngine.ts](file:///c:/GitHub/InfinityCN/src/lib/engine/cinematifier/chapterEngine.ts)
-- [fullSystemPipeline.ts](file:///c:/GitHub/InfinityCN/src/lib/engine/cinematifier/fullSystemPipeline.ts)
-- [renderer.ts](file:///c:/GitHub/InfinityCN/src/lib/runtime/renderer.ts)
-- [CinematicRenderer.tsx](file:///c:/GitHub/InfinityCN/src/components/reader/CinematicRenderer.tsx)
-
-
-### Root docs
-
-- [README.md](file:///c:/GitHub/InfinityCN/README.md) — project overview, stack, scripts, and source layout
-- [user-testing-checklist.md](file:///c:/GitHub/InfinityCN/docs/user-testing-checklist.md) — manual QA checklist
-- [wireframes.md](file:///c:/GitHub/InfinityCN/docs/wireframes.md) — screen wireframes and interaction flow map
-
-### Planning docs (`.planning/`)
-
-- [PROJECT.md](file:///c:/GitHub/InfinityCN/.planning/PROJECT.md) — project vision, guardrails, success metrics
-- [ROADMAP.md](file:///c:/GitHub/InfinityCN/.planning/ROADMAP.md) — milestone and phase tracking
-- [STATE.md](file:///c:/GitHub/InfinityCN/.planning/STATE.md) — current implementation state and blockers
-- [REQUIREMENTS.md](file:///c:/GitHub/InfinityCN/.planning/REQUIREMENTS.md) — milestone functional/technical requirements
-- [RULES.md](file:///c:/GitHub/InfinityCN/.planning/RULES.md) — global engineering and pipeline rules
-
-### Codebase map docs (`.planning/codebase/`)
-
-- [STACK.md](file:///c:/GitHub/InfinityCN/.planning/codebase/STACK.md) — framework and dependency map
-- [STRUCTURE.md](file:///c:/GitHub/InfinityCN/.planning/codebase/STRUCTURE.md) — folder/module structure map
-- [ARCHITECTURE.md](file:///c:/GitHub/InfinityCN/.planning/codebase/ARCHITECTURE.md) — layer and processing-flow map
-- [INTEGRATIONS.md](file:///c:/GitHub/InfinityCN/.planning/codebase/INTEGRATIONS.md) — external/internal integration map
-- [CONVENTIONS.md](file:///c:/GitHub/InfinityCN/.planning/codebase/CONVENTIONS.md) — code and architecture conventions
-- [TESTING.md](file:///c:/GitHub/InfinityCN/.planning/codebase/TESTING.md) — validation/testing strategy map
-- [CONCERNS.md](file:///c:/GitHub/InfinityCN/.planning/codebase/CONCERNS.md) — technical risk/concern map
-
-### Specification docs (`.planning/specs/`)
-
-- [SRS.md](file:///c:/GitHub/InfinityCN/.planning/specs/SRS.md) — Software Requirements Specification
-- [PRD.md](file:///c:/GitHub/InfinityCN/.planning/specs/PRD.md) — Product Requirements Document
-- [TRD.md](file:///c:/GitHub/InfinityCN/.planning/specs/TRD.md) — Technical Requirements Document
-- [UI_UX_DESIGN.md](file:///c:/GitHub/InfinityCN/.planning/specs/UI_UX_DESIGN.md) — UI/UX Design System Specification
-- [APP_FLOW.md](file:///c:/GitHub/InfinityCN/.planning/specs/APP_FLOW.md) — Application Flow and User Journeys Map
-- [BACKEND_SCHEMA.md](file:///c:/GitHub/InfinityCN/.planning/specs/BACKEND_SCHEMA.md) — Backend and Local Storage Database Schema
-
-### Instruction docs
-
-- [copilot-instructions.md](file:///c:/GitHub/InfinityCN/.github/copilot-instructions.md) — repository-level Copilot architecture and safety instructions
-
-## Getting Started
-
-### Prerequisites
-
-- Node.js `^20.19.0 || >=22.12.0` (see `.nvmrc` — use `nvm use` to switch automatically)
-- npm 8+
-
-```bash
-# Install dependencies
-npm install
-
-# Start dev server
-npm run dev
-
-# Run tests
-npm test
-
-# Build for production
-npm run build
-```
-
-## Scripts
-
-| Command                 | Description                         |
-| ----------------------- | ----------------------------------- |
-| `npm run dev`           | Start Vite dev server               |
-| `npm run build`         | Type-check and build for production |
-| `npm run lint`          | Run ESLint                          |
-| `npm run format`        | Format code with Prettier           |
-| `npm run format:check`  | Check formatting without writing    |
-| `npm test`              | Run test suite                      |
-| `npm run test:watch`    | Run tests in watch mode             |
-| `npm run test:coverage` | Run tests with coverage             |
-| `npm run preview`       | Preview production build            |
+---
 
 ## Project Structure
 
 ```
 src/
-  components/
-    landing/
-      LandingPage.tsx        # Landing wrapper with header, hero, upload, features, footer
-      HeroSection.tsx        # Hero with continue reading card
-      UploadSection.tsx      # File selector with error display
-      UploadZone.tsx         # Drag-and-drop file upload zone
-      ProcessingOverlay.tsx  # Full-screen processing status with quotes
-      FeatureShowcase.tsx    # Grid of core platform highlights
-      LandingFooter.tsx      # Minimal footer
-    layout/
-      AppShell.tsx           # Application layout frame and theme manager
-      AppRouter.tsx          # Lightweight hash-based custom router
-      PageTransition.tsx     # Framer Motion page transitions
-    m3/
-      ReaderHeader.tsx       # M3-design-system reader header (active)
-      ReaderHeader.css
-    reader/
-      ReaderPage.tsx         # Unified coordinator for dual-mode reading
-      CinematicRenderer.tsx  # High-performance cinematic block virtualizer
-      CinematicBlockView.tsx # Block display with ambient glow and tension metrics
-      OriginalTextView.tsx   # Clean plain-text reading view with drop-caps
-      ReaderHeader.tsx       # Legacy reader header (kept for reference)
-      ReaderFooter.tsx       # Footer with Scrubber progress tracking
-      ReaderChapterSidebar.tsx # Collapsible chapter navigation menu
-      ReaderCharactersPanel.tsx # Insights sidebar (character discovery / analytics)
-      ReaderSettingsPanel.tsx # Typography / theme settings overlay
-      EmotionHeatmap.tsx     # Emotion tension timeline overview
-      ChapterNav.tsx         # Keyboard navigation overlay
-      VirtualizedContent.tsx # Variable-height virtual scroll renderer
-      index.ts               # Reader barrel export
-    ui/
-      ErrorBoundary.tsx      # Velvet Noir error fallback UI
-      Scrubber.tsx           # Custom interactive scrubber progress bar
-    __tests__/
-      CinematifierApp.test.tsx  # Router, Suspense, and ErrorBoundary tests
-      ProcessingOverlay.test.tsx # ProcessingOverlay state tests
-  features/
-    settings/
-      components/
-        ProviderSection.tsx  # Provider grid wrapper
-        ProviderCard.tsx     # Provider toggle card
-        ApiKeyInput.tsx      # Secure password text toggle input
-        PreferencesSection.tsx # Typography / theme preferences
-  lib/
-    engine/
-      cinematifier/
-        chapterEngine.ts       # Canonical stage-ordered chapter pipeline
-        chapterSegmentation.ts # Heuristic and ML-based chapter boundary segmenter
-        fullSystemPipeline.ts  # Full text → cinematic orchestration
-        corePipeline.ts        # Core pipeline stage runner
-        pipeline.ts            # Stage definitions and execution engine
-        textProcessing.ts      # Text cleaning + paragraph reconstruction
-        textProcessingEngine.ts # Core text normalizer and reconstruction manager
-        paragraphBreakers.ts   # Paragraph-breaker API strategies
-        sceneDetection.ts      # Scene break detection
-        offlineEngine.ts       # Offline heuristic cinematification
-        entityExtractor.ts     # Character entity extraction
-        sentimentTracker.ts    # Sentiment + emotion tracking
-        pacingAnalyzer.ts      # Tension arc + pacing analysis
-        moodLexicon.ts         # Mood category lexicon
-        readability.ts         # Flesch-Kincaid readability scoring
-        regexPatterns.ts       # Common regex patterns for engine parsing
-        metadata.ts            # Narrative metadata extraction
-        entities.ts            # Book & ReadingProgress entity factories
-        index.ts               # Barrel re-export
-      offline/
-        speakerTracker.ts     # Offline speaker tracking
-    export/
-      exportPipeline.ts       # Book export (plain text / PDF layout)
-    ml/
-      chapterDetector.ts      # ML-based chapter boundary detection
-    processing/
-      bookAsyncProcessor.ts   # Chunked async processing for large books
-      pdfJobs.ts              # Resumable processing job tracking
-      pdfWorker.ts            # Multi-format extraction + OCR
-      documentIngestion.ts    # Document ingestion pipeline
-      jobQueue.ts             # Processing job queue
-      textStatistics.ts       # Text statistics & metrics API
-    rendering/
-      renderBridge.ts         # Core render bridge (stream → React state)
-      cinematicStreamAdapter.ts # Cinematic stream adapter
-    runtime/
-      appwrite.ts             # Appwrite client wiring
-      bookManager.ts          # Local-first library manager
-      cinematifierDb.ts       # IndexedDB persistence (Dexie)
-      cinematifiedCache.ts    # Cinematified chapter caching
-      feedbackStore.ts        # Reader feedback persistence
-      freeApis.ts             # Free metadata enrichment APIs
-      quotableApi.ts          # Quote APIs with offline fallback
-      readerApis.ts           # Story discovery APIs
-      readerBackend.ts        # Reader telemetry + cinematic depth analytics
-      renderer.ts             # Runtime cue and scene planning
-    cinematifier.ts           # Engine facade (re-exports engine/cinematifier/)
-    constants.ts              # Shared constants
-    errors.ts                 # Error class hierarchy
-    lru-cache.ts              # LRU cache utility
-    typescript-utils.ts       # TypeScript utility types
-  hooks/
-    useChapterProcessing.ts   # Per-chapter processing + cancellation
-    useFileProcessing.ts      # Upload/extract/segment/process orchestration
-    useDocumentParser.ts      # Document parsing hook
-    useProcessingPipeline.ts  # Processing pipeline hook
-    useReaderAnalytics.ts     # Reader telemetry snapshot lifecycle
-    useReaderDiscovery.ts     # Story discovery integration
-    useReaderFeedback.ts      # Reader feedback hook
-    useReaderState.ts         # Consolidated reader state hook
-    useBookHydration.ts       # Book hydration from IndexedDB
-    useReadingProgress.ts     # Reading progress tracking
-    useRenderBridge.ts        # Render bridge hook
-    usePacingEngine.ts        # Pacing engine hook
-    index.ts                  # Hooks barrel export
-  store/
-    cinematifierStore.ts      # Unified Zustand store (ESM devtools, persist)
-    bookStore.ts              # Book state slice
-    readerStore.ts            # Reader preferences slice
-    processingStore.ts        # Processing state slice
-    moodStore.ts              # Real-time mood store
-    index.ts                  # Store barrel export
-  types/
-    book.ts, chapter.ts, cinematic.ts, cinematifier.ts,
-    emotion.ts, processing.ts, reader.ts, rendering.ts, index.ts
-  test/
-    setup.ts                  # Vitest setup
-  main.tsx                    # App entry point
-  styles.css                  # Global CSS reset & app styles
-  cinematifier.css            # CSS entry: imports all css/ modules
+├── app/
+│   ├── api/                      # REST endpoints
+│   │   ├── documents/            # upload, list, detail, delete
+│   │   ├── jobs/                 # status, logs, dead-letter
+│   │   ├── narratives/           # narrative + export, search, progress, bookmarks
+│   │   ├── reading-progress/     # cross-narrative in-progress list
+│   │   ├── sample/               # built-in sample story
+│   │   ├── stats/                # dashboard aggregates
+│   │   └── health/               # liveness + database check
+│   ├── globals.css               # Lemniscate design system (OKLCH tokens)
+│   ├── layout.tsx
+│   └── page.tsx                  # single-page app shell
+├── components/
+│   ├── ui/                       # shadcn/ui component set (Radix primitives)
+│   └── lemniscate/               # app components
+│       ├── shell/                # header.tsx, footer.tsx
+│       ├── views/                # landing, library, processing, reader,
+│       │                         #   characters, scenes, settings
+│       ├── app.tsx               # root component — lazy view routing
+│       ├── store.ts              # Zustand state (navigation, reader prefs, progress)
+│       ├── logo.tsx              # InfinityMark, InfinityFlow, InfinityHero, Flourish
+│       ├── theme-provider.tsx    # next-themes wrapper
+│       ├── use-realtime.ts       # Socket.IO progress hook
+│       └── use-worker-status.ts  # worker connectivity probe
+├── hooks/                        # shared React hooks (use-mobile, use-toast)
+├── lib/
+│   ├── db.ts                     # Prisma client (SQLite, WAL mode)
+│   ├── types.ts                  # shared types (ProgressEvent, PipelineStage, …)
+│   ├── utils.ts                  # cn() class merge helper
+│   ├── motion.ts                 # Framer Motion variants + spring presets
+│   ├── logger.ts                 # structured JSON logger
+│   ├── env-validation.ts         # startup env checks (fail-fast in production)
+│   ├── backup.ts                 # scheduled SQLite backup scheduler
+│   ├── storage/index.ts          # local file storage (read/write/delete/url)
+│   ├── events/bus.ts             # in-process EventBus (ring buffer, 200 events/job)
+│   ├── middleware/               # security, rate-limit, validate-id, body-size
+│   ├── nlp/
+│   │   ├── core.ts               # tokenize, splitSentences, POS-lite, stats
+│   │   ├── core.test.ts          # unit tests for NLP primitives
+│   │   └── lexicons.ts           # AFINN valence, Plutchik, gazetteers, arc signals
+│   └── pipeline/
+│       ├── extract.ts            # PDF/DOCX/TXT extraction
+│       ├── extract.test.ts       # extraction unit tests
+│       ├── original.ts           # ORIGINAL MODE transformer
+│       ├── original.test.ts      # original mode unit tests
+│       ├── cinematified.ts       # CINEMATIFIED MODE engine
+│       ├── cinematified.test.ts  # cinematified mode unit tests
+│       ├── orchestrator.ts       # pipeline runner + DB persistence
+│       ├── job-runner.ts         # CAS claim + retry/backoff (shared module)
+│       ├── embedded-poller.ts    # in-process job poller (started from instrumentation.ts)
+│       └── pdf-extract-worker.mjs # isolated PDF child process (crash-safe)
+├── instrumentation.ts            # Next.js startup hook (env check, backup, poller)
+├── middleware.ts                 # Next.js edge middleware (pass-through)
+└── __e2e__/
+    └── pipeline-e2e.test.ts      # end-to-end pipeline test (requires live DB)
+
+mini-services/
+└── lemniscate-worker/            # standalone Bun worker (port 3003)
+    ├── index.ts                  # Socket.IO server + job poller
+    ├── package.json
+    └── tsconfig.json             # @/* → ../../src/*
+
+prisma/
+└── schema.prisma                 # full data model (14 models)
 ```
+
+---
+
+## Data Model (ERD)
+
+```
+Document 1───* Job
+Document 1───1 RawText
+Document 1───* Narrative
+Job     1───* Narrative
+Job     1───* ProcessingLog
+
+Narrative 1───* Paragraph
+Narrative 1───* Scene ──* Event
+Narrative 1───* Character
+Narrative 1───* Location
+Narrative 1───* NarrativeArc
+Narrative 1───* EmotionalPeak ──? Scene
+```
+
+See `prisma/schema.prisma` for the full schema.
+
+---
+
+## Quickstart
+
+```bash
+# 1. Install dependencies
+bun install
+
+# 2. Push the database schema
+bun run db:push
+
+# 3. Start the Next.js app (port 3000)
+bun run dev
+
+# 4. Start the realtime worker (port 3003) — in another terminal
+cd mini-services/lemniscate-worker
+bun install
+bun run dev
+```
+
+Open the app via the **Preview Panel** (not `localhost:3000` directly).
+
+### Try it
+
+1. Click **"Try the sample story"** to enqueue "The Last Lighthouse of Veyrn".
+2. Watch the live processing dashboard (pipeline stages + log stream).
+3. When complete, open the **Cinematified** narrative to explore scenes, characters, arcs, tension, and peaks.
+
+---
+
+## Deterministic NLP Methodology
+
+Lemniscate's "intelligence" comes entirely from curated rules and lexicons — no statistical models.
+
+| Capability | Method |
+|---|---|
+| Tokenization | Regex character-class tokenizer |
+| Sentence segmentation | Rule-based: terminators + abbreviation table + decimal/initial guards |
+| Paragraph reconstruction | Heuristic merge (mid-sentence breaks) + split (topic-shift leaders) |
+| POS tagging | Suffix/prefix + closed-class lexicon (deterministic regex) |
+| Character detection | Capitalized proper nouns + attribution-verb co-occurrence + honorifics |
+| Location detection | 5-category gazetteer + prepositional-phrase capture |
+| Scene segmentation | Location/time/topic-shift boundaries + heading/transition detection |
+| Event detection | Action-verb lexicon + discovery/conflict/resolution signal sets |
+| Narrative arcs | Signal-word density across 5 equal scene zones |
+| Tension | Violence + conflict lexicon + intensifiers + punctuation density |
+| Emotion | AFINN-style valence + Plutchik categories + negation/intensifier multipliers |
+| Readability | Flesch-Kincaid (syllable counting via vowel-group heuristics) |
+
+All lexicons live in `src/lib/nlp/lexicons.ts` and are hand-curated.
+
+---
+
+## Constraints Honored
+
+1. ✅ No LLMs / AI APIs / generative models — verified, zero AI dependencies.
+2. ✅ Deterministic & fully offline — no outbound network calls during processing.
+3. ✅ Classical NLP, heuristics, rule engines, lexicons, graph analysis.
+4. ✅ Production-grade single-node architecture (durable SQLite queue, standalone worker).
+5. ✅ Durable background workers (SQLite `Job` table + atomic CAS claim; restart-safe).
+6. ✅ Responsive frontend (live progress via Socket.IO).
+7. ✅ Users own their content (files stored locally, deletable).
+8. ✅ Privacy-first (no telemetry, no cloud).
+9. ✅ Self-hosted deployment (SQLite + Prisma + single binary worker).
+10. ✅ Clean, maintainable, enterprise-level code (typed, linted, documented).
+
+---
 
 ## License
 
-Private.
+Built for storytellers who value their data. Self-hostable.

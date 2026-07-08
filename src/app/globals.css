@@ -1,0 +1,584 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ============================================================================
+   LEMNISCATE — Design System
+   "Transform Documents Into Living Narratives"
+
+   Palette: Deep Midnight · Warm Ivory · Golden Amber · Muted Slate · Burgundy
+   Type:    Editorial serif headings · Humanist sans body · Reading-optimized
+   Motion:  Spring physics · Layered transitions · Cinematic depth
+   ============================================================================ */
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans-stack);
+  --font-mono: var(--font-mono-stack);
+  --font-serif: var(--font-serif-display);
+  --font-reader: var(--font-reader-stack);
+
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 12px);
+
+  /* Lemniscate semantic palette */
+  --color-midnight: var(--midnight);
+  --color-ivory: var(--ivory);
+  --color-amber: var(--amber);
+  --color-slate: var(--slate);
+  --color-burgundy: var(--burgundy);
+  --color-ink: var(--ink);
+  --color-tension: var(--tension);
+  --color-calm: var(--calm);
+  --color-climax: var(--climax);
+  --color-plum: var(--plum);
+}
+
+/* ─── DARK MODE (primary — "watching a movie at night") ─────────────────── */
+
+:root {
+  --radius: 0.75rem;
+
+  /* Deep Midnight — near-black with blue-violet undertones */
+  --background: oklch(0.11 0.02 270);
+  --foreground: oklch(0.93 0.01 75);
+
+  --card: oklch(0.15 0.022 270);
+  --card-foreground: oklch(0.93 0.01 75);
+
+  --popover: oklch(0.14 0.02 270);
+  --popover-foreground: oklch(0.93 0.01 75);
+
+  /* Golden Amber — the signature accent */
+  --primary: oklch(0.82 0.12 75);
+  --primary-foreground: oklch(0.12 0.02 270);
+
+  --secondary: oklch(0.2 0.025 270);
+  --secondary-foreground: oklch(0.9 0.01 75);
+
+  --muted: oklch(0.18 0.02 270);
+  --muted-foreground: oklch(0.65 0.015 75);
+
+  /* Cinematic Burgundy */
+  --accent: oklch(0.4 0.1 25);
+  --accent-foreground: oklch(0.93 0.01 75);
+
+  --destructive: oklch(0.55 0.22 22);
+
+  --border: oklch(0.25 0.02 270 / 0.5);
+  --input: oklch(0.18 0.02 270);
+  --ring: oklch(0.82 0.12 75 / 0.4);
+
+  /* Chart palette — jewel tones for cinematic analytics */
+  --chart-1: oklch(0.82 0.12 75);   /* amber */
+  --chart-2: oklch(0.6 0.14 165);   /* teal */
+  --chart-3: oklch(0.55 0.2 22);    /* burgundy */
+  --chart-4: oklch(0.6 0.15 290);   /* violet */
+  --chart-5: oklch(0.72 0.15 55);   /* gold */
+
+  --sidebar: oklch(0.13 0.02 270);
+  --sidebar-foreground: oklch(0.93 0.01 75);
+  --sidebar-primary: oklch(0.82 0.12 75);
+  --sidebar-primary-foreground: oklch(0.12 0.02 270);
+  --sidebar-accent: oklch(0.2 0.025 270);
+  --sidebar-accent-foreground: oklch(0.93 0.01 75);
+  --sidebar-border: oklch(0.25 0.02 270 / 0.5);
+  --sidebar-ring: oklch(0.82 0.12 75 / 0.4);
+
+  /* Semantic tokens */
+  --midnight: oklch(0.11 0.02 270);
+  --ivory: oklch(0.93 0.01 75);
+  --amber: oklch(0.82 0.12 75);
+  --slate: oklch(0.55 0.015 260);
+  --burgundy: oklch(0.45 0.13 25);
+  --ink: oklch(0.93 0.01 75);
+  --tension: oklch(0.55 0.2 22);
+  --calm: oklch(0.6 0.14 165);
+  --climax: oklch(0.62 0.18 350);
+  --plum: oklch(0.25 0.04 290);
+
+  /* Background gradient tokens */
+  --bg-glow-1: oklch(0.25 0.04 280 / 0.35);
+  --bg-glow-2: oklch(0.22 0.05 25 / 0.18);
+  --bg-glow-3: oklch(0.2 0.03 290 / 0.12);
+
+  /* Typography stacks — system fonts for offline capability */
+  --font-serif-display: "Iowan Old Style", "Apple Garamond", "Baskerville", "Times New Roman", Georgia, "Hoefler Text", serif;
+  --font-reader: "Iowan Old Style", "Hoefler Text", "Baskerville", Georgia, "Charter", "Bitstream Charter", serif;
+  --font-sans-stack: -apple-system, BlinkMacSystemFont, "Segoe UI", "SF Pro Text", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono-stack: "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* Motion tokens — spring physics */
+  --spring-bounce: 0.28;
+  --spring-duration: 0.6;
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out-quart: cubic-bezier(0.76, 0, 0.24, 1);
+  --ease-cinema: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ─── LIGHT MODE (warm ivory — daytime reading) ─────────────────────────── */
+
+/* Premium paper theme — warm ivory, parchment, soft sepia. Never pure white.
+   The brand tokens (ivory/midnight/plum/slate) are intentionally inverted to
+   their light-appropriate roles so the shared utility classes stay legible:
+   text-ivory → sepia ink, bg-midnight → paper, bg-plum → parchment panel. */
+.light {
+  color-scheme: light;
+
+  --background: oklch(0.949 0.013 84);      /* warm parchment (not white) */
+  --foreground: oklch(0.28 0.021 56);       /* soft sepia-brown ink */
+  --card: oklch(0.966 0.012 85);            /* creamy raised paper */
+  --card-foreground: oklch(0.28 0.021 56);
+  --popover: oklch(0.962 0.012 85);
+  --popover-foreground: oklch(0.28 0.021 56);
+  --primary: oklch(0.52 0.11 62);           /* deep bronze-amber */
+  --primary-foreground: oklch(0.97 0.012 85);
+  --secondary: oklch(0.912 0.014 82);       /* soft warm gray */
+  --secondary-foreground: oklch(0.3 0.02 56);
+  --muted: oklch(0.923 0.012 82);
+  --muted-foreground: oklch(0.46 0.017 58);
+  --accent: oklch(0.885 0.03 68);           /* subtle sepia accent */
+  --accent-foreground: oklch(0.3 0.02 56);
+  --destructive: oklch(0.52 0.19 25);
+  --border: oklch(0.874 0.013 78);          /* low-contrast warm border */
+  --input: oklch(0.9 0.012 80);
+  --ring: oklch(0.52 0.11 62 / 0.35);
+  --chart-1: oklch(0.55 0.12 62);
+  --chart-2: oklch(0.5 0.12 165);
+  --chart-3: oklch(0.5 0.16 25);
+  --chart-4: oklch(0.5 0.12 290);
+  --chart-5: oklch(0.6 0.13 60);
+
+  --sidebar: oklch(0.94 0.014 84);
+  --sidebar-foreground: oklch(0.28 0.021 56);
+  --sidebar-primary: oklch(0.52 0.11 62);
+  --sidebar-primary-foreground: oklch(0.97 0.012 85);
+  --sidebar-accent: oklch(0.912 0.014 82);
+  --sidebar-accent-foreground: oklch(0.3 0.02 56);
+  --sidebar-border: oklch(0.874 0.013 78);
+  --sidebar-ring: oklch(0.52 0.11 62 / 0.35);
+
+  /* Brand tokens — inverted to light-appropriate roles */
+  --midnight: oklch(0.949 0.013 84);   /* base paper surface */
+  --ivory: oklch(0.28 0.021 56);       /* sepia ink (primary text) */
+  --amber: oklch(0.52 0.12 62);        /* deep gold accent */
+  --slate: oklch(0.46 0.017 58);       /* warm gray (secondary text) */
+  --burgundy: oklch(0.44 0.13 25);
+  --ink: oklch(0.28 0.021 56);
+  --plum: oklch(0.923 0.016 80);       /* parchment panel */
+  --tension: oklch(0.52 0.17 25);
+  --calm: oklch(0.48 0.11 165);
+  --climax: oklch(0.5 0.14 350);
+
+  /* Soft, warm ambient glows — gentle, never harsh */
+  --bg-glow-1: oklch(0.9 0.02 72 / 0.4);
+  --bg-glow-2: oklch(0.88 0.025 40 / 0.22);
+  --bg-glow-3: oklch(0.91 0.02 92 / 0.18);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    color-scheme: dark;
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-sans-stack);
+    font-feature-settings: "ss01", "cv11", "kern";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background-color: var(--midnight);
+    background-image:
+      radial-gradient(ellipse 90% 60% at 50% -10%, var(--bg-glow-1) 0%, transparent 55%),
+      radial-gradient(ellipse 60% 50% at 5% 95%, var(--bg-glow-2) 0%, transparent 50%),
+      radial-gradient(ellipse 50% 40% at 95% 80%, var(--bg-glow-3) 0%, transparent 50%);
+    background-attachment: fixed;
+    min-height: 100vh;
+  }
+  h1, h2, h3, h4, h5 {
+    font-family: var(--font-serif-display);
+    letter-spacing: -0.02em;
+    font-weight: 500;
+  }
+  /* Reading-optimized text selection */
+  ::selection {
+    background: oklch(0.82 0.12 75 / 0.25);
+    color: var(--ivory);
+  }
+}
+
+/* ============================================================================
+   TYPOGRAPHY SCALE — editorial, rhythmic
+   ============================================================================ */
+
+@layer components {
+  .text-display {
+    font-family: var(--font-serif-display);
+    font-size: clamp(2.5rem, 6vw, 5rem);
+    line-height: 1.05;
+    letter-spacing: -0.03em;
+    font-weight: 500;
+  }
+  .text-headline {
+    font-family: var(--font-serif-display);
+    font-size: clamp(1.75rem, 3.5vw, 2.75rem);
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    font-weight: 500;
+  }
+  .text-title {
+    font-family: var(--font-serif-display);
+    font-size: clamp(1.25rem, 2vw, 1.5rem);
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+    font-weight: 500;
+  }
+  .text-reader-body {
+    font-family: var(--font-reader);
+    font-size: 1.125rem;
+    line-height: 1.8;
+    letter-spacing: 0.002em;
+    color: var(--ivory);
+  }
+  .text-reader-lg {
+    font-family: var(--font-reader);
+    font-size: 1.25rem;
+    line-height: 1.85;
+  }
+}
+
+/* ============================================================================
+   VELVET NOIR — Surface Utilities
+   ============================================================================ */
+
+@layer utilities {
+  .glass {
+    background: oklch(0.15 0.022 270 / 0.6);
+    backdrop-filter: blur(20px) saturate(1.4);
+    -webkit-backdrop-filter: blur(20px) saturate(1.4);
+    border: 1px solid oklch(0.82 0.12 75 / 0.12);
+  }
+  .glass-strong {
+    background: oklch(0.13 0.02 270 / 0.85);
+    backdrop-filter: blur(24px) saturate(1.5);
+    -webkit-backdrop-filter: blur(24px) saturate(1.5);
+    border: 1px solid oklch(0.82 0.12 75 / 0.15);
+  }
+  .surface-raised {
+    background: linear-gradient(135deg, oklch(0.17 0.022 270) 0%, oklch(0.14 0.02 270) 100%);
+    border: 1px solid oklch(0.82 0.12 75 / 0.1);
+    box-shadow: 0 8px 32px oklch(0 0 0 / 0.4), inset 0 1px 0 oklch(1 0 0 / 0.04);
+  }
+  .text-amber-gradient {
+    background: linear-gradient(135deg, oklch(0.88 0.1 80) 0%, oklch(0.75 0.13 65) 60%, oklch(0.6 0.1 45) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+  }
+  .shadow-cinema {
+    box-shadow: 0 24px 80px oklch(0 0 0 / 0.6), 0 8px 24px oklch(0 0 0 / 0.4), inset 0 1px 0 oklch(1 0 0 / 0.06);
+  }
+  .shadow-glow-amber {
+    box-shadow: 0 0 40px oklch(0.82 0.12 75 / 0.15), 0 8px 24px oklch(0 0 0 / 0.4);
+  }
+  .divider-gold {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, oklch(0.82 0.12 75 / 0.4), transparent);
+  }
+  .scrollbar-lemniscate {
+    scrollbar-width: thin;
+    scrollbar-color: oklch(0.82 0.12 75 / 0.3) transparent;
+  }
+  .scrollbar-lemniscate::-webkit-scrollbar { width: 6px; height: 6px; }
+  .scrollbar-lemniscate::-webkit-scrollbar-track { background: transparent; }
+  .scrollbar-lemniscate::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, oklch(0.82 0.12 75 / 0.3), oklch(0.6 0.1 65 / 0.2));
+    border-radius: 3px;
+  }
+  .scrollbar-lemniscate::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, oklch(0.82 0.12 75 / 0.5), oklch(0.6 0.1 65 / 0.4));
+  }
+  .text-balance { text-wrap: balance; }
+  .text-pretty { text-wrap: pretty; }
+
+  /* Reader — search-result flash highlight */
+  .reader-flash-highlight {
+    animation: reader-flash 2s var(--ease-out-expo, ease-out);
+    border-radius: 6px;
+  }
+  @keyframes reader-flash {
+    0% {
+      background-color: oklch(0.82 0.12 75 / 0.35);
+      box-shadow: 0 0 0 6px oklch(0.82 0.12 75 / 0.18);
+    }
+    60% {
+      background-color: oklch(0.82 0.12 75 / 0.12);
+      box-shadow: 0 0 0 12px oklch(0.82 0.12 75 / 0);
+    }
+    100% {
+      background-color: transparent;
+      box-shadow: 0 0 0 0 transparent;
+    }
+  }
+}
+
+/* ============================================================================
+   MOTION — Spring physics, cinematic easing
+   ============================================================================ */
+
+@keyframes lemniscate-draw {
+  0% { stroke-dashoffset: 400; }
+  100% { stroke-dashoffset: 0; }
+}
+@keyframes lemniscate-flow {
+  0% { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: -200; }
+}
+@keyframes pulse-amber {
+  0%, 100% { box-shadow: 0 0 0 0 oklch(0.82 0.12 75 / 0.3); }
+  50% { box-shadow: 0 0 0 12px oklch(0.82 0.12 75 / 0); }
+}
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+@keyframes drift-up {
+  0% { transform: translateY(0); opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { transform: translateY(-8px); opacity: 0.6; }
+}
+
+.lemniscate-draw { animation: lemniscate-draw 3s var(--ease-out-expo) forwards; }
+.lemniscate-flow { animation: lemniscate-flow 4s linear infinite; }
+.pulse-amber { animation: pulse-amber 2s ease-out infinite; }
+.shimmer-text {
+  background: linear-gradient(90deg, oklch(0.6 0.01 75) 0%, oklch(0.9 0.01 75) 50%, oklch(0.6 0.01 75) 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer 3s linear infinite;
+}
+
+/* Reduced motion — system preference OR the in-app setting (.reduce-motion) */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+.reduce-motion *,
+.reduce-motion *::before,
+.reduce-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* ============================================================================
+   PERFORMANCE — scroll & render optimizations
+   ============================================================================ */
+
+/* Optimized text rendering for small screens */
+@media (max-width: 768px) {
+  body {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+  /* Slightly tighter line-height on mobile for density */
+  .text-reader-body {
+    line-height: 1.7;
+  }
+}
+
+/* Prevent layout shift from scrollbar */
+html {
+  scrollbar-gutter: stable;
+}
+
+/* Smooth scrolling only on desktop (mobile uses native momentum) */
+@media (min-width: 1024px) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+/* ============================================================================
+   READER — immersive reading environment
+   ============================================================================ */
+
+@layer components {
+  .reader-canvas {
+    font-family: var(--font-reader);
+    color: var(--ivory);
+    line-height: 1.85;
+    letter-spacing: 0.002em;
+    max-width: 38rem;
+    margin: 0 auto;
+  }
+  .reader-canvas p {
+    margin-bottom: 1.5em;
+    text-align: left;
+    hyphens: auto;
+  }
+  .reader-canvas h2 {
+    font-family: var(--font-serif-display);
+    font-size: 1.5em;
+    font-weight: 500;
+    color: var(--amber);
+    margin-top: 2.5em;
+    margin-bottom: 1em;
+    letter-spacing: 0.02em;
+  }
+  .reader-canvas blockquote {
+    border-left: 2px solid oklch(0.82 0.12 75 / 0.4);
+    padding-left: 1.5em;
+    margin: 1.5em 0;
+    font-style: italic;
+    color: oklch(0.88 0.01 75);
+  }
+  .scene-heading {
+    font-family: var(--font-mono-stack);
+    font-size: 0.75em;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: oklch(0.82 0.12 75 / 0.7);
+    text-align: center;
+    margin: 3em 0 1em;
+  }
+}
+
+/* Cinematic scene separator */
+.scene-separator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin: 3rem 0;
+  color: oklch(0.82 0.12 75 / 0.3);
+}
+.scene-separator::before,
+.scene-separator::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, oklch(0.82 0.12 75 / 0.2), transparent);
+  max-width: 120px;
+}
+
+/* ============================================================================
+   LIGHT THEME — surface adaptations
+   The glass / raised / shadow utilities use hardcoded dark values for the
+   primary (dark) theme. In light mode we remap them to the paper aesthetic so
+   panels, popovers, and cards read as warm parchment rather than dark glass.
+   ============================================================================ */
+
+.light .glass {
+  background: oklch(0.968 0.012 85 / 0.72);
+  backdrop-filter: blur(20px) saturate(1.2);
+  -webkit-backdrop-filter: blur(20px) saturate(1.2);
+  border: 1px solid oklch(0.52 0.12 62 / 0.14);
+}
+.light .glass-strong {
+  background: oklch(0.964 0.013 84 / 0.9);
+  backdrop-filter: blur(24px) saturate(1.3);
+  -webkit-backdrop-filter: blur(24px) saturate(1.3);
+  border: 1px solid oklch(0.52 0.12 62 / 0.16);
+}
+.light .surface-raised {
+  background: linear-gradient(135deg, oklch(0.975 0.011 86) 0%, oklch(0.95 0.014 83) 100%);
+  border: 1px solid oklch(0.52 0.12 62 / 0.12);
+  box-shadow: 0 6px 24px oklch(0.42 0.03 60 / 0.08), inset 0 1px 0 oklch(1 0 0 / 0.6);
+}
+.light .shadow-cinema {
+  box-shadow: 0 20px 60px oklch(0.42 0.03 60 / 0.12), 0 6px 18px oklch(0.42 0.03 60 / 0.08), inset 0 1px 0 oklch(1 0 0 / 0.5);
+}
+.light .shadow-glow-amber {
+  box-shadow: 0 0 32px oklch(0.52 0.12 62 / 0.12), 0 6px 18px oklch(0.42 0.03 60 / 0.08);
+}
+
+/* Deeper amber gradient so display titles keep contrast on parchment */
+.light .text-amber-gradient {
+  background: linear-gradient(135deg, oklch(0.56 0.13 72) 0%, oklch(0.48 0.13 56) 60%, oklch(0.42 0.11 46) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* Reader surfaces in light mode */
+.light .reader-canvas blockquote {
+  color: oklch(0.36 0.022 56);
+  border-left-color: oklch(0.52 0.12 62 / 0.4);
+}
+.light .scene-heading {
+  color: oklch(0.5 0.12 62 / 0.95);
+}
+.light ::selection {
+  background: oklch(0.52 0.12 62 / 0.2);
+  color: oklch(0.26 0.02 56);
+}
+
+/* ============================================================================
+   THEME TRANSITIONS — gentle cross-fade between light and dark
+   Scoped to major surfaces to avoid interfering with micro-interactions.
+   Respects reduced-motion.
+   ============================================================================ */
+
+@media (prefers-reduced-motion: no-preference) {
+  body,
+  .glass,
+  .glass-strong,
+  .surface-raised,
+  .reader-canvas,
+  .reader-canvas p,
+  .reader-canvas h2,
+  .reader-canvas blockquote {
+    transition:
+      background-color 260ms var(--ease-cinema),
+      border-color 260ms var(--ease-cinema),
+      color 260ms var(--ease-cinema);
+  }
+}

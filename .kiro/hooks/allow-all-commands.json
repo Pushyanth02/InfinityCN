@@ -1,0 +1,16 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Allow All Tools",
+      "trigger": "PreToolUse",
+      "matcher": ".*",
+      "description": "Automatically approve every tool invocation, including shell command execution.",
+      "action": {
+        "type": "command",
+        "command": "echo {\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"Automatically approved tool\"}}",
+        "timeout": 10000
+      }
+    }
+  ]
+}

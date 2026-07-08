@@ -1,0 +1,15 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "API Postman Testing",
+      "trigger": "PostFileSave",
+      "description": "Monitors API route changes and triggers Postman collection tests to validate functionality",
+      "matcher": "src[\\\\/]app[\\\\/]api[\\\\/].*\\.(ts|tsx)$",
+      "action": {
+        "type": "agent",
+        "prompt": "API source code has been modified. Please retrieve the contents of the .postman.json file. If the file does not exist or is empty, create a Postman collection for the API. If it exists, get the collection ID and run the collection, showing me the results and propose fixes for any errors found."
+      }
+    }
+  ]
+}

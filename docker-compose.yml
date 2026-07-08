@@ -1,0 +1,81 @@
+# =============================================================================
+# Lemniscate — Docker Compose
+# =============================================================================
+# Services: Next.js app, Worker, Caddy reverse proxy
+# Volumes: SQLite database, uploaded documents
+# =============================================================================
+
+services:
+  # --- Next.js Application ---
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      - db-data:/app/db
+      - uploads:/app/uploads
+    environment:
+      - DATABASE_URL=file:/app/db/custom.db
+      - NODE_ENV=production
+      - UPLOAD_DIR=/app/uploads
+      # The dedicated `worker` service below processes the job queue, so the
+      # app container disables its in-process poller to avoid redundant polling.
+      - DISABLE_EMBEDDED_WORKER=1
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  # --- Standalone Worker ---
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    ports:
+      - "3003:3003"
+    volumes:
+      - db-data:/app/db
+      - uploads:/app/uploads
+    environment:
+      - DATABASE_URL=file:/app/db/custom.db
+      - NODE_ENV=production
+      - UPLOAD_DIR=/app/uploads
+      - WORKER_CONCURRENCY=2
+      - WORKER_POLL_INTERVAL_MS=800
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3003/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  # --- Caddy Reverse Proxy ---
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "81:81"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+      worker:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  uploads:
+  caddy-data:
+  caddy-config:
