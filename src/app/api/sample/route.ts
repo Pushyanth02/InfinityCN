@@ -136,12 +136,12 @@ Finally, Marin stood. He carried the lamp back into the lighthouse and set it in
 And so he did. Every night, for the rest of his life, Marin lit the lamp of Veyrn. And the sea, which had taken so much from them, never took again.`
 
 export async function POST(req: NextRequest) {
-  const blocked = securityCheck(req, `sample:${getClientIP(req)}`, 5)
+  const blocked = await securityCheck(req, `sample:${getClientIP(req)}`, 5)
   if (blocked) return blocked
 
   const mode = (req.nextUrl.searchParams.get('mode') as string) || 'BOTH'
   if (!['ORIGINAL', 'CINEMATIFIED', 'BOTH'].includes(mode)) {
-    return NextResponse.json({ error: `Invalid mode "${mode}".` }, { status: 400 })
+    return NextResponse.json({ error: 'Invalid mode. Must be ORIGINAL, CINEMATIFIED, or BOTH.' }, { status: 400 })
   }
 
   const fileHash = await hashText(SAMPLE)

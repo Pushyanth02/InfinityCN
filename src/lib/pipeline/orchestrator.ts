@@ -17,6 +17,7 @@ import { computeStats } from '../nlp/core'
 import { eventBus } from '../events/bus'
 import type { ProgressEvent, PipelineStage } from '../types'
 import { uploadPath } from '../storage'
+import { buildCanonicalDocument, type CanonicalDocument } from '../canonical'
 
 export interface PipelineRunOptions {
   jobId: string
@@ -35,6 +36,8 @@ export async function runPipeline(opts: PipelineRunOptions): Promise<PipelineRun
   const startedAt = Date.now()
   const { jobId, documentId, mode } = opts
 
+  // Announce the QUEUED→PROCESSING transition so clients see the job wake up
+  // before the (potentially blocking) extraction begins.
   await setJobStage(jobId, 'EXTRACT', 5, 'Extracting text from source document…')
   const doc = await db.document.findUnique({ where: { id: documentId } })
   if (!doc) throw new Error(`Document ${documentId} not found`)
@@ -125,6 +128,27 @@ export async function runPipeline(opts: PipelineRunOptions): Promise<PipelineRun
       chapterCount: metadata.chapterCount,
       language: metadata.language,
     },
+  )
+
+  // ---- 2c. Build CanonicalDocument --------------------------------------
+  // The unified internal representation that all downstream engines consume.
+  // This bridges the format-specific extraction into a single normalized model
+  // so scene detection, character analysis, and narrative intelligence never
+  // need to know about the original file format.
+  const canonical: CanonicalDocument = buildCanonicalDocument({
+    documentId,
+    originalName: doc.originalName,
+    mimeType: doc.mimeType,
+    extracted,
+    originalResult: baseOriginal,
+    metadata,
+  })
+  await log(
+    jobId,
+    'SEGMENT',
+    'DEBUG',
+    `CanonicalDocument built: ${canonical.paragraphs.length} paragraphs, source=${canonical.sourceFormat}.`,
+    { sourceFormat: canonical.sourceFormat, paragraphCount: canonical.paragraphs.length },
   )
 
   // ---- 3. Original mode -------------------------------------------------
@@ -333,6 +357,7 @@ async function persistCinematified(jobId: string, documentId: string, r: Cinemat
         mood: s.mood,
         tensionScore: s.tensionScore,
         emotionScore: s.emotionScore,
+        dominantEmotion: s.dominantEmotion,
         momentumScore: s.momentumScore,
         arousalScore: s.arousalScore,
         valence: s.valence,
@@ -447,7 +472,38 @@ async function setJobStage(jobId: string, stage: PipelineStage, progress: number
   const evt: ProgressEvent = { type: 'stage', jobId, stage, progress, message, timestamp: Date.now() }
   eventBus.publish(evt)
   eventBus.publish({ type: 'progress', jobId, progress, timestamp: Date.now() })
+  // Yield to the event loop so the just-published ProgressEvent flushes to
+  // Socket.IO clients before the next (potentially blocking) stage runs.
+  // Without this, all six stages execute in one event-loop tick and the UI
+  // never observes intermediate progress (the "instant completion" bug).
+  await nextTick()
+  // Minimum observable dwell: the frontend's HTTP-polling fallback runs on a
+  // 2s interval, and small documents complete the whole pipeline in <100ms —
+  // so a poll-only client would otherwise see only the final COMPLETED state.
+  // Hold each stage briefly so published progress is observable even through
+  // the slowest client channel. Real workloads (large docs) dominate this.
+  // Set LEMNISCATE_STAGE_DWELL_MS=0 to disable (e.g. tests, batch runs).
+  const dwell = STAGE_DWELL_MS
+  if (dwell > 0) await sleep(dwell)
 }
+
+/** A single event-loop yield. Lets pending I/O (DB writes, socket fan-out,
+ *  the frontend's HTTP poll) settle between pipeline stages. */
+function nextTick(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve))
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/**
+ * Per-stage minimum dwell in ms. Keeps each pipeline stage observable for
+ * poll-based clients (no realtime worker in the default embedded setup).
+ * Defaults to 250ms (~1.5s total across six stages — well under the 5-min
+ * job timeout, and dwarfed by real extraction/analysis on large documents).
+ */
+const STAGE_DWELL_MS = Math.max(0, parseInt(process.env.LEMNISCATE_STAGE_DWELL_MS ?? '250', 10))
 
 async function log(jobId: string, stage: string, level: 'INFO' | 'WARN' | 'ERROR' | 'DEBUG', message: string, metadata?: Record<string, unknown>) {
   await db.processingLog.create({

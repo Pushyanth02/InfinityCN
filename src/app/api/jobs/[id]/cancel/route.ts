@@ -12,7 +12,7 @@ import { securityCheck } from '@/lib/middleware/security'
 import { getClientIP } from '@/lib/middleware/rate-limit'
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const blocked = securityCheck(req, `job-cancel:${getClientIP(req)}`, 10)
+  const blocked = await securityCheck(req, `job-cancel:${getClientIP(req)}`, 10)
   if (blocked) return blocked
 
   const { id } = await ctx.params

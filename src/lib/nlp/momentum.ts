@@ -26,6 +26,8 @@ export interface MomentumSceneInput {
   text: string
   dialogueRatio: number
   valence: number
+  /** Pre-computed sentences (avoids re-splitting when caller already has them). */
+  sentences?: { text: string; start: number; end: number }[]
 }
 
 // Component weights (sum = 1.0). Documented + deterministic.
@@ -61,7 +63,7 @@ function sceneComponents(
 ): MomentumPoint['components'] {
   const tokens = scene.text.split(/\s+/).map(normalizeToken).filter(Boolean)
   const wordCount = Math.max(1, tokens.length)
-  const sentences = splitSentences(scene.text)
+  const sentences = scene.sentences ?? splitSentences(scene.text)
   const avgWordsPerSentence = sentences.length > 0 ? wordCount / sentences.length : wordCount
 
   // Pacing: shorter sentences ⇒ faster pace ⇒ higher momentum.

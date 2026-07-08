@@ -488,6 +488,88 @@ html {
     text-align: center;
     margin: 3em 0 1em;
   }
+
+  /* ─── Cinematified scene intelligence rail (Phase C1) ─── */
+  .scene-meta-rail {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem 0.75rem;
+    margin: 0 auto 1.5em;
+    max-width: 32rem;
+    font-family: var(--font-mono-stack);
+    font-size: 0.7em;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: oklch(0.55 0.015 260);
+  }
+  .scene-meta-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35em;
+    padding: 0.2em 0.6em;
+    border-radius: 9999px;
+    border: 1px solid oklch(0.82 0.12 75 / 0.18);
+    background: oklch(0.25 0.04 290 / 0.35);
+  }
+  .scene-tension-bar {
+    position: relative;
+    height: 4px;
+    width: 64px;
+    border-radius: 9999px;
+    background: oklch(0.82 0.12 75 / 0.12);
+    overflow: hidden;
+  }
+  .scene-tension-bar > span {
+    position: absolute;
+    inset: 0 auto 0 0;
+    background: linear-gradient(90deg, oklch(0.6 0.14 165) 0%, oklch(0.82 0.12 75) 60%, oklch(0.55 0.2 22) 100%);
+  }
+
+  /* ─── Phase ribbon (Phase C4) ─── */
+  .phase-ribbon {
+    display: flex;
+    align-items: stretch;
+    gap: 2px;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid oklch(0.82 0.12 75 / 0.15);
+  }
+  .phase-ribbon > button {
+    flex: 1;
+    border: 0;
+    background: transparent;
+    font-family: var(--font-mono-stack);
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: oklch(0.55 0.015 260);
+    padding: 0.4em 0.3em;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .phase-ribbon > button:hover { background: oklch(0.82 0.12 75 / 0.08); color: var(--ivory); }
+  .phase-ribbon > button[data-active="true"] { background: oklch(0.82 0.12 75 / 0.18); color: var(--amber); }
+
+  /* ─── Inline character highlighting (Phase C2) ─── */
+  .reader-canvas .reader-char {
+    background: transparent;
+    color: inherit;
+    border-bottom: 1px dotted oklch(0.82 0.12 75 / 0.55);
+    cursor: help;
+    transition: background 0.15s, color 0.15s;
+  }
+  .reader-canvas .reader-char[data-first="true"] {
+    border-bottom-color: oklch(0.82 0.12 75);
+  }
+  .reader-canvas .reader-char:hover {
+    background: oklch(0.82 0.12 75 / 0.16);
+    color: var(--amber);
+  }
 }
 
 /* Cinematic scene separator */
@@ -555,6 +637,21 @@ html {
 }
 .light .scene-heading {
   color: oklch(0.5 0.12 62 / 0.95);
+}
+.light .scene-meta-strip {
+  border-color: oklch(0.52 0.12 62 / 0.16);
+  background: oklch(0.96 0.012 85 / 0.5);
+}
+.light .reader-char {
+  background: oklch(0.82 0.12 75 / 0.16);
+  border-bottom-color: oklch(0.52 0.12 62 / 0.55);
+  color: oklch(0.34 0.04 56);
+}
+.light .reader-char--first {
+  background: oklch(0.82 0.12 75 / 0.28);
+}
+.light .reader-meter-track {
+  background: oklch(0.5 0.012 62 / 0.16);
 }
 .light ::selection {
   background: oklch(0.52 0.12 62 / 0.2);

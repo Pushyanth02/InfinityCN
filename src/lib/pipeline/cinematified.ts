@@ -99,17 +99,6 @@ export interface CinematifiedResult {
 // ---------------------------------------------------------------------------
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-function compileWordRe(word: string): RegExp { return new RegExp(`\\b${escapeRe(word)}\\b`, 'gi') }
-
-const LOCATION_GAZETTEER_REGEXES: Array<{ re: RegExp; name: string; type: CinematifiedLocation['type'] }> = (() => {
-  const gazetteers: Array<[Set<string>, CinematifiedLocation['type']]> = [
-    [LOCATION_INDOOR, 'INDOOR'], [LOCATION_OUTDOOR, 'OUTDOOR'], [LOCATION_URBAN, 'URBAN'],
-    [LOCATION_NATURE, 'NATURE'], [LOCATION_VEHICLE, 'VEHICLE'],
-  ]
-  const out: Array<{ re: RegExp; name: string; type: CinematifiedLocation['type'] }> = []
-  for (const [gaz, type] of gazetteers) for (const word of gaz) out.push({ re: compileWordRe(word), name: word, type })
-  return out
-})()
 
 const TIME_OF_DAY_REGEXES: Array<{ re: RegExp; tod: string }> = (() => {
   const out: Array<{ re: RegExp; tod: string }> = []
@@ -147,6 +136,63 @@ export function transformCinematified(text: string, paragraphs: OriginalParagrap
     return { scene, joined, sentences: splitSentences(joined) }
   })
 
+  // ---- 2-7. Narrative Transformation Engine -----------------------------
+  // The heavy deterministic analysis (characters, intelligence, emotion,
+  // momentum, structure, events, arcs, peaks) is isolated in
+  // `analyzeCinematified` so it can be invoked independently of rendering -
+  // e.g. to re-analyze an already-segmented narrative, or skipped on a
+  // render-only path. It mutates `scenes` in place (populating every v2
+  // metric field) and returns the cross-scene analysis artifacts.
+  const analysis = analyzeCinematified(text, paragraphs, scenes, sceneAnalysis, locations, transforms)
+
+  // ---- 8. Render ---------------------------------------------------------
+  const title = titleHint?.trim() || inferTitle(paragraphs) || 'Untitled Cinematic Narrative'
+  const { content, plainText } = renderCinematic(title, scenes)
+  transforms.push('Reconstructed into cinematic screenplay-style narrative.')
+
+  return {
+    title, content, plainText, scenes,
+    characters: analysis.characters, locations, events: analysis.events,
+    arcs: analysis.arcs, peaks: analysis.peaks,
+    sceneCount: scenes.length, transforms,
+    intelligence: analysis.intelligence, coOccurrence: analysis.coOccurrence,
+    emotionTimeline: analysis.emotionTimeline, momentumTimeline: analysis.momentumTimeline,
+    structure: analysis.structure,
+  }
+}
+
+/**
+ * Narrative Transformation Engine - the deterministic analysis core.
+ * ----------------------------------------------------------------------------
+ * Runs character detection + intelligence, emotion, momentum, dramatic
+ * structure, event classification, arc mapping, and emotional-peak detection
+ * over an already-segmented set of scenes. Mutates each scene's analysis
+ * fields (tension/emotion/momentum/structure/mood/heading/title/summary) in
+ * place and pushes human-readable transform entries to `transforms`.
+ *
+ * Pure function of its inputs - byte-identical output for byte-identical input.
+ * No ML, no network. Exported so future callers (a lazy/deferred analysis path,
+ * a re-analyze endpoint, or an alternative renderer) can invoke it without
+ * re-running segmentation - the seam called for by Phase 4.
+ */
+export function analyzeCinematified(
+  text: string,
+  paragraphs: OriginalParagraph[],
+  scenes: CinematifiedScene[],
+  sceneAnalysis: SceneAnalysis,
+  locations: CinematifiedLocation[],
+  transforms: string[],
+): {
+  characters: CinematifiedCharacter[]
+  events: CinematifiedEvent[]
+  arcs: CinematifiedArc[]
+  peaks: CinematifiedPeak[]
+  intelligence: CharacterIntelligence
+  coOccurrence: CoOccurrenceGraph
+  emotionTimeline: EmotionTimelinePoint[]
+  momentumTimeline: MomentumPoint[]
+  structure: StoryStructure
+} {
   // ---- 2. Character detection + intelligence ----------------------------
   const charAnalysis = analyzeCharacters(
     text,
@@ -168,7 +214,7 @@ export function transformCinematified(text: string, paragraphs: OriginalParagrap
     sceneAnalysis.map(({ scene, joined, sentences }) => ({ index: scene.index, text: joined, startOffset: scene.startOffset, sentences })),
   )
   const momentum = analyzeMomentum(
-    sceneAnalysis.map(({ scene, joined }, i) => ({ index: scene.index, text: joined, dialogueRatio: scene.dialogueRatio, valence: emotion.timeline[i]?.valence ?? 0 })),
+    sceneAnalysis.map(({ scene, joined, sentences }, i) => ({ index: scene.index, text: joined, dialogueRatio: scene.dialogueRatio, valence: emotion.timeline[i]?.valence ?? 0, sentences })),
   )
   const structure = analyzeStructure(
     sceneAnalysis.map(({ scene, joined }) => ({ index: scene.index, text: joined })),
@@ -219,14 +265,8 @@ export function transformCinematified(text: string, paragraphs: OriginalParagrap
   }))
   transforms.push(`Identified ${peaks.length} emotional peaks.`)
 
-  // ---- 8. Render ---------------------------------------------------------
-  const title = titleHint?.trim() || inferTitle(paragraphs) || 'Untitled Cinematic Narrative'
-  const { content, plainText } = renderCinematic(title, scenes)
-  transforms.push('Reconstructed into cinematic screenplay-style narrative.')
-
   return {
-    title, content, plainText, scenes, characters, locations, events, arcs, peaks,
-    sceneCount: scenes.length, transforms,
+    characters, events, arcs, peaks,
     intelligence, coOccurrence: charAnalysis.coOccurrence,
     emotionTimeline: emotion.timeline, momentumTimeline: momentum.timeline, structure,
   }
@@ -237,15 +277,39 @@ export function transformCinematified(text: string, paragraphs: OriginalParagrap
 // ---------------------------------------------------------------------------
 
 function detectLocations(text: string): CinematifiedLocation[] {
-  const found = new Map<string, { mentions: number; firstOffset: number; type: CinematifiedLocation['type'] }>()
-  for (const { re, name, type } of LOCATION_GAZETTEER_REGEXES) {
-    re.lastIndex = 0
-    let m: RegExpExecArray | null
-    while ((m = re.exec(text)) !== null) {
-      let entry = found.get(name)
-      if (!entry) { entry = { mentions: 0, firstOffset: m.index, type }; found.set(name, entry) }
-      entry.mentions += 1
+  // Build a single alternation regex from all gazetteer sets — one pass
+  // instead of 100+ individual regex scans.
+  const wordToInfo = new Map<string, { name: string; type: CinematifiedLocation['type'] }>()
+  const gazetteers: Array<[Set<string>, CinematifiedLocation['type']]> = [
+    [LOCATION_INDOOR, 'INDOOR'], [LOCATION_OUTDOOR, 'OUTDOOR'], [LOCATION_URBAN, 'URBAN'],
+    [LOCATION_NATURE, 'NATURE'], [LOCATION_VEHICLE, 'VEHICLE'],
+  ]
+  const words: string[] = []
+  for (const [gaz, type] of gazetteers) {
+    for (const word of gaz) {
+      const lower = word.toLowerCase()
+      if (!wordToInfo.has(lower)) {
+        wordToInfo.set(lower, { name: word, type })
+        words.push(word)
+      }
     }
+  }
+  if (words.length === 0) return []
+
+  const alternation = words
+    .map((w) => `\\b${escapeRe(w)}\\b`)
+    .join('|')
+  const re = new RegExp(alternation, 'gi')
+
+  const found = new Map<string, { mentions: number; firstOffset: number; type: CinematifiedLocation['type'] }>()
+  let m: RegExpExecArray | null
+  while ((m = re.exec(text)) !== null) {
+    const matched = m[0].toLowerCase()
+    const info = wordToInfo.get(matched)
+    if (!info) continue
+    let entry = found.get(info.name)
+    if (!entry) { entry = { mentions: 0, firstOffset: m.index, type: info.type }; found.set(info.name, entry) }
+    entry.mentions += 1
   }
   return [...found.entries()]
     .map(([name, info]) => ({ name, mentions: info.mentions, type: info.type, firstAppearanceOffset: info.firstOffset }))

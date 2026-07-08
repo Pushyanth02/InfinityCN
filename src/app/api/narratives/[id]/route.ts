@@ -14,7 +14,7 @@ import { securityCheck } from '@/lib/middleware/security'
 import { getClientIP } from '@/lib/middleware/rate-limit'
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const blocked = securityCheck(req, `narrative:${getClientIP(req)}`, 60)
+  const blocked = await securityCheck(req, `narrative:${getClientIP(req)}`, 60)
   if (blocked) return blocked
 
   const { id } = await ctx.params

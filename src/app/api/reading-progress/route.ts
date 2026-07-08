@@ -9,7 +9,7 @@ import { securityCheck } from '@/lib/middleware/security'
 import { getClientIP } from '@/lib/middleware/rate-limit'
 
 export async function GET(req: NextRequest) {
-  const blocked = securityCheck(req, `reading-progress:${getClientIP(req)}`, 30)
+  const blocked = await securityCheck(req, `reading-progress:${getClientIP(req)}`, 30)
   if (blocked) return blocked
 
   const progressRecords = await db.readingProgress.findMany({

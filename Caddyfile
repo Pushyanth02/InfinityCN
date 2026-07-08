@@ -1,4 +1,21 @@
 :81 {
+	# ─── Request limits ──────────────────────────────────────────────────
+	request_body {
+		max_size 30MB
+	}
+
+	# ─── Security headers (defense-in-depth with Next.js) ────────────────
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		# HSTS — instructs browsers to use HTTPS for 1 year (incl. subdomains)
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		# Remove server identification
+		-Server
+	}
+
 	@transform_port_query {
 		query XTransformPort=*
 	}

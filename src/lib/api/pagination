@@ -1,0 +1,127 @@
+/**
+ * Lemniscate — API Pagination Helpers
+ * ----------------------------------------------------------------------------
+ * Utilities for parsing pagination, filtering, and sorting parameters from
+ * request query strings. All helpers are pure functions returning typed values.
+ */
+
+import type { PaginationMeta } from './response'
+import type { NextRequest } from 'next/server'
+
+// ─── Defaults ─────────────────────────────────────────────────────────────
+
+export const DEFAULT_PAGE_SIZE = 50
+export const MAX_PAGE_SIZE = 200
+
+// ─── Pagination parsing ───────────────────────────────────────────────────
+
+export interface PaginationParams {
+  limit: number
+  offset: number
+}
+
+/**
+ * Parse `limit` and `offset` from a request's query string.
+ * Enforces bounds: limit ∈ [1, MAX_PAGE_SIZE], offset ≥ 0.
+ */
+export function parsePagination(req: NextRequest, defaults?: Partial<PaginationParams>): PaginationParams {
+  const url = req.nextUrl ?? new URL(req.url)
+  const params = url.searchParams
+
+  const limit = clamp(
+    parseInt(params.get('limit') || String(defaults?.limit ?? DEFAULT_PAGE_SIZE), 10) || DEFAULT_PAGE_SIZE,
+    1,
+    MAX_PAGE_SIZE,
+  )
+  const offset = Math.max(0, parseInt(params.get('offset') || String(defaults?.offset ?? 0), 10) || 0)
+
+  return { limit, offset }
+}
+
+/**
+ * Parse page-based pagination (`page`, `pageSize`) and convert to limit/offset.
+ */
+export function parsePagePagination(req: NextRequest): PaginationParams {
+  const url = req.nextUrl ?? new URL(req.url)
+  const params = url.searchParams
+
+  const pageSize = clamp(
+    parseInt(params.get('pageSize') || String(DEFAULT_PAGE_SIZE), 10) || DEFAULT_PAGE_SIZE,
+    1,
+    MAX_PAGE_SIZE,
+  )
+  const page = Math.max(1, parseInt(params.get('page') || '1', 10) || 1)
+  const offset = (page - 1) * pageSize
+
+  return { limit: pageSize, offset }
+}
+
+/**
+ * Build a PaginationMeta response object from limit/offset and total count.
+ */
+export function buildPaginationMeta(
+  limit: number,
+  offset: number,
+  total?: number,
+): PaginationMeta {
+  return {
+    limit,
+    offset,
+    total,
+    hasMore: total !== undefined ? offset + limit < total : undefined,
+  }
+}
+
+// ─── Sorting parsing ──────────────────────────────────────────────────────
+
+export interface SortParams {
+  sortBy: string
+  sortOrder: 'asc' | 'desc'
+}
+
+/**
+ * Parse `sortBy` and `sortOrder` from query string.
+ * Returns null if no sort parameter is present.
+ */
+export function parseSort(req: NextRequest, allowedFields: string[], defaultSort?: SortParams): SortParams | null {
+  const url = req.nextUrl ?? new URL(req.url)
+  const params = url.searchParams
+
+  const sortBy = params.get('sortBy') || params.get('sort') || defaultSort?.sortBy
+  if (!sortBy) return null
+
+  // Validate against allowlist to prevent injection.
+  if (!allowedFields.includes(sortBy)) return defaultSort ?? null
+
+  const rawOrder = (params.get('sortOrder') || params.get('order') || defaultSort?.sortOrder || 'asc').toLowerCase()
+  const sortOrder: 'asc' | 'desc' = rawOrder === 'desc' ? 'desc' : 'asc'
+
+  return { sortBy, sortOrder }
+}
+
+// ─── Filtering parsing ────────────────────────────────────────────────────
+
+export interface FilterParams {
+  [key: string]: string | undefined
+}
+
+/**
+ * Parse filter parameters from query string.
+ * Only keys in `allowedFilters` are extracted.
+ */
+export function parseFilters(req: NextRequest, allowedFilters: string[]): FilterParams {
+  const url = req.nextUrl ?? new URL(req.url)
+  const params = url.searchParams
+  const filters: FilterParams = {}
+  for (const key of allowedFilters) {
+    const val = params.get(key)
+    if (val !== null) filters[key] = val
+  }
+  return filters
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value))
+}

@@ -20,9 +20,20 @@ services:
       - DATABASE_URL=file:/app/db/custom.db
       - NODE_ENV=production
       - UPLOAD_DIR=/app/uploads
+      # [REQUIRED] Set these before deploying.
+      # LEMNISCATE_API_KEY must be >=16 characters.
+      - LEMNISCATE_API_KEY=${LEMNISCATE_API_KEY:?Set LEMNISCATE_API_KEY in .env}
+      - LEMNISCATE_ALLOWED_ORIGINS=${LEMNISCATE_ALLOWED_ORIGINS:-http://localhost:81}
+      # Trust the Caddy reverse proxy for accurate client-IP extraction.
+      # Docker assigns IPs from the 172.16.0.0/12 subnet by default.
+      - LEMNISCATE_TRUSTED_PROXY_CIDR=${LEMNISCATE_TRUSTED_PROXY_CIDR:-172.16.0.0/12}
       # The dedicated `worker` service below processes the job queue, so the
       # app container disables its in-process poller to avoid redundant polling.
       - DISABLE_EMBEDDED_WORKER=1
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: ${APP_MEM_LIMIT:-512m}
+    memswap_limit: ${APP_MEMSWAP_LIMIT:-1g}
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
       interval: 30s
@@ -36,8 +47,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.worker
-    ports:
-      - "3003:3003"
+    # Worker port is internal-only — Caddy proxies to it.
+    # Do NOT expose 3003 externally.
+    expose:
+      - "3003"
     volumes:
       - db-data:/app/db
       - uploads:/app/uploads
@@ -47,6 +60,11 @@ services:
       - UPLOAD_DIR=/app/uploads
       - WORKER_CONCURRENCY=2
       - WORKER_POLL_INTERVAL_MS=800
+      - LEMNISCATE_ALLOWED_ORIGINS=${LEMNISCATE_ALLOWED_ORIGINS:-http://localhost:81}
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: ${WORKER_MEM_LIMIT:-1g}
+    memswap_limit: ${WORKER_MEMSWAP_LIMIT:-2g}
     depends_on:
       app:
         condition: service_healthy

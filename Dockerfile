@@ -11,16 +11,18 @@
 # requires build-time devDependencies such as typescript, tailwindcss, and
 # @tailwindcss/postcss. The final runtime image (stage 3) copies only the
 # standalone output + Prisma engine, so these build deps never ship to prod.
-FROM node:20-alpine AS deps
+FROM node:20-alpine3.21 AS deps
 WORKDIR /app
 
 COPY package.json package-lock.json ./
 COPY prisma ./prisma/
 
-RUN npm ci && npx prisma generate
+# --ignore-scripts prevents lifecycle scripts from untrusted packages.
+# Prisma generate is run explicitly afterward.
+RUN npm ci --ignore-scripts && npx prisma generate
 
 # --- Stage 2: Build ---
-FROM node:20-alpine AS builder
+FROM node:20-alpine3.21 AS builder
 WORKDIR /app
 
 COPY --from=deps /app/node_modules ./node_modules
@@ -39,14 +41,19 @@ RUN mkdir -p /app/db-seed && \
     DATABASE_URL=file:/app/db-seed/custom.db npx prisma db push --skip-generate
 
 # --- Stage 3: Production runtime ---
-FROM node:20-alpine AS runner
+FROM node:20-alpine3.21 AS runner
 WORKDIR /app
+
+LABEL org.opencontainers.image.title="Lemniscate"
+LABEL org.opencontainers.image.description="Deterministic document-to-storytelling platform"
+LABEL org.opencontainers.image.vendor="Lemniscate"
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV DATABASE_URL=file:/app/db/custom.db
 
-RUN addgroup --system --gid 1001 nodejs && \
+RUN apk update && apk upgrade --no-cache && \
+    addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
 # Copy standalone output

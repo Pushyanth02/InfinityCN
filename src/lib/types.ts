@@ -1,3 +1,13 @@
+import type {
+  PipelineStage,
+  NarrativeMode,
+  JobStatus,
+  DocumentStatus,
+  CharacterRole,
+  EventType,
+  ParagraphType,
+} from './domain/enums'
+
 /**
  * Shared types for the Lemniscate queue + pipeline.
  */
@@ -18,17 +28,17 @@ export interface JobAck {
   durationMs?: number
 }
 
-/** Stage names emitted during processing. */
-export type PipelineStage =
-  | 'QUEUED'
-  | 'EXTRACT'
-  | 'SEGMENT'
-  | 'ORIGINAL'
-  | 'CINEMATIFY'
-  | 'ANALYZE'
-  | 'FINALIZE'
-  | 'COMPLETED'
-  | 'FAILED'
+// Re-export enums from the domain layer (single source of truth).
+// These were previously duplicated here; now they delegate to domain/enums.ts.
+export type {
+  PipelineStage,
+  NarrativeMode,
+  JobStatus,
+  DocumentStatus,
+  CharacterRole,
+  EventType,
+  ParagraphType,
+} from './domain/enums'
 
 /** A real-time progress event sent over WebSocket. */
 export interface ProgressEvent {
@@ -52,13 +62,6 @@ export interface ProgressEvent {
 // API response shapes — used by frontend components
 // ---------------------------------------------------------------------------
 
-export type NarrativeMode = 'ORIGINAL' | 'CINEMATIFIED'
-export type JobStatus = 'QUEUED' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'DEAD_LETTER'
-export type DocumentStatus = 'UPLOADED' | 'EXTRACTED' | 'PROCESSED' | 'FAILED'
-export type CharacterRole = 'PROTAGONIST' | 'ANTAGONIST' | 'SUPPORTING' | 'MINOR'
-export type EventType = 'ACTION' | 'DIALOGUE' | 'DISCOVERY' | 'CONFLICT' | 'RESOLUTION' | 'TRANSITION'
-export type ParagraphType = 'NARRATION' | 'DIALOGUE' | 'ACTION' | 'TRANSITION' | 'HEADING' | 'THOUGHT'
-export type LogLevel = 'INFO' | 'WARN' | 'ERROR' | 'DEBUG'
 
 /** Job as returned by GET /api/jobs/[id] */
 export interface ApiJob {

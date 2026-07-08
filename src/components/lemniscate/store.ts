@@ -27,6 +27,8 @@ interface ReaderPreferences {
   readerFontFamily: FontFamily
   readerWidth: ReaderWidth
   reducedMotion: boolean
+  /** Whether the reader's explorer sidebar is collapsed (maximizes reading width). */
+  readerSidebarCollapsed: boolean
 }
 
 const DEFAULT_PREFERENCES: ReaderPreferences = {
@@ -36,6 +38,7 @@ const DEFAULT_PREFERENCES: ReaderPreferences = {
   readerFontFamily: 'serif',
   readerWidth: 'medium',
   reducedMotion: false,
+  readerSidebarCollapsed: false,
 }
 
 interface LemniscateState extends ReaderPreferences {
@@ -44,6 +47,10 @@ interface LemniscateState extends ReaderPreferences {
   activeDocumentId: string | null
   activeNarrativeId: string | null
   activeMode: ReaderMode | null
+  /** Desired reading mode for dual-mode switching. The reader resolves this
+   *  to whichever sibling narrative exists on the active document. */
+  desiredMode: ReaderMode | null
+  setDesiredMode: (m: ReaderMode) => void
   readerImmersive: boolean
 
   // upload
@@ -71,6 +78,8 @@ interface LemniscateState extends ReaderPreferences {
   setReaderWidth: (w: ReaderWidth) => void
   setReducedMotion: (v: boolean) => void
   toggleReaderImmersive: () => void
+  toggleReaderSidebar: () => void
+  setReaderSidebarCollapsed: (v: boolean) => void
 
   // progress
   patchProgress: (jobId: string, patch: Partial<{ progress: number; stage: string; message: string; status: string }>) => void
@@ -86,6 +95,7 @@ export const useLemniscate = create<LemniscateState>()(
       activeDocumentId: null,
       activeNarrativeId: null,
       activeMode: null,
+      desiredMode: null,
       readerImmersive: false,
       uploadMode: 'BOTH',
       setUploadMode: (m) => set({ uploadMode: m }),
@@ -94,7 +104,8 @@ export const useLemniscate = create<LemniscateState>()(
       openProcessing: (jobId, documentId) =>
         set({ view: 'processing', activeJobId: jobId, activeDocumentId: documentId }),
       openReader: (narrativeId, mode, documentId) =>
-        set({ view: 'reader', activeNarrativeId: narrativeId, activeMode: mode, activeDocumentId: documentId ?? null }),
+        set({ view: 'reader', activeNarrativeId: narrativeId, activeMode: mode, desiredMode: mode, activeDocumentId: documentId ?? null }),
+      setDesiredMode: (m) => set({ desiredMode: m }),
       openCharacters: (narrativeId, documentId) =>
         set({ view: 'characters', activeNarrativeId: narrativeId, activeDocumentId: documentId ?? null }),
       openScenes: (narrativeId, documentId) =>
@@ -111,6 +122,9 @@ export const useLemniscate = create<LemniscateState>()(
       setReaderWidth: (w) => set({ readerWidth: w }),
       setReducedMotion: (v) => set({ reducedMotion: v }),
       toggleReaderImmersive: () => set((s) => ({ readerImmersive: !s.readerImmersive })),
+      toggleReaderSidebar: () =>
+        set((s) => ({ readerSidebarCollapsed: !s.readerSidebarCollapsed })),
+      setReaderSidebarCollapsed: (v) => set({ readerSidebarCollapsed: v }),
       patchProgress: (jobId, patch) =>
         set((s) => ({
           progress: { ...s.progress, [jobId]: { ...s.progress[jobId], ...patch } },
@@ -135,6 +149,7 @@ export const useLemniscate = create<LemniscateState>()(
         readerFontFamily: s.readerFontFamily,
         readerWidth: s.readerWidth,
         reducedMotion: s.reducedMotion,
+        readerSidebarCollapsed: s.readerSidebarCollapsed,
       }),
     },
   ),

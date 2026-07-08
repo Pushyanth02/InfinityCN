@@ -50,6 +50,24 @@ describe('[unit] metadata — title detection priority chain', () => {
     expect(md.title).toBe('Great Expectations')
     expect(md.titleSource).toBe('filename')
   })
+
+  it('uses the chapter label as the title for a single-chapter upload (Phase 3 regression)', () => {
+    // The exact scenario from the bug report: a document that opens directly
+    // with a chapter heading and has no separate title line. The title must
+    // become the rendered chapter label — never duplicated, never malformed.
+    const text =
+      'Chapter 1: The Heart of a Demon Never Has Regret Even in Death\n\nThe morning light broke over the silent valley.'
+    const md = detectDocumentMetadata({ text, paragraphs: paras(text), filename: 'demon-heart.pdf' })
+    expect(md.title).toBe('Chapter 1: The Heart of a Demon Never Has Regret Even in Death')
+    expect(md.titleSource).toBe('chapter')
+  })
+
+  it('never duplicates an identical chapter heading as the title', () => {
+    const text =
+      'Chapter 1\n\nChapter 1\n\nIt was a fine morning and the birds were singing.'
+    const md = detectDocumentMetadata({ text, paragraphs: paras(text), filename: 'x.txt' })
+    expect(md.title).toBe('Chapter 1')
+  })
 })
 
 describe('[unit] metadata — author / chapters / series', () => {
@@ -75,6 +93,26 @@ describe('[unit] metadata — author / chapters / series', () => {
     expect(md.chapterCount).toBeGreaterThanOrEqual(3)
     expect(md.chapters[0].title).toMatch(/Chapter 1/i)
     expect(md.chapters.some((c) => /Epilogue/i.test(c.title))).toBe(true)
+  })
+
+  it('uses the leading chapter label as the title for a single-chapter upload', () => {
+    // Phase 3 scenario: a chapter whose heading carries a trailing title.
+    // The document opens directly with the chapter marker and has no separate
+    // book title — the chapter label "Chapter 1: <Title>" becomes the title,
+    // never duplicated or malformed.
+    const text =
+      'Chapter 1: The Heart of a Demon Never Has Regret Even in Death\n\nThe old monk opened his eyes at dawn.'
+    const md = detectDocumentMetadata({ text, paragraphs: paras(text), filename: 'x.txt' })
+    expect(md.title).toBe('Chapter 1: The Heart of a Demon Never Has Regret Even in Death')
+    expect(md.titleSource).toBe('chapter')
+    expect(md.chapterCount).toBe(1)
+  })
+
+  it('does not duplicate the title when the heading repeats verbatim', () => {
+    const text =
+      'Chapter 1: The Awakening\n\nChapter 1: The Awakening\n\nShe rose from the bed, confused.'
+    const md = detectDocumentMetadata({ text, paragraphs: paras(text), filename: 'x.txt' })
+    expect(md.title).toBe('Chapter 1: The Awakening')
   })
 
   it('detects a series name in parenthetical notation', () => {

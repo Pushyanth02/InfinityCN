@@ -55,6 +55,8 @@ import {
   FileText,
   FileDown,
   Loader2,
+  PanelRight,
+  PanelRightOpen,
 } from 'lucide-react'
 
 import {
@@ -123,8 +125,15 @@ interface ReaderScene {
   tensionScore: number
   emotionScore: number
   dominantEmotion?: string | null
+  // v2 promoted scalars (served on the Scene row; undeclared before)
+  momentumScore?: number
+  arousalScore?: number
+  valence?: number
+  structurePhase?: string | null
   dialogueRatio: number
   eventCount: number
+  startOffset?: number
+  endOffset?: number
   paragraphs: ReaderParagraph[]
   events: ReaderEvent[]
 }
@@ -135,6 +144,14 @@ interface ReaderCharacter {
   role: string
   mentions: number
   dialogueLines: number
+  // v2 promoted scalars + JSON metadata (served; undeclared before)
+  aliases?: string // JSON array
+  importanceScore?: number
+  confidenceScore?: number
+  speakingCount?: number
+  firstAppearanceOffset?: number
+  lastAppearanceOffset?: number
+  metadata?: string // JSON: { honorifics, gender, scenes }
 }
 
 interface ReaderLocation {
@@ -142,6 +159,27 @@ interface ReaderLocation {
   name: string
   type: string
   mentions: number
+}
+
+/** Narrative arc (served as NarrativeArc[]). */
+interface ReaderArc {
+  id: string
+  name: string
+  arcType: string
+  startSceneIdx: number
+  endSceneIdx: number
+  intensity: number
+  summary: string
+}
+
+/** Emotional peak (served as EmotionalPeak[]). */
+interface ReaderPeak {
+  id: string
+  offset: number
+  intensity: number
+  emotion: string
+  snippet: string
+  sceneId?: string | null
 }
 
 interface ReaderNarrative {
@@ -154,7 +192,22 @@ interface ReaderNarrative {
   scenes: ReaderScene[]
   characters: ReaderCharacter[]
   locations: ReaderLocation[]
+  arcs?: ReaderArc[]
+  peaks?: ReaderPeak[]
   metadata?: string
+  // Structured v2 analysis (parsed from metadata by the service).
+  analysis?: ReaderAnalysis
+}
+
+/** Deterministic v2 analysis artifacts, parsed server-side from metadata. */
+interface ReaderAnalysis {
+  intelligence?: Record<string, unknown>
+  coOccurrence?: { edges?: Array<{ source: string; target: string; weight: number }>; maxWeight?: number }
+  emotionTimeline?: Array<{ index: number; emotionScore?: number; valence?: number; arousal?: number; dominant?: string }>
+  momentumTimeline?: Array<{ index: number; score?: number }>
+  structure?: {
+    segments?: Array<{ phase: string; startSceneIndex: number; endSceneIndex: number; confidence?: number }>
+  }
 }
 
 // ─── Reader-power-user types ────────────────────────────────────────────────
@@ -924,6 +977,14 @@ interface TopBarProps {
   bookmarks: ReaderBookmark[]
   onJumpBookmark: (bm: ReaderBookmark) => void
   onDeleteBookmark: (id: string) => void
+  // Dual-mode toggle: present only when both sibling narratives exist.
+  showModeToggle?: boolean
+  desiredMode?: ReaderMode | null
+  onSetDesiredMode?: (m: ReaderMode) => void
+  // Collapsible explorer sidebar (cinematified only).
+  showSidebarToggle?: boolean
+  sidebarCollapsed?: boolean
+  onToggleSidebar?: () => void
 }
 
 function TopBar({
@@ -949,6 +1010,12 @@ function TopBar({
   bookmarks,
   onJumpBookmark,
   onDeleteBookmark,
+  showModeToggle,
+  desiredMode,
+  onSetDesiredMode,
+  showSidebarToggle,
+  sidebarCollapsed,
+  onToggleSidebar,
 }: TopBarProps) {
   const [exportOpen, setExportOpen] = React.useState(false)
   const exportRef = useRef<HTMLDivElement>(null)
@@ -1014,12 +1081,46 @@ function TopBar({
             >
               {title}
             </h1>
-            <Badge
-              variant="outline"
-              className="hidden shrink-0 border-amber/30 px-1.5 py-0 text-[10px] font-normal uppercase tracking-wider text-amber/70 md:inline-flex"
-            >
-              {mode === 'CINEMATIFIED' ? 'Cinema' : 'Original'}
-            </Badge>
+            {showModeToggle && onSetDesiredMode ? (
+              // Dual-mode segmented control: switch between sibling narratives.
+              // No reprocessing — both already exist; toggle swaps the loaded row.
+              <div
+                role="tablist"
+                aria-label="Reading mode"
+                className="inline-flex shrink-0 items-center rounded-md border border-amber/20 bg-midnight/50 p-0.5"
+              >
+                {(['ORIGINAL', 'CINEMATIFIED'] as ReaderMode[]).map((m) => {
+                  const active = (desiredMode ?? mode) === m
+                  return (
+                    <button
+                      key={m}
+                      role="tab"
+                      aria-selected={active}
+                      onClick={() => onSetDesiredMode(m)}
+                      className={`flex items-center gap-1 rounded-[5px] px-2 py-1 text-[10px] font-medium uppercase tracking-wider transition-colors ${
+                        active
+                          ? 'bg-amber/20 text-amber'
+                          : 'text-slate/70 hover:bg-amber/10 hover:text-amber'
+                      }`}
+                    >
+                      {m === 'CINEMATIFIED' ? (
+                        <Film className="h-3 w-3" />
+                      ) : (
+                        <Type className="h-3 w-3" />
+                      )}
+                      {m === 'CINEMATIFIED' ? 'Cinema' : 'Original'}
+                    </button>
+                  )
+                })}
+              </div>
+            ) : (
+              <Badge
+                variant="outline"
+                className="hidden shrink-0 border-amber/30 px-1.5 py-0 text-[10px] font-normal uppercase tracking-wider text-amber/70 md:inline-flex"
+              >
+                {mode === 'CINEMATIFIED' ? 'Cinema' : 'Original'}
+              </Badge>
+            )}
           </div>
 
           {/* Controls */}
@@ -1220,6 +1321,32 @@ function TopBar({
               </AnimatePresence>
             </div>
 
+            {/* Explorer sidebar toggle (cinematified only) — `[` keyboard shortcut */}
+            {showSidebarToggle && onToggleSidebar && (
+              <Button
+                onClick={onToggleSidebar}
+                variant="ghost"
+                size="icon"
+                aria-label={
+                  sidebarCollapsed ? 'Show explorer sidebar' : 'Hide explorer sidebar'
+                }
+                aria-pressed={!sidebarCollapsed}
+                title={`${sidebarCollapsed ? 'Show' : 'Hide'} explorer ( [ )`}
+                className={cn(
+                  'h-9 w-9 hover:bg-amber/15',
+                  sidebarCollapsed
+                    ? 'text-slate hover:text-amber'
+                    : 'text-amber hover:text-amber',
+                )}
+              >
+                {sidebarCollapsed ? (
+                  <PanelRightOpen className="h-4 w-4" />
+                ) : (
+                  <PanelRight className="h-4 w-4" />
+                )}
+              </Button>
+            )}
+
             {/* Immersive toggle */}
             <Button
               onClick={onToggleImmersive}
@@ -1347,12 +1474,217 @@ function OriginalReader({
   )
 }
 
+// ─── Scene metadata rail + character highlighting (Cinematified v2) ──────────
+
+/** Color maps for mood / phase / emotion badges. Pure presentation. */
+const MOOD_COLOR: Record<string, string> = {
+  TENSE: 'var(--tension)',
+  VIOLENT: 'var(--tension)',
+  SOMBER: 'var(--slate)',
+  CALM: 'var(--amber)',
+  JOYFUL: 'var(--amber)',
+  HOPEFUL: 'var(--amber)',
+  MYSTERIOUS: 'var(--plum)',
+  ROMANTIC: 'var(--burgundy)',
+}
+const PHASE_COLOR: Record<string, string> = {
+  EXPOSITION: 'var(--slate)',
+  INCITING_INCIDENT: 'var(--amber)',
+  RISING_ACTION: 'var(--amber)',
+  MIDPOINT: 'var(--amber)',
+  CLIMAX: 'var(--tension)',
+  FALLING_ACTION: 'var(--burgundy)',
+  RESOLUTION: 'var(--slate)',
+}
+const PHASE_LABEL: Record<string, string> = {
+  EXPOSITION: 'Setup',
+  INCITING_INCIDENT: 'Inciting',
+  RISING_ACTION: 'Rising',
+  MIDPOINT: 'Midpoint',
+  CLIMAX: 'Climax',
+  FALLING_ACTION: 'Falling',
+  RESOLUTION: 'Resolution',
+}
+const EMOTION_COLOR: Record<string, string> = {
+  JOY: 'var(--amber)',
+  LOVE: 'var(--burgundy)',
+  ANGER: 'var(--tension)',
+  FEAR: 'var(--plum)',
+  SADNESS: 'var(--slate)',
+  SURPRISE: 'var(--amber)',
+  DISGUST: 'var(--slate)',
+  NEUTRAL: 'var(--slate)',
+}
+
+/** A single labeled meter segment (tension / momentum / arousal). */
+function MeterBar({
+  label,
+  value,
+  color,
+  signed = false,
+}: {
+  label: string
+  value: number
+  color: string
+  signed?: boolean
+}) {
+  // signed valence is -100..100 → render centered bar growing left/right.
+  if (signed) {
+    const pct = Math.min(50, Math.abs(value) / 2)
+    const positive = value >= 0
+    return (
+      <div className="flex items-center gap-1.5" title={`${label}: ${value > 0 ? '+' : ''}${value}`}>
+        <span className="w-14 shrink-0 font-mono text-[9px] uppercase tracking-wider text-amber/50">
+          {label}
+        </span>
+        <div className="scene-meter-rail relative h-1.5 w-16">
+          <div className="scene-meter-center" />
+          <div
+            className="absolute top-0 h-full rounded-full"
+            style={{
+              width: `${pct}%`,
+              [positive ? 'left' : 'right']: '50%',
+              background: color,
+            }}
+          />
+        </div>
+      </div>
+    )
+  }
+  const pct = Math.max(0, Math.min(100, value))
+  return (
+    <div className="flex items-center gap-1.5" title={`${label}: ${Math.round(pct)}`}>
+      <span className="w-14 shrink-0 font-mono text-[9px] uppercase tracking-wider text-amber/50">
+        {label}
+      </span>
+      <div className="scene-meter-rail h-1.5 w-16">
+        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Wrap verbatim paragraph text, highlighting known character names. The text
+ * bytes are never modified — only split into React fragments around matches.
+ */
+function HighlightedText({
+  text,
+  forms,
+}: {
+  text: string
+  forms: Array<{ form: string; character: ReaderCharacter }>
+}) {
+  if (forms.length === 0) return <>{text}</>
+  return <>{highlightCharacters(text, forms)}</>
+}
+
+/** Compact horizontal rail of scene intelligence metrics. */
+function SceneMetaRail({ scene }: { scene: ReaderScene }) {
+  const moodColor = scene.mood ? MOOD_COLOR[scene.mood] ?? 'var(--slate)' : 'var(--slate)'
+  const phaseColor = scene.structurePhase
+    ? PHASE_COLOR[scene.structurePhase] ?? 'var(--slate)'
+    : null
+  const emoColor = scene.dominantEmotion
+    ? EMOTION_COLOR[scene.dominantEmotion] ?? 'var(--slate)'
+    : 'var(--slate)'
+  return (
+    <div className="scene-meta-rail">
+      {/* Mood + phase badges */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {scene.mood && (
+          <span className="scene-badge" style={{ color: moodColor, borderColor: moodColor }}>
+            {scene.mood}
+          </span>
+        )}
+        {phaseColor && scene.structurePhase && (
+          <span className="scene-badge" style={{ color: phaseColor, borderColor: phaseColor }}>
+            {PHASE_LABEL[scene.structurePhase] ?? scene.structurePhase}
+          </span>
+        )}
+        {scene.dominantEmotion && scene.dominantEmotion !== 'NEUTRAL' && (
+          <span className="scene-badge" style={{ color: emoColor, borderColor: emoColor }}>
+            {scene.dominantEmotion}
+          </span>
+        )}
+        {scene.timeOfDay && scene.timeOfDay !== 'UNKNOWN' && (
+          <span className="scene-badge scene-badge-muted">{scene.timeOfDay}</span>
+        )}
+      </div>
+      {/* Meters */}
+      <div className="flex flex-wrap gap-x-3 gap-y-1">
+        <MeterBar label="Tension" value={scene.tensionScore} color="var(--tension)" />
+        <MeterBar label="Momentum" value={scene.momentumScore ?? 0} color="var(--amber)" />
+        <MeterBar label="Arousal" value={scene.arousalScore ?? 0} color="var(--burgundy)" />
+        <MeterBar label="Valence" value={scene.valence ?? 0} color="var(--amber)" signed />
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Highlight known character names inside a verbatim paragraph. Splits the text
+ * on matches and wraps each in a <mark>; the original bytes are never altered —
+ * only split into React fragments. Longest forms win (claimed-span technique).
+ */
+function highlightCharacters(
+  text: string,
+  forms: Array<{ form: string; character: ReaderCharacter }>,
+): React.ReactNode[] {
+  if (forms.length === 0 || !text) return [text]
+  const sorted = [...forms].sort((a, b) => b.form.length - a.form.length)
+  const claimed: Array<[number, number]> = []
+  const hits: Array<{ start: number; end: number; character: ReaderCharacter }> = []
+  for (const { form, character } of sorted) {
+    const re = new RegExp(
+      `${form.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+')}`,
+      'g',
+    )
+    let m: RegExpExecArray | null
+    re.lastIndex = 0
+    while ((m = re.exec(text)) !== null) {
+      const start = m.index
+      const end = start + m[0].length
+      if (claimed.some(([s, e]) => start >= s && end <= e)) continue
+      claimed.push([start, end])
+      hits.push({ start, end, character })
+    }
+  }
+  if (hits.length === 0) return [text]
+  hits.sort((a, b) => a.start - b.start)
+  const out: React.ReactNode[] = []
+  let cursor = 0
+  for (const h of hits) {
+    if (h.start > cursor) out.push(text.slice(cursor, h.start))
+    const roleColor = h.character.role === 'PROTAGONIST'
+      ? 'var(--amber)'
+      : h.character.role === 'ANTAGONIST'
+        ? 'var(--tension)'
+        : 'var(--ivory)'
+    out.push(
+      <mark
+        key={`${h.start}-${h.character.id}`}
+        className="reader-char"
+        style={{ textDecorationColor: roleColor }}
+        title={`${h.character.name} · ${h.character.role} · ${h.character.mentions} mentions`}
+      >
+        {text.slice(h.start, h.end)}
+      </mark>,
+    )
+    cursor = h.end
+  }
+  if (cursor < text.length) out.push(text.slice(cursor))
+  return out
+}
+
 // ─── Scene cinematic rendering (CINEMATIFIED mode) ───────────────────────────
 
 interface SceneCinematicProps {
   scene: ReaderScene
   locations: ReaderLocation[]
   fontSize: FontSize
+  characters: ReaderCharacter[]
+  highlightChars: boolean
   onSceneInView: (index: number) => void
   registerRef: (index: number, el: HTMLElement | null) => void
 }
@@ -1361,6 +1693,8 @@ function SceneCinematic({
   scene,
   locations,
   fontSize,
+  characters,
+  highlightChars,
   onSceneInView,
   registerRef,
 }: SceneCinematicProps) {
@@ -1369,6 +1703,52 @@ function SceneCinematic({
   const inView = useInView(ref, { margin: '-40% 0px -40% 0px' })
   // Reveal-once: the scene animates in the first time it scrolls into view.
   const inViewOnce = useInView(ref, { once: true, margin: '-10% 0px -10% 0px' })
+
+  // Character surface forms (original-case name + aliases) for the characters
+  // that participate in THIS scene. Scoping keeps the highlighter fast on large
+  // casts. `form` keeps original casing so the verbatim text is matched exactly.
+  const charForms = React.useMemo(() => {
+    const forms: Array<{ form: string; character: ReaderCharacter }> = []
+    if (!highlightChars) return forms
+    const sceneStart = scene.startOffset
+    const sceneEnd = scene.endOffset
+    const smallCast = characters.length <= 40
+    for (const c of characters) {
+      const inScene =
+        smallCast ||
+        (sceneStart !== undefined &&
+          sceneEnd !== undefined &&
+          c.firstAppearanceOffset !== undefined &&
+          c.lastAppearanceOffset !== undefined &&
+          c.lastAppearanceOffset >= sceneStart &&
+          c.firstAppearanceOffset <= sceneEnd)
+      if (!inScene) continue
+      forms.push({ form: c.name, character: c })
+      // aliases is stored as a JSON string on the Character row; parse defensively.
+      if (c.aliases) {
+        try {
+          const parsed = JSON.parse(c.aliases)
+          if (Array.isArray(parsed)) {
+            for (const a of parsed) {
+              if (typeof a === 'string' && a.trim()) forms.push({ form: a, character: c })
+            }
+          }
+        } catch {
+          /* malformed aliases JSON — ignore */
+        }
+      }
+    }
+    return forms
+  }, [characters, highlightChars, scene.startOffset, scene.endOffset])
+
+  /** Render a paragraph's text, wrapping character-name matches in <mark>. */
+  const renderText = React.useCallback(
+    (text: string) => {
+      if (!highlightChars || charForms.length === 0) return text
+      return <HighlightedText text={text} forms={charForms} />
+    },
+    [highlightChars, charForms],
+  )
 
   React.useEffect(() => {
     if (inView) onSceneInView(scene.index)
@@ -1486,7 +1866,7 @@ function SceneCinematic({
                   data-paragraph-id={p.id}
                   data-paragraph-idx={p.index}
                 >
-                  {p.text}
+                  {renderText(p.text)}
                 </motion.p>
               )
             }
@@ -1499,7 +1879,7 @@ function SceneCinematic({
                   data-paragraph-id={p.id}
                   data-paragraph-idx={p.index}
                 >
-                  {p.text}
+                  {renderText(p.text)}
                 </motion.p>
               )
             }
@@ -1512,7 +1892,7 @@ function SceneCinematic({
                 data-paragraph-id={p.id}
                 data-paragraph-idx={p.index}
               >
-                {p.text}
+                {renderText(p.text)}
               </motion.p>
             )
           })}
@@ -1547,6 +1927,9 @@ function CinematifiedReader({
   registerRef: (i: number, el: HTMLElement | null) => void
 }) {
   const { maxWidth } = useReaderTypography()
+  // Inline character-highlighting toggle (off by default — many readers want
+  // clean prose; the toggle surfaces the character intelligence on demand).
+  const [highlightChars, setHighlightChars] = React.useState(true)
   return (
     <motion.article
       variants={bookOpen}
@@ -1582,6 +1965,26 @@ function CinematifiedReader({
         deterministic heuristics. No content was invented.
       </motion.p>
 
+      {/* Character-highlight toggle */}
+      {narrative.characters.length > 0 && (
+        <div className="mb-10 flex justify-center">
+          <button
+            onClick={() => setHighlightChars((v) => !v)}
+            className={cn(
+              'inline-flex items-center gap-2 rounded-full border px-4 py-1.5 font-mono text-[10px] uppercase tracking-[0.2em] transition-colors',
+              highlightChars
+                ? 'border-amber/40 bg-amber/10 text-amber'
+                : 'border-amber/15 text-slate hover:bg-amber/5 hover:text-amber',
+            )}
+            aria-pressed={highlightChars}
+          >
+            <Users className="h-3.5 w-3.5" />
+            {highlightChars ? 'Characters highlighted' : 'Highlight characters'}
+            <span className="text-amber/50">· {narrative.characters.length}</span>
+          </button>
+        </div>
+      )}
+
       {narrative.scenes.length === 0 && (
         <p className="text-center italic text-slate">
           No scenes were detected in this narrative.
@@ -1594,6 +1997,8 @@ function CinematifiedReader({
             scene={scene}
             locations={narrative.locations}
             fontSize={fontSize}
+            characters={narrative.characters}
+            highlightChars={highlightChars}
             onSceneInView={onSceneInView}
             registerRef={registerRef}
           />
@@ -1621,31 +2026,51 @@ function CinematifiedReader({
 interface SidebarProps {
   scenes: ReaderScene[]
   locations: ReaderLocation[]
+  arcs?: ReaderArc[]
+  peaks?: ReaderPeak[]
   currentSceneIdx: number
   onJumpScene: (i: number) => void
+  onJumpPeak?: (peak: ReaderPeak) => void
   bookmarks: ReaderBookmark[]
   onJumpBookmark: (bm: ReaderBookmark) => void
   onDeleteBookmark: (id: string) => void
+  /** Persisted collapse state. When true the rail animates to zero width but
+   *  stays mounted — so the reader never re-renders and scroll position is
+   *  preserved across toggles. */
+  collapsed: boolean
 }
 
 function ReaderSidebar({
   scenes,
   locations,
+  arcs,
+  peaks,
   currentSceneIdx,
   onJumpScene,
+  onJumpPeak,
   bookmarks,
   onJumpBookmark,
   onDeleteBookmark,
+  collapsed,
 }: SidebarProps) {
   const current = scenes[currentSceneIdx]
-
+  // Collapse animation: width + horizontal padding shrink to zero. The inner
+  // content stays in the DOM (visibility/opacity only) so toggling never
+  // remounts the reader or resets scroll. Reduced-motion users skip the spring.
   return (
     <motion.aside
-      initial={{ x: 40, opacity: 0 }}
-      animate={{ x: 0, opacity: 1 }}
+      initial={false}
+      animate={{
+        width: collapsed ? 0 : 288,
+        paddingLeft: collapsed ? 0 : 16,
+        paddingRight: collapsed ? 0 : 16,
+        opacity: collapsed ? 0 : 1,
+      }}
       transition={spring.gentle}
-      className="sticky top-20 hidden h-[calc(100vh-6rem)] w-72 shrink-0 overflow-y-auto rounded-xl border border-amber/15 bg-plum/20 p-4 backdrop-blur-xl scrollbar-lemniscate lg:block"
+      className="sticky top-20 hidden h-[calc(100vh-6rem)] shrink-0 overflow-hidden rounded-xl border border-amber/15 bg-plum/20 backdrop-blur-xl scrollbar-lemniscate lg:block"
       aria-label="Reader explorer"
+      aria-hidden={collapsed}
+      style={{ pointerEvents: collapsed ? 'none' : 'auto' }}
     >
       {/* Current scene */}
       {current && (
@@ -1693,7 +2118,7 @@ function ReaderSidebar({
                 <span className="shrink-0 font-mono text-[10px] text-amber/50">
                   {String(s.index + 1).padStart(2, '0')}
                 </span>
-                <span className="truncate">{s.title}</span>
+                <span className="min-w-0 flex-1 truncate">{s.title}</span>
               </button>
             )
           })}
@@ -1749,6 +2174,71 @@ function ReaderSidebar({
           </div>
         )}
       </div>
+
+      {/* Narrative arcs */}
+      {arcs && arcs.length > 0 && (
+        <div className="mb-5">
+          <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.25em] text-amber/50">
+            Arcs · {arcs.length}
+          </p>
+          <div className="space-y-1">
+            {arcs.map((a) => {
+              const color =
+                a.arcType === 'CLIMAX' ? 'var(--tension)'
+                  : a.arcType === 'INCITING' ? 'var(--amber)'
+                    : a.arcType === 'RESOLUTION' ? 'var(--slate)'
+                      : 'var(--amber)'
+              return (
+                <button
+                  key={a.id}
+                  onClick={() => onJumpScene(a.startSceneIdx)}
+                  className="group flex w-full flex-col gap-1 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-amber/5"
+                >
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="h-1.5 w-1.5 shrink-0 rounded-full"
+                      style={{ background: color }}
+                    />
+                    <span className="text-[12px] text-ivory">{a.name}</span>
+                  </div>
+                  <div className="ml-3.5 h-1 w-full max-w-[120px] overflow-hidden rounded-full bg-amber/10">
+                    <div
+                      className="h-full rounded-full"
+                      style={{ width: `${Math.max(4, Math.min(100, a.intensity))}%`, background: color }}
+                    />
+                  </div>
+                  <p className="ml-3.5 font-mono text-[9px] uppercase tracking-wide text-amber/50">
+                    Scenes {a.startSceneIdx + 1}–{a.endSceneIdx + 1}
+                  </p>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Emotional peaks */}
+      {peaks && peaks.length > 0 && (
+        <div className="mb-5">
+          <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.25em] text-amber/50">
+            Key Moments · {peaks.length}
+          </p>
+          <div className="max-h-60 space-y-0.5 overflow-y-auto scrollbar-lemniscate">
+            {peaks.slice(0, 20).map((p) => (
+              <button
+                key={p.id}
+                onClick={() => onJumpPeak?.(p)}
+                className="group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-amber/5"
+              >
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber/40 group-hover:bg-amber" />
+                <span className="truncate text-[11px] italic text-slate group-hover:text-ivory">
+                  {p.snippet}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </motion.aside>
   )
 }
@@ -1866,9 +2356,15 @@ function BottomNav({
 export function ReaderView() {
   const narrativeId = useLemniscate((s) => s.activeNarrativeId)
   const activeMode = useLemniscate((s) => s.activeMode)
+  const activeDocumentId = useLemniscate((s) => s.activeDocumentId)
+  const desiredMode = useLemniscate((s) => s.desiredMode)
+  const setDesiredMode = useLemniscate((s) => s.setDesiredMode)
   const fontSize = useLemniscate((s) => s.readerFontSize)
   const readerTheme = useLemniscate((s) => s.readerTheme)
   const immersive = useLemniscate((s) => s.readerImmersive)
+  const sidebarCollapsed = useLemniscate((s) => s.readerSidebarCollapsed)
+  const toggleSidebar = useLemniscate((s) => s.toggleReaderSidebar)
+  const reducedMotion = useLemniscate((s) => s.reducedMotion)
   const openLibrary = useLemniscate((s) => s.openLibrary)
   const openCharacters = useLemniscate((s) => s.openCharacters)
   const openScenes = useLemniscate((s) => s.openScenes)
@@ -1920,6 +2416,29 @@ export function ReaderView() {
   const currentParagraphIdxRef = useRef(currentParagraphIdx)
   const activeModeRef = useRef(activeMode)
   const narrativeModeRef = useRef<ReaderMode | null>(null)
+  // Dual-mode: cache loaded narratives so switching back is instant, and a
+  // flag to suppress progress-save churn during a mode swap.
+  const narrativeCacheRef = useRef<Map<string, ReaderNarrative>>(new Map())
+  const switchingRef = useRef(false)
+  // The id of the narrative currently rendered in the reader. Progress saves
+  // and bookmark loads target THIS id (not the originally-opened one) so a
+  // mode switch persists state to the correct sibling narrative.
+  const loadedNarrativeIdRef = useRef<string | null>(narrativeId)
+
+  /** Re-apply a scroll percentage after the DOM has settled post-render. */
+  const applyScrollPct = React.useCallback((scrollPct: number) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const scrollableHeight =
+          document.documentElement.scrollHeight - window.innerHeight
+        const targetY = (scrollPct / 100) * Math.max(0, scrollableHeight)
+        window.scrollTo({ top: targetY, behavior: 'auto' })
+        setTimeout(() => {
+          switchingRef.current = false
+        }, 400)
+      })
+    })
+  }, [])
   React.useEffect(() => {
     currentSceneIdxRef.current = currentSceneIdx
   }, [currentSceneIdx])
@@ -1931,6 +2450,11 @@ export function ReaderView() {
   }, [activeMode])
   React.useEffect(() => {
     if (narrative) narrativeModeRef.current = narrative.mode
+  }, [narrative])
+  // Keep loadedNarrativeIdRef in sync with the rendered narrative so
+  // progress saves target the currently-shown row (correct after a switch).
+  React.useEffect(() => {
+    if (narrative) loadedNarrativeIdRef.current = narrative.id
   }, [narrative])
 
   // ─── Fetch narrative ──────────────────────────────────────────────────────
@@ -1965,6 +2489,102 @@ export function ReaderView() {
     return cleanup
   }, [fetchNarrative])
 
+  // Cache the loaded narrative so a mode switch back doesn't refetch.
+  React.useEffect(() => {
+    if (narrative) {
+      narrativeCacheRef.current.set(narrative.id, narrative)
+      // Track the currently-rendered narrative's id so progress saves and
+      // bookmark loads target the correct row after a mode switch.
+      loadedNarrativeIdRef.current = narrative.id
+    }
+  }, [narrative])
+
+  // ─── Dual-mode: resolve both sibling narratives on the same document ───────
+  // Original and Cinematified are separate Narrative rows. We discover both via
+  // the document's narrative list so the reader can toggle between them without
+  // reprocessing (both already exist from a BOTH job). Modes without a sibling
+  // simply hide the toggle.
+  const [siblingMap, setSiblingMap] = React.useState<Record<ReaderMode, string | null>>({
+    ORIGINAL: null,
+    CINEMATIFIED: null,
+  })
+  React.useEffect(() => {
+    if (!activeDocumentId) return
+    let cancelled = false
+    fetch(`/api/documents/${activeDocumentId}/narratives`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return
+        const narrs: { id: string; mode: string }[] = data.narratives ?? []
+        const map: Record<ReaderMode, string | null> = { ORIGINAL: null, CINEMATIFIED: null }
+        for (const n of narrs) {
+          if (n.mode === 'ORIGINAL') map.ORIGINAL = n.id
+          else if (n.mode === 'CINEMATIFIED') map.CINEMATIFIED = n.id
+        }
+        setSiblingMap(map)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [activeDocumentId])
+
+  // The effective narrative id follows `desiredMode` when its sibling exists;
+  // otherwise it stays on the originally-opened narrative.
+  const effectiveNarrativeId =
+    (desiredMode && siblingMap[desiredMode]) || narrativeId
+
+  // ─── Mode switch: swap to the sibling narrative, preserving scroll position ─
+  // No reprocessing — both narratives already exist. We capture the current
+  // scroll percentage before the swap and re-apply it after the new narrative's
+  // DOM settles (two RAFs), so continuous reading position is preserved.
+  React.useEffect(() => {
+    if (!effectiveNarrativeId) return
+    // Same id as what's loaded → nothing to do.
+    if (narrative && narrative.id === effectiveNarrativeId) return
+    // Capture scroll % before swapping.
+    const scrollPct =
+      document.documentElement.scrollHeight > window.innerHeight
+        ? Math.min(
+            100,
+            Math.max(
+              0,
+              (window.scrollY /
+                Math.max(1, document.documentElement.scrollHeight - window.innerHeight)) *
+                100,
+            ),
+          )
+        : 0
+    const cached = narrativeCacheRef.current.get(effectiveNarrativeId)
+    switchingRef.current = true
+    if (cached) {
+      setNarrative(cached)
+      setLoading(false)
+      applyScrollPct(scrollPct)
+    } else {
+      const controller = new AbortController()
+      setLoading(true)
+      fetch(`/api/narratives/${effectiveNarrativeId}`, { signal: controller.signal })
+        .then(async (res) => {
+          if (!res.ok) throw new Error(`HTTP ${res.status}`)
+          const data = await res.json()
+          if (!data.narrative) throw new Error('No narrative in response')
+          setNarrative(data.narrative as ReaderNarrative)
+          setLoading(false)
+          applyScrollPct(scrollPct)
+        })
+        .catch((err: unknown) => {
+          if (err instanceof DOMException && err.name === 'AbortError') return
+          setError(err instanceof Error ? err.message : 'Unknown fetch error')
+          setLoading(false)
+        })
+      return () => controller.abort()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveNarrativeId])
+
+  // (applyScrollPct + switchingRef are declared with the other refs above.)
+
   // ─── Theme sync: readerTheme follows the global theme, toggle updates both ─
   React.useEffect(() => {
     if (globalTheme === 'light' || globalTheme === 'dark') {
@@ -1972,26 +2592,35 @@ export function ReaderView() {
     }
   }, [globalTheme, readerTheme, setReaderTheme])
 
-  // ─── Reading progress: fetch on mount ──────────────────────────────────────
+  // ─── Reading progress: fetch whenever the effective narrative changes ───────
+  // (Initial open AND after a mode switch — each narrative has its own progress.)
   React.useEffect(() => {
-    if (!narrativeId) return
+    if (!effectiveNarrativeId) return
     let cancelled = false
-    fetch(`/api/narratives/${narrativeId}/progress`)
+    // Re-enable position restoration for the freshly-loaded narrative.
+    setProgressRestored(false)
+    fetch(`/api/narratives/${effectiveNarrativeId}/progress`)
       .then((r) => r.json())
       .then((data) => {
         if (cancelled) return
         if (data.progress) {
           setSavedProgress(data.progress as ReaderProgress)
+        } else {
+          setSavedProgress(null)
         }
       })
       .catch(() => {})
     return () => {
       cancelled = true
     }
-  }, [narrativeId])
+  }, [effectiveNarrativeId])
 
   // ─── Restore scroll position once narrative renders ────────────────────────
+  // Suppressed during a mode switch (switchingRef) — the mode-switch effect
+  // already re-applies the captured reading position. On initial open
+  // switchingRef is false, so saved-progress restoration works as before.
   React.useEffect(() => {
+    if (switchingRef.current) return
     if (!narrative || !savedProgress || progressRestored) return
     if (savedProgress.scrollPct <= 0) {
       setProgressRestored(true)
@@ -2018,9 +2647,13 @@ export function ReaderView() {
   }, [narrative, savedProgress, progressRestored])
 
   // ─── Save reading progress (debounced ~3s) ─────────────────────────────────
+  // Targets the *rendered* narrative (loadedNarrativeIdRef), so a mode switch
+  // persists progress to the correct sibling row rather than the one originally
+  // opened.
   const saveProgress = React.useCallback(
     (force = false) => {
-      if (!narrativeId || restoringRef.current) return
+      const targetId = loadedNarrativeIdRef.current
+      if (!targetId || restoringRef.current) return
       const now = Date.now()
       if (!force && now - lastSaveRef.current < 2500) return
 
@@ -2058,19 +2691,22 @@ export function ReaderView() {
         })
       }
 
-      const isCine =
-        activeModeRef.current === 'CINEMATIFIED' &&
-        narrativeModeRef.current === 'CINEMATIFIED'
+      // sceneIndex is meaningful only when the *rendered* narrative is
+      // cinematified. narrativeModeRef tracks the loaded narrative's mode, so
+      // it stays correct across a mode switch (activeModeRef would be stale).
+      const isCine = narrativeModeRef.current === 'CINEMATIFIED'
       const sceneIndex = isCine ? currentSceneIdxRef.current : 0
 
       lastSaveRef.current = now
-      fetch(`/api/narratives/${narrativeId}/progress`, {
+      fetch(`/api/narratives/${targetId}/progress`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ scrollPct, sceneIndex, paragraphIdx }),
       }).catch(() => {})
     },
-    [narrativeId],
+    // No deps: the target id is read from a ref so this callback is stable
+    // and always targets the currently-rendered narrative.
+    [],
   )
 
   // Auto-save every 3s while reading
@@ -2087,16 +2723,17 @@ export function ReaderView() {
     }
   }, [saveProgress])
 
-  // ─── Bookmarks: fetch on mount + when narrativeId changes ──────────────────
+  // ─── Bookmarks: fetch on mount + when the effective narrative changes ───────
+  // (effectiveNarrativeId so bookmarks follow a mode switch to the sibling row.)
   const refreshBookmarks = React.useCallback(() => {
-    if (!narrativeId) return
-    fetch(`/api/narratives/${narrativeId}/bookmarks`)
+    if (!effectiveNarrativeId) return
+    fetch(`/api/narratives/${effectiveNarrativeId}/bookmarks`)
       .then((r) => r.json())
       .then((data) =>
         setBookmarks((data.bookmarks as ReaderBookmark[]) || []),
       )
       .catch(() => {})
-  }, [narrativeId])
+  }, [effectiveNarrativeId])
 
   React.useEffect(() => {
     refreshBookmarks()
@@ -2209,6 +2846,21 @@ export function ReaderView() {
         }
         return
       }
+      // [ : toggle the explorer sidebar (cinematified, non-immersive only).
+      // Ignored while typing in an input or while any overlay is open.
+      if (
+        e.key === '[' &&
+        activeMode === 'CINEMATIFIED' &&
+        !immersive &&
+        !searchOpen &&
+        !bookmarksListOpen &&
+        !(e.target instanceof HTMLInputElement) &&
+        !(e.target instanceof HTMLTextAreaElement)
+      ) {
+        e.preventDefault()
+        toggleSidebar()
+        return
+      }
       // Arrow keys: navigate scenes (cinematified only) — disabled while search is open
       if (
         activeMode === 'CINEMATIFIED' &&
@@ -2258,9 +2910,9 @@ export function ReaderView() {
   )
 
   // ─── Power-user callbacks ──────────────────────────────────────────────────
-  // Derived effective mode (also computed post-load in the render section)
-  const isCinematifiedMode =
-    activeMode === 'CINEMATIFIED' && narrative?.mode === 'CINEMATIFIED'
+  // Derived from the *rendered* narrative's mode so it stays correct after a
+  // dual-mode switch (the loaded row — not the originally-opened activeMode).
+  const isCinematifiedMode = narrative?.mode === 'CINEMATIFIED'
 
   // Track current paragraph via scroll (throttled by RAF)
   React.useEffect(() => {
@@ -2325,7 +2977,7 @@ export function ReaderView() {
 
   // Toggle bookmark at current position
   const onToggleBookmark = React.useCallback(() => {
-    if (!narrativeId) return
+    if (!effectiveNarrativeId) return
     // If current pos is already bookmarked, remove it
     if (isCurrentBookmarked) {
       const existing = isCinematifiedMode
@@ -2335,7 +2987,7 @@ export function ReaderView() {
           )
       if (existing) {
         fetch(
-          `/api/narratives/${narrativeId}/bookmarks?bookmarkId=${existing.id}`,
+          `/api/narratives/${effectiveNarrativeId}/bookmarks?bookmarkId=${existing.id}`,
           { method: 'DELETE' },
         )
           .then(() => {
@@ -2356,7 +3008,7 @@ export function ReaderView() {
             : ''
         }`
       : `${scrollPct}% through`
-    fetch(`/api/narratives/${narrativeId}/bookmarks`, {
+    fetch(`/api/narratives/${effectiveNarrativeId}/bookmarks`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -2372,7 +3024,7 @@ export function ReaderView() {
       })
       .catch(() => {})
   }, [
-    narrativeId,
+    effectiveNarrativeId,
     isCurrentBookmarked,
     isCinematifiedMode,
     bookmarks,
@@ -2403,9 +3055,9 @@ export function ReaderView() {
   // Delete a bookmark
   const onDeleteBookmark = React.useCallback(
     (id: string) => {
-      if (!narrativeId) return
+      if (!effectiveNarrativeId) return
       fetch(
-        `/api/narratives/${narrativeId}/bookmarks?bookmarkId=${id}`,
+        `/api/narratives/${effectiveNarrativeId}/bookmarks?bookmarkId=${id}`,
         { method: 'DELETE' },
       )
         .then(() => {
@@ -2414,7 +3066,7 @@ export function ReaderView() {
         })
         .catch(() => {})
     },
-    [narrativeId, refreshBookmarks, toast],
+    [effectiveNarrativeId, refreshBookmarks, toast],
   )
 
   // Search result jump handlers
@@ -2434,6 +3086,20 @@ export function ReaderView() {
     }
   }, [])
 
+  // Jump to an emotional peak by scrolling to its containing scene. Peaks carry
+  // a sceneId; we resolve it to the scene's DOM element and scroll there. (The
+  // peak's char-offset isn't directly mappable to scroll position, so the scene
+  // is the closest faithful anchor — and the peak lives within it.)
+  const onJumpPeak = React.useCallback((peak: ReaderPeak) => {
+    if (!peak.sceneId) return
+    const el = document.querySelector(`[data-scene-id="${peak.sceneId}"]`)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      el.classList.add('reader-flash-highlight')
+      setTimeout(() => el.classList.remove('reader-flash-highlight'), 2000)
+    }
+  }, [])
+
   // Continue-reading hint actions
   const onDismissHint = React.useCallback(() => {
     setShowContinueHint(false)
@@ -2442,14 +3108,14 @@ export function ReaderView() {
   const onStartOver = React.useCallback(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' })
     setShowContinueHint(false)
-    if (narrativeId) {
-      fetch(`/api/narratives/${narrativeId}/progress`, {
+    if (effectiveNarrativeId) {
+      fetch(`/api/narratives/${effectiveNarrativeId}/progress`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ scrollPct: 0, sceneIndex: 0, paragraphIdx: 0 }),
       }).catch(() => {})
     }
-  }, [narrativeId])
+  }, [effectiveNarrativeId])
 
   // ─── Empty state ───────────────────────────────────────────────────────────
   if (!narrativeId || !activeMode) {
@@ -2478,7 +3144,11 @@ export function ReaderView() {
   }
 
   // ─── Loaded ────────────────────────────────────────────────────────────────
-  const isCinematified = activeMode === 'CINEMATIFIED' && narrative.mode === 'CINEMATIFIED'
+  // The rendered narrative's mode is authoritative — after a mode switch the
+  // sibling row loads with its own `mode`, and `isCinematified` follows it.
+  // (`activeMode` from the store reflects only the originally-opened narrative
+  // and is intentionally NOT used here, so toggling updates the layout.)
+  const isCinematified = narrative.mode === 'CINEMATIFIED'
   const effectiveMode: ReaderMode = isCinematified ? 'CINEMATIFIED' : 'ORIGINAL'
 
   return (
@@ -2519,6 +3189,14 @@ export function ReaderView() {
             bookmarks={bookmarks}
             onJumpBookmark={onJumpBookmark}
             onDeleteBookmark={onDeleteBookmark}
+            showModeToggle={
+              !!(siblingMap.ORIGINAL && siblingMap.CINEMATIFIED)
+            }
+            desiredMode={desiredMode}
+            onSetDesiredMode={setDesiredMode}
+            showSidebarToggle={isCinematified}
+            sidebarCollapsed={sidebarCollapsed}
+            onToggleSidebar={toggleSidebar}
           />
         )}
       </AnimatePresence>
@@ -2550,12 +3228,32 @@ export function ReaderView() {
           <ReaderSidebar
             scenes={narrative.scenes}
             locations={narrative.locations}
+            arcs={narrative.arcs ?? []}
+            peaks={narrative.peaks ?? []}
             currentSceneIdx={currentSceneIdx}
             onJumpScene={jumpScene}
+            onJumpPeak={onJumpPeak}
             bookmarks={bookmarks}
             onJumpBookmark={onJumpBookmark}
             onDeleteBookmark={onDeleteBookmark}
+            collapsed={sidebarCollapsed}
           />
+        )}
+
+        {/* Collapsed-rail restore button — a thin tab to reopen the explorer.
+         *  The reader itself is untouched by this toggle (sibling layout only). */}
+        {isCinematified && !immersive && sidebarCollapsed && (
+          <motion.button
+            type="button"
+            onClick={toggleSidebar}
+            initial={{ opacity: 0, x: 10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={spring.gentle}
+            aria-label="Show explorer"
+            className="sticky top-20 hidden h-10 shrink-0 items-center rounded-l-lg border border-amber/15 border-r-0 bg-plum/30 px-1.5 text-amber/70 backdrop-blur-xl transition-colors hover:bg-amber/10 hover:text-amber lg:flex"
+          >
+            <PanelRightOpen className="h-4 w-4" />
+          </motion.button>
         )}
       </div>
 

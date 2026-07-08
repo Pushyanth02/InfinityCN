@@ -1,6 +1,6 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# dependencies
+# ─── Dependencies ────────────────────────────────────────────────────────────
 node_modules
 /.pnp
 .pnp.*
@@ -10,68 +10,92 @@ node_modules
 !.yarn/releases
 !.yarn/versions
 
-# testing
+# ─── Testing & Coverage ─────────────────────────────────────────────────────
 /coverage
+*.lcov
+junit.xml
+e2e-report*.txt
+e2e-run*.txt
 
-# next.js
+# ─── Next.js ─────────────────────────────────────────────────────────────────
 /.next/
 /out/
+.next/standalone/
 
-# production
+# ─── Production Build ────────────────────────────────────────────────────────
 /build
 
-# misc
-.DS_Store
-*.pem
+# ─── Environment Files ──────────────────────────────────────────────────────
+# All .env files are ignored by default.  Only .env.example is committed.
+.env*
+!.env.example
 
-# debug
+# ─── OS Files ────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+Desktop.ini
+._*
+
+# ─── IDE / Editor ────────────────────────────────────────────────────────────
+.idea/
+*.swp
+*.swo
+*~
+
+# ─── Certificates & Keys ────────────────────────────────────────────────────
+*.pem
+*.key
+*.cert
+*.crt
+
+# ─── Debug & Log Files ──────────────────────────────────────────────────────
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+*.log
+server.log
+dev.log
+dev.out.log
+dev_test.log
 
-# env files (can opt-in for committing if needed)
-.env*
-
-# vercel
-.vercel
-
-# e2e test output reports
-e2e-report.txt
-e2e-run.txt
-e2e-run2.txt
-e2e-run3.txt
-e2e-run4.txt
-
-# typescript
+# ─── TypeScript ──────────────────────────────────────────────────────────────
 *.tsbuildinfo
 next-env.d.ts
+
+# ─── Vercel ──────────────────────────────────────────────────────────────────
+.vercel
+
+# ─── AI / Agent Config (user-specific) ──────────────────────────────────────
 local-*
 .claude
 .z-ai-config
-*.log
-dev.log
-dev.out.log
+.kiro/
 test
 prompt
+agent-ctx/
+skills-lock.json
 
-server.log
-# Skills directory
+# ─── Skills ──────────────────────────────────────────────────────────────────
 /skills/
 
-# build output — standalone (47k+ files, rebuilt on demand)
-.next/standalone/
+# ─── Redis (reserved for future rate-limit/queue use) ───────────────────────
+dump.rdb
+appendonly.aof
 
-# bun lockfiles — deterministic via bun.lock-binary
+# ─── Bun ─────────────────────────────────────────────────────────────────────
 bun.lock
 
-# auto-generated PID files from dev scripts
+# ─── PID Files ───────────────────────────────────────────────────────────────
+*.pid
 .zscripts/dev.pid
 
-# file uploads (local storage)
+# ─── File Uploads (local storage) ────────────────────────────────────────────
 public/uploads/
+.tmp-upload-*
 
-# SQLite database files (runtime data — must not be committed).
+# ─── SQLite Database Files ───────────────────────────────────────────────────
+# Runtime data — must not be committed.
 # Prisma resolves `file:` URLs relative to CWD at runtime and relative to the
 # schema at CLI time, which is why both locations can appear.
 db/*.db
@@ -83,5 +107,5 @@ prisma/db/*.db-shm
 prisma/db/*.db-wal
 prisma/db/*.db-journal
 
-# database backups
+# ─── Database Backups ────────────────────────────────────────────────────────
 /backups/

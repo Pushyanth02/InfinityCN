@@ -11,7 +11,10 @@ import { getClientIP } from '@/lib/middleware/rate-limit'
 import { validateIdParam } from '@/lib/middleware/validate-id'
 import { enforceBodySize } from '@/lib/middleware/body-size'
 
-export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const blocked = await securityCheck(req, `bookmarks:${getClientIP(req)}`, 60)
+  if (blocked) return blocked
+
   const { id } = await ctx.params
   const invalid = validateIdParam(id, 'narrativeId')
   if (invalid) return invalid
@@ -23,7 +26,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
 }
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const blocked = securityCheck(req, `bookmarks:${getClientIP(req)}`, 20)
+  const blocked = await securityCheck(req, `bookmarks:${getClientIP(req)}`, 20)
   if (blocked) return blocked
   const tooLarge = enforceBodySize(req)
   if (tooLarge) return tooLarge
@@ -31,22 +34,31 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const { id } = await ctx.params
   const invalid = validateIdParam(id, 'narrativeId')
   if (invalid) return invalid
-  const body = await req.json()
+  let body: Record<string, unknown>
+  try {
+    body = (await req.json()) as Record<string, unknown>
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+  }
+
+  // Validate and sanitize bookmark fields
+  const sceneIndex = typeof body.sceneIndex === 'number' && Number.isFinite(body.sceneIndex)
+    ? Math.max(0, Math.trunc(body.sceneIndex)) : null
+  const paragraphIdx = typeof body.paragraphIdx === 'number' && Number.isFinite(body.paragraphIdx)
+    ? Math.max(0, Math.trunc(body.paragraphIdx)) : null
+  const offset = typeof body.offset === 'number' && Number.isFinite(body.offset)
+    ? Math.max(0, Math.trunc(body.offset)) : 0
+  const label = typeof body.label === 'string' ? body.label.slice(0, 200).trim() || null : null
+  const note = typeof body.note === 'string' ? body.note.slice(0, 1000).trim() || null : null
+
   const bookmark = await db.bookmark.create({
-    data: {
-      narrativeId: id,
-      sceneIndex: body.sceneIndex ?? null,
-      paragraphIdx: body.paragraphIdx ?? null,
-      offset: body.offset ?? 0,
-      label: body.label ?? null,
-      note: body.note ?? null,
-    },
+    data: { narrativeId: id, sceneIndex, paragraphIdx, offset, label, note },
   })
   return NextResponse.json({ bookmark })
 }
 
 export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const blocked = securityCheck(req, `bookmarks:${getClientIP(req)}`, 20)
+  const blocked = await securityCheck(req, `bookmarks:${getClientIP(req)}`, 20)
   if (blocked) return blocked
 
   const { id: narrativeId } = await ctx.params

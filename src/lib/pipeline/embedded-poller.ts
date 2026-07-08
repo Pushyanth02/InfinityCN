@@ -17,15 +17,18 @@
  */
 
 import { claimNextJob, executeJobWithRetry, rehydrateStalledJobs } from './job-runner'
+import { createLogger } from '../logger'
+
+const logger = createLogger('embedded-poller')
 
 // Process-level resilience: prevent uncaught errors from killing the server
 if (!process.env.LEMNISCATE_GUARDS_SET) {
   process.env.LEMNISCATE_GUARDS_SET = '1'
   process.on('uncaughtException', (err) => {
-    console.error('[lemniscate] UNCAUGHT EXCEPTION (surviving):', (err as Error)?.message || err)
+    logger.error('UNCAUGHT EXCEPTION (surviving)', { error: (err as Error)?.message || String(err) })
   })
   process.on('unhandledRejection', (err) => {
-    console.error('[lemniscate] UNHANDLED REJECTION (surviving):', err)
+    logger.error('UNHANDLED REJECTION (surviving)', { error: String(err) })
   })
 }
 
@@ -37,17 +40,17 @@ let inFlight = 0
 export function startEmbeddedPoller() {
   if (started) return
   started = true
-  console.log('[embedded-poller] starting…')
+  logger.info('starting embedded poller')
 
   // Re-hydrate stalled jobs (only those that are truly stale)
   ;(async () => {
     try {
       const count = await rehydrateStalledJobs()
       if (count > 0) {
-        console.log(`[embedded-poller] re-queued ${count} stale job(s)`)
+        logger.info('re-queued stale jobs', { count })
       }
     } catch (err) {
-      console.error('[embedded-poller] re-hydrate error:', err)
+      logger.error('re-hydrate error', { error: (err as Error).message })
     }
   })()
 
@@ -58,13 +61,13 @@ export function startEmbeddedPoller() {
       if (!claim) return
 
       inFlight += 1
-      console.log(`[embedded-poller] claimed job ${claim.jobId} (mode=${claim.mode}, doc=${claim.documentId})`)
+      logger.info('claimed job', { jobId: claim.jobId, mode: claim.mode, documentId: claim.documentId })
 
       executeJobWithRetry(claim, '[embedded-poller]')
-        .catch((err) => console.error(`[embedded-poller] job ${claim.jobId} crashed:`, err))
+        .catch((err) => logger.error('job crashed', { jobId: claim.jobId, error: (err as Error).message }))
         .finally(() => { inFlight -= 1 })
     } catch (err) {
-      console.error('[embedded-poller] poll error:', err)
+      logger.error('poll error', { error: (err as Error).message })
     }
   }
 

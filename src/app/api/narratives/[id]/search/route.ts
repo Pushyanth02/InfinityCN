@@ -10,7 +10,7 @@ import { securityCheck } from '@/lib/middleware/security'
 import { getClientIP } from '@/lib/middleware/rate-limit'
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const blocked = securityCheck(req, `search:${getClientIP(req)}`, 30)
+  const blocked = await securityCheck(req, `search:${getClientIP(req)}`, 30)
   if (blocked) return blocked
 
   const { id } = await ctx.params
@@ -20,6 +20,10 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   if (!q || q.length < 2) {
     return NextResponse.json({ results: [] })
   }
+  // Cap query length to prevent excessive scanning across all paragraphs
+  const maxQueryLen = 200
+  const query = q.length > maxQueryLen ? q.slice(0, maxQueryLen) : q
+  const lowerQ = query.toLowerCase()
 
   const narrative = await db.narrative.findUnique({
     where: { id },
@@ -39,14 +43,13 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     matchCount: number
   }> = []
 
-  const lowerQ = q.toLowerCase()
   const makeSnippet = (text: string, maxLen = 120): { snippet: string; count: number } => {
     const lower = text.toLowerCase()
     const idx = lower.indexOf(lowerQ)
     const count = lower.split(lowerQ).length - 1
     if (idx === -1) return { snippet: text.slice(0, maxLen) + (text.length > maxLen ? '…' : ''), count }
     const start = Math.max(0, idx - 40)
-    const end = Math.min(text.length, idx + q.length + 60)
+    const end = Math.min(text.length, idx + query.length + 60)
     const prefix = start > 0 ? '…' : ''
     const suffix = end < text.length ? '…' : ''
     return { snippet: prefix + text.slice(start, end) + suffix, count }

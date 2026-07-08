@@ -11,8 +11,13 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV DATABASE_URL=file:/app/db/custom.db
 
-RUN addgroup --system --gid 1001 worker && \
+RUN apk update && apk upgrade --no-cache && \
+    addgroup --system --gid 1001 worker && \
     adduser --system --uid 1001 worker
+
+LABEL org.opencontainers.image.title="Lemniscate Worker"
+LABEL org.opencontainers.image.description="Standalone background job processor for Lemniscate"
+LABEL org.opencontainers.image.vendor="Lemniscate"
 
 # Copy the full source (worker imports from ../../src)
 COPY package.json ./
@@ -21,7 +26,8 @@ COPY prisma ./prisma/
 COPY src ./src/
 COPY mini-services/lemniscate-worker ./mini-services/lemniscate-worker/
 
-RUN bun install --production && bunx prisma generate
+# --ignore-scripts prevents lifecycle scripts from executing during installation.
+RUN bun install --production --ignore-scripts && bunx prisma generate
 
 # Create db directory with correct permissions
 RUN mkdir -p ./db && chown -R worker:worker ./db

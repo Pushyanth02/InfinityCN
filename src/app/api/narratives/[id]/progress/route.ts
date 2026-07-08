@@ -11,7 +11,10 @@ import { getClientIP } from '@/lib/middleware/rate-limit'
 import { validateIdParam } from '@/lib/middleware/validate-id'
 import { enforceBodySize } from '@/lib/middleware/body-size'
 
-export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const blocked = await securityCheck(req, `progress:${getClientIP(req)}`, 60)
+  if (blocked) return blocked
+
   const { id } = await ctx.params
   const invalid = validateIdParam(id, 'narrativeId')
   if (invalid) return invalid
@@ -20,7 +23,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
 }
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const blocked = securityCheck(req, `progress:${getClientIP(req)}`, 30)
+  const blocked = await securityCheck(req, `progress:${getClientIP(req)}`, 30)
   if (blocked) return blocked
   const tooLarge = enforceBodySize(req)
   if (tooLarge) return tooLarge

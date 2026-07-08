@@ -8,10 +8,22 @@
  */
 
 import { NextResponse } from 'next/server'
+import { timingSafeEqual } from 'node:crypto'
 import { rateLimit as tokenBucketRateLimit } from './rate-limit'
 import { createLogger } from '../logger'
 
 const logger = createLogger('security')
+
+/**
+ * Constant-time string comparison to prevent timing side-channel attacks.
+ * Returns false immediately if lengths differ (this leaks length, not content).
+ */
+function safeEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a)
+  const bufB = Buffer.from(b)
+  if (bufA.length !== bufB.length) return false
+  return timingSafeEqual(bufA, bufB)
+}
 
 // ─── Production Startup Guard ────────────────────────────────────────────────
 
@@ -31,10 +43,11 @@ if (process.env.NODE_ENV === 'production' && !API_KEY) {
 export function checkAuth(req: Request): boolean {
   if (!API_KEY) return true
   // Programmatic / cross-origin callers authenticate with the shared secret.
+  // Uses constant-time comparison to prevent timing side-channel attacks.
   const authHeader = req.headers.get('authorization')
-  if (authHeader === `Bearer ${API_KEY}`) return true
+  if (authHeader?.startsWith('Bearer ') && safeEqual(authHeader.slice(7), API_KEY)) return true
   const apiKeyHeader = req.headers.get('x-api-key')
-  if (apiKeyHeader === API_KEY) return true
+  if (apiKeyHeader && safeEqual(apiKeyHeader, API_KEY)) return true
   // First-party browser requests (the app's own UI) cannot carry the
   // server-side secret — exposing it in client code would defeat its purpose.
   // Accept them when the request provably originates from a trusted, same-site
@@ -106,15 +119,25 @@ export function checkCSRF(req: Request): boolean {
 }
 
 /** Combined security check: auth + CSRF + rate limiting */
-export function securityCheck(req: Request, rateLimitKey: string, rateLimitMax: number): NextResponse | null {
+export async function securityCheck(req: Request, rateLimitKey: string, rateLimitMax: number): Promise<NextResponse | null> {
   if (!checkAuth(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
   if (!checkCSRF(req)) {
     return NextResponse.json({ error: 'Forbidden — invalid origin' }, { status: 403 })
   }
-  if (!tokenBucketRateLimit(rateLimitKey, rateLimitMax)) {
-    return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 })
+  const rl = await tokenBucketRateLimit(rateLimitKey, rateLimitMax)
+  if (!rl.allowed) {
+    const retryAfterSec = Math.ceil(rl.resetMs / 1000)
+    return NextResponse.json({ error: 'Rate limit exceeded' }, {
+      status: 429,
+      headers: {
+        'Retry-After': String(retryAfterSec),
+        'X-RateLimit-Limit': String(rateLimitMax),
+        'X-RateLimit-Remaining': '0',
+        'X-RateLimit-Reset': String(Math.ceil(Date.now() / 1000) + retryAfterSec),
+      },
+    })
   }
   return null
 }

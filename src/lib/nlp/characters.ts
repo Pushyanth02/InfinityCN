@@ -623,20 +623,30 @@ function collectNameOffsets(
   const forms = [...formToChar.keys()].sort((a, b) => b.length - a.length)
   if (forms.length === 0) return offsetsByChar
 
+  // Single alternation regex: one pass over text instead of N passes.
+  // Each form is escaped and wrapped in a named-like pattern. We use a single
+  // regex and resolve which form matched by length-descending check at each
+  // match position (avoids the O(F*T) cost of N separate regex scans).
+  const alternation = forms
+    .map((f) => `\\b${f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`)
+    .join('|')
+  const re = new RegExp(alternation, 'g')
+
   const claimed: Array<[number, number]> = [] // [start,end) spans already matched
-  for (const form of forms) {
-    const ci = formToChar.get(form)!
-    const re = new RegExp(`\\b${form.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g')
-    let m: RegExpExecArray | null
-    while ((m = re.exec(text)) !== null) {
-      const start = m.index
-      const end = start + m[0].length
-      // Skip if inside an already-claimed (longer) span.
-      if (claimed.some(([s, e]) => start >= s && end <= e)) continue
-      offsetsByChar[ci].push(start)
-      claimed.push([start, end])
-    }
+  let m: RegExpExecArray | null
+  while ((m = re.exec(text)) !== null) {
+    const start = m.index
+    const end = start + m[0].length
+    // Skip if inside an already-claimed (longer) span.
+    if (claimed.some(([s, e]) => start >= s && end <= e)) continue
+    // Find which form matched (longest first — deterministic).
+    const matched = m[0]
+    const ci = formToChar.get(matched)
+    if (ci === undefined) continue
+    offsetsByChar[ci].push(start)
+    claimed.push([start, end])
   }
+
   for (const arr of offsetsByChar) arr.sort((a, b) => a - b)
   return offsetsByChar
 }

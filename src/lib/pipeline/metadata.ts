@@ -78,6 +78,10 @@ export interface DetectMetadataInput {
 const STRUCTURAL_HEADING_RE =
   /^(chapter|chapitre|kapitel|capitolo|cap[íi]tulo|prologue|prolog|epilogue|epilog|part|book|act|scene|section|introduction|intro|preface|prologo|foreword|afterword|appendix|contents|table of contents|dedication|acknowledge?ments?|about the author|copyright)\b/i
 
+/** A leading structural heading WITH a trailing title, e.g. "Chapter 1: The Heart of a Demon". */
+const LEADING_HEADING_RE =
+  /^(chapter|chapitre|kapitel|capitolo|cap[íi]tulo|prologue|prolog|epilogue|epilog|introduction|preface|foreword|afterword|part|book|act|scene)\b[^\n]{0,120}$/i
+
 /** Chapter-marker detection (multilingual-ish, deterministic). */
 const CHAPTER_MARKER_RE =
   /^\s*(?:(chapter|chapitre|kapitel|capitolo|cap[íi]tulo)\s+(\d{1,3}|[ivxlcdm]{1,7}|[a-z]+)|(prologue|prolog|epilogue|epilog|introduction|preface|foreword|afterword)|(part|book|act)\s+(\d{1,3}|[ivxlcdm]{1,7}|[a-z]+))\b(?:\s*[:.\u2014-]\s*(.+))?$/i
@@ -112,11 +116,18 @@ export function detectDocumentMetadata(input: DetectMetadataInput): DetectedMeta
   const language = detectLanguageMulti(text) || input.language || 'en'
 
   // ---- Title (priority chain) --------------------------------------------
+  // Clean raw extraction noise once, up front, so every candidate below sees
+  // consistent text: stray soft-hyphens, OCR ligature artifacts, duplicated
+  // whitespace, and the Unicode replacement character from bad encodings.
   let title = ''
   let titleSource: TitleSource = 'filename'
 
-  const embeddedTitle = sanitizeCandidate(embedded?.title)
-  if (embeddedTitle && !JUNK_TITLE_RE.test(embeddedTitle) && !isFilenameEcho(embeddedTitle, filename)) {
+  const embeddedTitle = sanitizeCandidate(cleanTextNoise(embedded?.title))
+  if (
+    embeddedTitle &&
+    !JUNK_TITLE_RE.test(embeddedTitle) &&
+    !isFilenameEcho(embeddedTitle, filename)
+  ) {
     title = embeddedTitle
     titleSource = 'embedded'
   }
@@ -130,6 +141,18 @@ export function detectDocumentMetadata(input: DetectMetadataInput): DetectedMeta
   }
 
   if (!title) {
+    // No separate title heading anywhere: if the document opens with a chapter
+    // heading, the chapter label is the most faithful title for a single-chapter
+    // upload ("Chapter 1: <Heading>"). This runs AFTER the heading check so a
+    // genuine book title always beats a chapter marker.
+    const chapterTitle = leadingChapterTitle(paragraphs)
+    if (chapterTitle) {
+      title = chapterTitle
+      titleSource = 'chapter'
+    }
+  }
+
+  if (!title) {
     const prominent = mostProminentEarlyLine(text)
     if (prominent) {
       title = prominent
@@ -138,7 +161,7 @@ export function detectDocumentMetadata(input: DetectMetadataInput): DetectedMeta
   }
 
   if (!title && chapters.length > 0) {
-    // A document that is only chapters — fall back to the first chapter title.
+    // A multi-chapter document with no title signal anywhere.
     title = chapters[0].title
     titleSource = 'chapter'
   }
@@ -149,6 +172,11 @@ export function detectDocumentMetadata(input: DetectMetadataInput): DetectedMeta
   }
 
   title = tidyTitle(title)
+
+  // Final de-duplication guard: never let a heading-derived title duplicate the
+  // body's own heading text repeated verbatim as a second line. If after
+  // tidying the title equals the first chapter label, keep it once.
+  title = collapseDuplicateTitle(title)
 
   // ---- Author -------------------------------------------------------------
   const author =
@@ -180,6 +208,66 @@ export function detectDocumentMetadata(input: DetectMetadataInput): DetectedMeta
     wordCount: stats.wordCount,
     readingTimeMin: stats.readingTimeMin,
   }
+}
+
+// ---------------------------------------------------------------------------
+// Leading-chapter title + text-noise helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * When a document opens with a structural chapter heading (and there is no
+ * embedded/typography title), that heading — rendered as a chapter label —
+ * is the most faithful title for a single-chapter upload. We only promote it
+ * when the FIRST heading in the document is a chapter marker; multi-chapter
+ * works resolve their title elsewhere (and chapters are listed separately).
+ */
+function leadingChapterTitle(paragraphs: OriginalParagraph[]): string {
+  const head = paragraphs.slice(0, 5)
+  for (const p of head) {
+    const line = p.text.replace(/^#+\s*/, '').trim()
+    const m = CHAPTER_MARKER_RE.exec(line)
+    if (!m) continue
+    const label = buildChapterLabel(m, line)
+    if (label && label !== line) return label
+    return label
+  }
+  return ''
+}
+
+/**
+ * Clean OCR/extraction artifacts from a candidate title string:
+ *  - Unicode replacement chars and BOM from bad encodings
+ *  - Soft hyphens, zero-width chars
+ *  - Common OCR ligature fusions (ﬁ → fi) and stray double-spaces
+ * Deterministic; never alters legitimate content.
+ */
+function cleanTextNoise(value: string | undefined): string | undefined {
+  if (!value) return value
+  return value
+    .replace(/�/g, '') // replacement char
+    .replace(/[​-‍﻿]/g, '') // zero-width / BOM
+    .replace(/­/g, '') // soft hyphen
+    .replace(/[ﬀ-ﬆ]/g, (lig) => // Latin ligatures
+      ({ 'ﬀ': 'ff', 'ﬁ': 'fi', 'ﬂ': 'fl', 'ﬃ': 'ffi', 'ﬄ': 'ffl', 'ﬅ': 'st', 'ﬆ': 'st' }[lig] || lig))
+    .replace(/[ \t ]{2,}/g, ' ')
+    .trim()
+}
+
+/**
+ * Guard against a title that merely echoes the first chapter's own heading
+ * duplicated on a second line — collapse e.g. "Chapter 1: X\nChapter 1: X"
+ * to a single "Chapter 1: X". Also collapses a trailing repeat of the same
+ * label appended after a newline.
+ */
+function collapseDuplicateTitle(title: string): string {
+  if (!title) return title
+  const parts = title.split(/\n+/).map((s) => s.trim()).filter(Boolean)
+  const deduped: string[] = []
+  for (const part of parts) {
+    const last = deduped[deduped.length - 1]
+    if (!last || last.toLowerCase() !== part.toLowerCase()) deduped.push(part)
+  }
+  return deduped.join(' ').replace(/\s+/g, ' ').trim()
 }
 
 // ---------------------------------------------------------------------------

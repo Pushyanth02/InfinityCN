@@ -323,3 +323,77 @@ The E2E test (`pipeline-e2e.test.ts`) writes a human-readable transcript to
 ```
 npx vitest run src/__e2e__/pipeline-e2e.test.ts
 ```
+
+## 12. Pluggable Provider Architecture
+
+Lemniscate uses a dependency-injection provider registry so that every major
+processing capability can be swapped via environment variables without touching
+service or API code.
+
+### Provider Interfaces
+
+| Interface | Slot | Default | Env Var |
+|---|---|---|---|
+| `IDocumentParser` | `documentParser` | `deterministic` | `DOCUMENT_PARSER_PROVIDER` |
+| `INarrativeAnalyzer` | `narrativeAnalyzer` | `deterministic` | `NARRATIVE_ANALYZER_PROVIDER` |
+| `ICharacterAnalyzer` | `characterAnalyzer` | `deterministic` | `CHARACTER_ANALYZER_PROVIDER` |
+| `IRelationshipAnalyzer` | `relationshipAnalyzer` | `deterministic` | `RELATIONSHIP_ANALYZER_PROVIDER` |
+| `IEmbeddingProvider` | `embedding` | _(none — opt-in)_ | `EMBEDDING_PROVIDER` |
+| `ISearchProvider` | `search` | `deterministic` | `SEARCH_PROVIDER` |
+| `IStorageProvider` | `storage` | `local` | `STORAGE_PROVIDER` |
+| `IQueueProvider` | `queue` | `sqlite` | `QUEUE_PROVIDER` |
+
+To add a new provider (e.g. an OpenAI embedding provider):
+1. Create the implementation in `src/lib/providers/implementations/`.
+2. Import it in `src/lib/providers/index.ts` and call `registerProvider()`.
+3. Users select it via the corresponding environment variable.
+
+This modular design supports deterministic algorithms today and cloud AI
+providers tomorrow — all behind stable interfaces.
+
+## 13. Relationship Engine
+
+The Relationship Engine (`src/lib/nlp/relationships.ts`) builds a deterministic
+social graph from co-occurrence and dialogue interaction data.
+
+### Pipeline
+
+1. **Edge construction** — characters sharing a scene get a co-occurrence edge;
+   sequential dialogue turns (within a 2-line window) get dialogue interaction
+   counts.
+2. **Strength scoring** — composite `[0..100]` from co-occurrence (60%) and
+   dialogue interactions (40%), normalized to the graph's maximum.
+3. **Centrality metrics**:
+   - **Degree centrality** — connections / (n-1)
+   - **Betweenness centrality** — Brandes' algorithm for shortest-path bridging
+   - **Closeness centrality** — harmonic mean of shortest distances
+4. **Community detection** — deterministic label propagation; each community
+   reports a `cohesion` score (internal edge density).
+
+All algorithms are deterministic: identical input produces byte-identical output.
+
+### API
+
+| Route | Method | Purpose |
+|---|---|---|
+| `/api/v1/narratives/:id/relationships` | GET | Relationship graph |
+
+## 14. Service Layer
+
+| Service | File | Responsibility |
+|---|---|---|
+| Document Service | `document.service.ts` | Upload, list, get, delete |
+| Narrative Service | `narrative.service.ts` | Narrative detail, reading progress, bookmarks |
+| Job Service | `job.service.ts` | Job status, logs, dead-letter, health |
+| Search Service | `search.service.ts` | Full-text search within narratives |
+| Analytics Service | `analytics.service.ts` | Dashboard aggregates |
+| Processing Service | `processing.service.ts` | Pipeline orchestration, cancel, re-prioritize |
+| Export Service | `export.service.ts` | Markdown/HTML/EPUB/JSON export |
+| Notification Service | `notification.service.ts` | Event fan-out (EventBus to WebSocket) |
+| Auth Service | `auth.service.ts` | Authentication + CSRF validation |
+| Relationship Service | `relationship.service.ts` | Relationship graph generation |
+
+## 15. Versioned API (v1)
+
+All new endpoints are under `/api/v1/` and use the standard response envelope.
+OpenAPI 3.1 spec is available at `/api/v1/openapi.json`.

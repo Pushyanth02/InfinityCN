@@ -13,6 +13,11 @@ export async function register() {
     const { enforceEnvironment } = await import('@/lib/env-validation')
     enforceEnvironment()
 
+    // Register pluggable providers (deterministic defaults).
+    // Future cloud/AI providers are registered in @/lib/providers without
+    // touching services or API code.
+    await import('@/lib/providers')
+
     const { startBackupScheduler } = await import('@/lib/backup')
     startBackupScheduler()
 

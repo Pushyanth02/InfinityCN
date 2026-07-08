@@ -14,8 +14,39 @@
  */
 import { type NextRequest, NextResponse } from 'next/server'
 
-export function proxy(_request: NextRequest) {
-  return NextResponse.next()
+export function proxy(request: NextRequest) {
+  // Generate cryptographically secure base64 nonce (16 characters)
+  const nonce = btoa(crypto.randomUUID()).slice(0, 16)
+  const isProd = process.env.NODE_ENV === 'production'
+
+  // Configure script-src: strict in production (nonce only), relaxed in dev for HMR
+  const scriptSrc = isProd
+    ? `'self' 'nonce-${nonce}'`
+    : `'self' 'unsafe-inline' 'unsafe-eval' 'nonce-${nonce}'`
+
+  const styleSrc = `'self' 'unsafe-inline'` // Tailwind and UI components require inline styles
+
+  // Production permits only encrypted WebSocket (wss:); dev allows plain ws: for local HMR
+  const connectSrc = isProd
+    ? `'self' wss:`
+    : `'self' ws: wss:`
+
+  const cspHeader = `default-src 'self'; script-src ${scriptSrc}; style-src ${styleSrc}; img-src 'self' data: blob:; font-src 'self' data:; connect-src ${connectSrc}; object-src 'none'; base-uri 'self'; frame-ancestors 'none';`
+
+  // Pass nonce to request headers so Server Components can read it
+  const requestHeaders = new Headers(request.headers)
+  requestHeaders.set('x-nonce', nonce)
+
+  const response = NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  })
+
+  // Set the CSP header on the response
+  response.headers.set('Content-Security-Policy', cspHeader)
+
+  return response
 }
 
 export const config = {

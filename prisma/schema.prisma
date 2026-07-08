@@ -149,6 +149,7 @@ model Scene {
   mood          String?  // TENSE | CALM | JOYFUL | SOMBER | MYSTERIOUS | ROMANTIC | VIOLENT | HOPEFUL
   tensionScore  Int      @default(0) // 0..100
   emotionScore  Int      @default(0) // 0..100 (signed valence -100..100 normalized to 0..100)
+  dominantEmotion String? // JOY | ANGER | FEAR | SADNESS | SURPRISE | DISGUST | LOVE | NEUTRAL
   // Narrative Intelligence Engine v2 — promoted scalar metrics.
   momentumScore Int      @default(0) // 0..100 normalized momentum
   arousalScore  Int      @default(0) // 0..100 emotional activation

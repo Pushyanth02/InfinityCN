@@ -25,7 +25,11 @@ import { createServer } from 'node:http'
 import { Server as IOServer } from 'socket.io'
 import { eventBus } from '@/lib/events/bus'
 import { claimNextJob, executeJobWithRetry, rehydrateStalledJobs } from '@/lib/pipeline/job-runner'
+import { createLogger } from '@/lib/logger'
+import { isValidId } from '@/lib/middleware/validate-id'
 import type { ProgressEvent } from '@/lib/types'
+
+const logger = createLogger('worker')
 
 const PORT = parseInt(process.env.WORKER_PORT || '3003', 10)
 const POLL_INTERVAL_MS = parseInt(process.env.WORKER_POLL_INTERVAL_MS || '800', 10)
@@ -41,26 +45,26 @@ let shuttingDown = false
 // Process-level resilience: never die on an unhandled error
 // ---------------------------------------------------------------------------
 process.on('uncaughtException', (err) => {
-  console.error('[worker] UNCAUGHT EXCEPTION (surviving):', err)
+  logger.error('UNCAUGHT EXCEPTION (surviving)', { error: err.message, stack: err.stack })
 })
 process.on('unhandledRejection', (err) => {
-  console.error('[worker] UNHANDLED REJECTION (surviving):', err)
+  logger.error('UNHANDLED REJECTION (surviving)', { error: String(err) })
 })
 process.on('SIGTERM', async () => {
-  console.log('[worker] SIGTERM received, starting graceful shutdown')
+  logger.info('SIGTERM received, starting graceful shutdown')
   shuttingDown = true
 
   // Stop accepting new jobs, wait for in-flight to complete
   const deadline = Date.now() + GRACEFUL_SHUTDOWN_MS
   while (inFlight > 0 && Date.now() < deadline) {
-    console.log(`[worker] waiting for ${inFlight} in-flight job(s) to complete...`)
+    logger.info('waiting for in-flight jobs to complete', { inFlight })
     await new Promise((resolve) => setTimeout(resolve, 1000))
   }
 
   if (inFlight > 0) {
-    console.warn(`[worker] shutdown grace period expired with ${inFlight} jobs still running`)
+    logger.warn('shutdown grace period expired with jobs still running', { inFlight })
   } else {
-    console.log('[worker] all jobs completed, exiting cleanly')
+    logger.info('all jobs completed, exiting cleanly')
   }
 
   io.close()
@@ -134,8 +138,17 @@ const io = new IOServer(httpServer, {
 })
 
 io.on('connection', (socket) => {
-  const jobId = socket.handshake.query.jobId as string | undefined
-  console.log(`[ws] client connected (jobId=${jobId ?? '—'})`)
+  const rawJobId = socket.handshake.query.jobId
+  const jobId = typeof rawJobId === 'string' ? rawJobId : undefined
+
+  // Validate jobId format to prevent injection via crafted room names.
+  if (jobId && !isValidId(jobId)) {
+    logger.warn('Socket connection rejected: invalid jobId', { jobId })
+    socket.disconnect(true)
+    return
+  }
+
+  logger.info('client connected', { jobId: jobId ?? null })
 
   try {
     if (jobId) {
@@ -145,16 +158,20 @@ io.on('connection', (socket) => {
     }
     socket.join('global')
   } catch (err) {
-    console.error('[ws] connection setup error:', err)
+    logger.error('connection setup error', { error: (err as Error).message })
   }
 
   socket.on('subscribe', (jid: string) => {
+    if (!isValidId(jid)) {
+      logger.warn('Subscribe rejected: invalid jobId', { jobId: jid })
+      return
+    }
     try {
       socket.join(`job:${jid}`)
       const history = eventBus.historyFor(jid)
       for (const evt of history) socket.emit('progress', evt)
     } catch (err) {
-      console.error('[ws] subscribe error:', err)
+      logger.error('subscribe error', { jobId: jid, error: (err as Error).message })
     }
   })
 
@@ -163,7 +180,7 @@ io.on('connection', (socket) => {
   })
 
   socket.on('error', (err: Error) => {
-    console.error('[ws] socket error:', err.message)
+    logger.error('socket error', { error: err.message })
   })
 
   socket.on('disconnect', () => {
@@ -172,7 +189,7 @@ io.on('connection', (socket) => {
 })
 
 io.engine.on('connection_error', (err: { message?: string }) => {
-  console.error('[ws] engine connection_error:', err?.message || err)
+  logger.error('engine connection_error', { error: err?.message || String(err) })
 })
 
 // Bridge EventBus → Socket.IO
@@ -181,7 +198,7 @@ eventBus.subscribeAll((evt: ProgressEvent) => {
     io.to(`job:${evt.jobId}`).emit('progress', evt)
     io.to('global').emit('progress', evt)
   } catch (err) {
-    console.error('[ws] emit error:', err)
+    logger.error('emit error', { jobId: evt.jobId, error: (err as Error).message })
   }
 })
 
@@ -198,7 +215,10 @@ async function pollOnce() {
   // Memory pressure check (spec 2.12)
   const memUsedMB = process.memoryUsage().rss / (1024 * 1024)
   if (memUsedMB > WORKER_MAX_MEMORY_MB * 0.8) {
-    console.warn(`[worker] memory pressure: ${Math.round(memUsedMB)}MB / ${WORKER_MAX_MEMORY_MB}MB — skipping new jobs`)
+    logger.warn('memory pressure — skipping new jobs', {
+      memUsedMB: Math.round(memUsedMB),
+      limitMB: WORKER_MAX_MEMORY_MB,
+    })
     return
   }
 
@@ -207,13 +227,13 @@ async function pollOnce() {
     if (!claim) return
 
     inFlight += 1
-    console.log(`[worker] claimed job ${claim.jobId} (mode=${claim.mode}, doc=${claim.documentId})`)
+    logger.info('claimed job', { jobId: claim.jobId, mode: claim.mode, documentId: claim.documentId })
 
     executeJobWithRetry(claim, '[worker]')
-      .catch((err) => console.error(`[worker] job ${claim.jobId} crashed:`, err))
+      .catch((err) => logger.error('job crashed', { jobId: claim.jobId, error: (err as Error).message }))
       .finally(() => { inFlight -= 1 })
   } catch (err) {
-    console.error('[worker] poll error:', err)
+    logger.error('poll error', { error: (err as Error).message })
   }
 }
 
@@ -221,9 +241,12 @@ async function pollOnce() {
 // Boot
 // ---------------------------------------------------------------------------
 httpServer.listen(PORT, () => {
-  console.log(`\n  Lemniscate Realtime Worker → http://0.0.0.0:${PORT}`)
-  console.log(`  Socket.IO path: /?XTransformPort=${PORT}`)
-  console.log(`  Polling for jobs every ${POLL_INTERVAL_MS}ms (concurrency=${CONCURRENCY})\n`)
+  logger.info('Lemniscate Realtime Worker started', {
+    port: PORT,
+    socketIoPath: `/?XTransformPort=${PORT}`,
+    pollIntervalMs: POLL_INTERVAL_MS,
+    concurrency: CONCURRENCY,
+  })
 })
 
 setInterval(pollOnce, POLL_INTERVAL_MS)
@@ -235,6 +258,6 @@ pollOnce()
 ;(async () => {
   const count = await rehydrateStalledJobs()
   if (count > 0) {
-    console.log(`[worker] re-queued ${count} stalled job(s)`)
+    logger.info('re-queued stalled jobs', { count })
   }
 })()

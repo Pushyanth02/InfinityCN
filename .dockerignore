@@ -1,9 +1,53 @@
+# ─── Dependencies & Build Artifacts ──────────────────────────────────────────
 node_modules
 .next
 .git
+
+# ─── Environment & Secrets ───────────────────────────────────────────────────
 .env
-*.log
+.env.local
+.env.*.local
+.env.production
+.env.development
+
+# ─── Database & Runtime Data ─────────────────────────────────────────────────
 db/*.db
 db/*.db-journal
 db/*.db-wal
+db/*.db-shm
+backups/
+
+# ─── Logs & Temp Files ──────────────────────────────────────────────────────
+*.log
 .tmp-upload-*
+*.pid
+
+# ─── Testing & Coverage ─────────────────────────────────────────────────────
+coverage/
+*.lcov
+e2e-report*.txt
+e2e-run*.txt
+junit.xml
+
+# ─── IDE & Editor Config ────────────────────────────────────────────────────
+.vscode/
+.idea/
+.kiro/
+.claude/
+
+# ─── Agent & AI Context ─────────────────────────────────────────────────────
+.agents/
+agent-ctx/
+skills-lock.json
+
+# ─── Documentation (not needed at runtime) ───────────────────────────────────
+docs/
+*.md
+!README.md
+
+# ─── OS Files ────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ─── Upload Data ─────────────────────────────────────────────────────────────
+public/uploads/

@@ -94,61 +94,86 @@ const TITLE_CASE_ABBR = new Set([
 ])
 
 /**
- * Split text into sentences using a deterministic ruleset:
- *   1. Split on [.!?]+ followed by whitespace + capital/quote.
+ * Split text into sentences using a deterministic single-pass state machine.
+ *   1. Track preceding word as we scan forward (no backward lookups).
  *   2. Don't split after known abbreviations.
  *   3. Don't split on decimals (3.14) or numbered lists (1. ...).
  *   4. Respect quotation marks at end of sentence.
+ *
+ * O(n) single pass — replaces the previous O(n²) backward-scanning approach.
  */
 export function splitSentences(text: string): { text: string; start: number; end: number }[] {
   const sentences: { text: string; start: number; end: number }[] = []
   if (!text || !text.trim()) return sentences
 
-  let i = 0
   const n = text.length
   let start = 0
+  let wordStart = -1
+  let inWord = false
 
-  const isSentenceEnd = (idx: number): boolean => {
-    const ch = text[idx]
-    if (ch !== '.' && ch !== '!' && ch !== '?') return false
-    let j = idx + 1
-    while (j < n && /[.!?;:'"’”’)\]\}]/.test(text[j])) j++
-    if (j >= n) return true
-    if (!/\s/.test(text[j])) return false
+  for (let i = 0; i < n; i++) {
+    const ch = text[i]
+
+    // Track word boundaries for abbreviation lookup
+    if (/[A-Za-z]/.test(ch)) {
+      if (!inWord) { wordStart = i; inWord = true }
+    } else {
+      inWord = false
+    }
+
+    // Only sentence terminators trigger boundary logic
+    if (ch !== '.' && ch !== '!' && ch !== '?') continue
+
+    // Skip decimals: digit.digit (e.g. 3.14)
+    if (ch === '.' && i > 0 && i + 1 < n && /\d/.test(text[i - 1]) && /\d/.test(text[i + 1])) continue
+    // Skip numbered list markers: "1. item"
+    if (ch === '.' && i > 0 && /\d/.test(text[i - 1])) {
+      let j = i + 1
+      while (j < n && /\s/.test(text[j])) j++
+      if (j < n && /[a-z]/.test(text[j])) continue
+    }
+
+    // Scan forward past trailing punctuation and whitespace
+    let j = i + 1
+    while (j < n && /[.!?;:'"‘’“”)}]]/.test(text[j])) j++
+    if (j >= n) continue
+    if (!/\s/.test(text[j])) continue
     let k = j
     while (k < n && /\s/.test(text[k])) k++
-    if (k >= n) return true
+    if (k >= n) continue
+
     const next = text[k]
-    // Lowercase continuation after a terminator is usually NOT a sentence boundary
-    // (e.g. "Hello." she said. → one sentence). Only abbreviations/decimals are
-    // handled below; everything else with a lowercase next-char is not a split.
-    if (!/[A-Z"'“‘(]/.test(next)) {
-      return false
+    // Lowercase continuation after terminator is NOT a sentence boundary
+    if (!/[A-Z"‘“(]/.test(next)) continue
+
+    // Abbreviation check using tracked word
+    if (ch === '.') {
+      if (wordStart >= 0 && inWord) {
+        const word = text.slice(wordStart, i).toLowerCase()
+        if (ABBREVIATIONS.has(word)) continue
+        if (word.length === 1 && /[a-z]/.test(word)) continue
+      } else {
+        // Fallback backward scan (only when word tracking missed it)
+        let w2 = i - 1
+        while (w2 >= 0 && /[A-Za-z.]/.test(text[w2])) w2--
+        const word2 = text.slice(w2 + 1, i).toLowerCase()
+        if (ABBREVIATIONS.has(word2)) continue
+        if (word2.length === 1 && /[a-z]/.test(word2)) continue
+      }
     }
-    let w = idx - 1
-    while (w >= 0 && /[A-Za-z.]/.test(text[w])) w--
-    const word = text.slice(w + 1, idx).toLowerCase()
-    if (ABBREVIATIONS.has(word)) return false
-    if (word.length === 1 && /[a-z]/.test(word)) return false
-    if (/\d/.test(text[idx - 1]) && k < n && /\d/.test(text[k])) return false
-    return true
+
+    // Sentence boundary confirmed
+    let end = i + 1
+    while (end < n && /[.!?;:'"‘’“”)}]]/.test(text[end])) end++
+    const chunk = text.slice(start, end).trim()
+    if (chunk) {
+      sentences.push({ text: chunk, start, end })
+    }
+    while (end < n && /\s/.test(text[end])) end++
+    start = end
+    i = end - 1 // loop increment will set i to end
   }
 
-  while (i < n) {
-    if (isSentenceEnd(i)) {
-      let end = i + 1
-      while (end < n && /[.!?;:'"’”’)\]\}]/.test(text[end])) end++
-      const chunk = text.slice(start, end).trim()
-      if (chunk) {
-        sentences.push({ text: chunk, start, end })
-      }
-      while (end < n && /\s/.test(text[end])) end++
-      start = end
-      i = end
-      continue
-    }
-    i++
-  }
   const tail = text.slice(start).trim()
   if (tail) sentences.push({ text: tail, start, end: text.length })
   return sentences

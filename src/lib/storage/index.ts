@@ -34,8 +34,18 @@ export async function ensureUploadDir(): Promise<string> {
   return UPLOAD_ROOT
 }
 
+/**
+ * Resolve a storageName to an absolute path within UPLOAD_ROOT.
+ * Throws if the resolved path escapes the upload directory (path traversal
+ * defense-in-depth — callers already sanitize names, but this is a backstop).
+ */
 export function uploadPath(storageName: string): string {
-  return path.join(UPLOAD_ROOT, storageName)
+  const resolved = path.resolve(UPLOAD_ROOT, storageName)
+  const root = path.resolve(UPLOAD_ROOT)
+  if (!resolved.startsWith(root + path.sep) && resolved !== root) {
+    throw new Error('Path traversal detected: storage name escapes upload directory')
+  }
+  return resolved
 }
 
 export function publicUrl(storageName: string): string {

@@ -9,6 +9,9 @@
 
 import { db } from '@/lib/db'
 import { eventBus } from '@/lib/events/bus'
+import { createLogger } from '@/lib/logger'
+
+const logger = createLogger('job-runner')
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -101,7 +104,7 @@ export async function executeJobWithRetry(
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     if (attempt > 0) {
       const delay = BASE_DELAY_MS * Math.pow(2, attempt - 1)
-      console.log(`${logPrefix} job ${jobId} retry ${attempt}/${MAX_RETRIES} after ${delay}ms`)
+      logger.warn('Retrying job', { jobId, attempt, maxRetries: MAX_RETRIES, delayMs: delay, source: logPrefix })
       await sleep(delay)
 
       // Update job to show retry in progress
@@ -124,11 +127,14 @@ export async function executeJobWithRetry(
       const { runPipeline } = await import('./orchestrator')
       const result = await Promise.race([runPipeline({ jobId, documentId, mode }), timeout])
 
-      console.log(
-        `${logPrefix} job ${jobId} complete: ${result.narrativeIds.length} narratives, ` +
-        `${result.sceneCount} scenes in ${result.durationMs}ms` +
-        (attempt > 0 ? ` (after ${attempt} retries)` : ''),
-      )
+      logger.info('Job completed', {
+        jobId,
+        narratives: result.narrativeIds.length,
+        scenes: result.sceneCount,
+        durationMs: result.durationMs,
+        retries: attempt,
+        source: logPrefix,
+      })
       return // Success — exit retry loop
     } catch (err) {
       lastError = err as Error
@@ -136,17 +142,17 @@ export async function executeJobWithRetry(
 
       // Non-retryable errors: don't waste time retrying
       if (isNonRetryableError(msg)) {
-        console.error(`${logPrefix} job ${jobId} non-retryable failure: ${msg}`)
+        logger.error('Job failed (non-retryable)', { jobId, error: msg, source: logPrefix })
         break
       }
 
-      console.warn(`${logPrefix} job ${jobId} attempt ${attempt + 1} failed: ${msg}`)
+      logger.warn('Job attempt failed', { jobId, attempt: attempt + 1, error: msg, source: logPrefix })
     }
   }
 
   // All retries exhausted — mark as permanently FAILED in dead-letter state (spec 2.18)
   const errorMsg = lastError?.message || 'Unknown error'
-  console.error(`${logPrefix} job ${jobId} permanently failed: ${errorMsg}`)
+  logger.error('Job permanently failed', { jobId, error: errorMsg, source: logPrefix })
 
   await db.job.update({
     where: { id: jobId },

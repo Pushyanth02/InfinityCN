@@ -1,5 +1,26 @@
 # DevOps Steering
 
+<!--
+  STATUS: ASPIRATIONAL DESIGN GUIDANCE — NOT the implemented stack.
+  This file describes a target Postgres/Redis/Nginx topology. The repository as
+  shipped uses a deliberately simpler stack. Treat this as future-direction
+  guidance, never as ground truth. For what is actually deployed, read:
+    - CLAUDE.md              (authoritative, the "Gotchas" section in particular)
+    - docs/ARCHITECTURE.md   (authoritative deep-dive)
+    - docker-compose.yml     (the real topology: app + worker + caddy + db-data)
+  Implemented stack: Next.js (standalone) + embedded poller or standalone worker,
+  SQLite (file) as both app DB and the job queue, local-filesystem storage,
+  Caddy reverse proxy. No Postgres, no Redis (see note on REDIS_URL below), no
+  managed object storage, no Nginx.
+-->
+
+> ⚠️ **This is aspirational guidance, not the implemented stack.**
+> The sections below describe a future Postgres/Redis/Nginx topology. The
+> production codebase today ships with **SQLite + SQLite-queue + Caddy** and
+> filesystem storage. Read `CLAUDE.md` and `docs/ARCHITECTURE.md` for what is
+> actually deployed. The bullet lists below that name PostgreSQL/Redis/object
+> storage/Nginx are **targets**, not current facts.
+
 ## Philosophy
 
 Infrastructure must be reproducible, observable, and recoverable.
@@ -14,7 +35,8 @@ Every deployment should be automated, repeatable, and reversible.
 
 - Docker Compose for all services.
 - Hot reloading for frontend and backend.
-- Local PostgreSQL, Redis, and object storage.
+- Local SQLite (file) as both app DB and job queue, local-filesystem storage.
+  *(Aspirational target: PostgreSQL + Redis + object storage — not yet wired.)*
 - Seed scripts for development data.
 
 ### Staging
@@ -23,13 +45,19 @@ Every deployment should be automated, repeatable, and reversible.
 - Use production-like data volumes.
 - Validate deployments before production promotion.
 
-### Production
+### Production (aspirational target — NOT what ships today)
 
 - Containerized services.
 - Reverse proxy (Nginx/Caddy) for TLS and routing.
 - Managed or self-hosted PostgreSQL.
 - Redis for queue and caching.
 - Persistent object storage for documents.
+
+> Implemented today (see `docker-compose.yml`): `app` (Next.js standalone) +
+> `worker` (optional; embedded poller is the default) + `caddy`, sharing a
+> `db-data` volume. Database and queue are a single SQLite file; storage is the
+> local filesystem. The items above are the target if/when the project outgrows
+> SQLite.
 
 ---
 
@@ -73,8 +101,8 @@ Health checks must verify:
 
 - service is running
 - database is reachable
-- Redis is reachable
 - storage is accessible
+- (Redis is reachable — **only when `REDIS_URL` is configured**; Redis rate-limiting is opt-in, not a required service)
 
 Return structured JSON with component status.
 
@@ -164,9 +192,14 @@ Set alerts for anomalous values.
 
 ## Scaling
 
+> Aspirational — the shipped single-process stack does not horizontally scale yet.
+
 - Frontend: stateless, horizontally scalable.
 - API: stateless, horizontally scalable behind load balancer.
 - Workers: scale independently based on queue depth.
+  *(Today there is one embedded poller or one standalone worker; multi-worker
+  coordination would require the reserved, currently-unimplemented `REDIS_URL`
+  queue backend — see the REDIS_URL note above.)*
 - Database: vertical scaling first, read replicas when needed.
 - Redis: sentinel or cluster for high availability.
 

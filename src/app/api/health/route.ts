@@ -1,23 +1,30 @@
 /**
  * GET /api/health — health check with database connectivity verification.
- * Returns 200 if both the process and database are healthy.
+ *
+ * Thin wrapper over the job service's checkHealth(). Returns 200 when the
+ * database is reachable, 503 when it is not. The HTTP status code (not the
+ * body) is what Docker Compose / Dockerfile healthchecks rely on
+ * (`wget --spider`), so the 200/503 distinction must be preserved exactly.
+ *
+ * Response body is a superset of the legacy shape: it keeps `ok`, `service`,
+ * `database`, and a timestamp, and adds `status`, `latencyMs`, `version`.
  */
 import { NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { checkHealth } from '@/lib/services/job.service'
 
 export async function GET() {
-  try {
-    await db.$queryRawUnsafe('SELECT 1')
-    return NextResponse.json({
-      ok: true,
+  const health = await checkHealth()
+  const status = health.ok ? 200 : 503
+  return NextResponse.json(
+    {
+      ok: health.ok,
       service: 'lemniscate',
-      database: 'connected',
-      time: Date.now(),
-    })
-  } catch {
-    return NextResponse.json(
-      { ok: false, service: 'lemniscate', database: 'disconnected', time: Date.now() },
-      { status: 503 },
-    )
-  }
+      status: health.status,
+      database: health.database,
+      latencyMs: health.latencyMs,
+      version: health.version,
+      time: health.timestamp,
+    },
+    { status },
+  )
 }
