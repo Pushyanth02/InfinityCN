@@ -30,6 +30,20 @@ export interface ExportResult {
 }
 
 /**
+ * Parse a narrative's stored `metadata` JSON column defensively. The column is
+ * a free-form string written by the pipeline; a corrupt/truncated value must
+ * never break an export. Mirrors the defensive pattern in narrative.service.
+ */
+function parseMetadataJson(raw: string | null | undefined): Record<string, unknown> {
+  if (!raw) return {}
+  try {
+    return JSON.parse(raw) as Record<string, unknown>
+  } catch {
+    return {}
+  }
+}
+
+/**
  * The exact shape returned by the export query below. Derived from Prisma so it
  * stays in sync with the schema and relation includes automatically.
  */
@@ -254,7 +268,7 @@ function exportJson(n: NarrativeExport, baseFilename: string): ExportResult {
         readingTimeMin: n.readingTimeMin,
         sceneCount: n.sceneCount,
         paragraphCount: n.paragraphCount,
-        metadata: n.metadata ? JSON.parse(n.metadata) : {},
+        metadata: parseMetadataJson(n.metadata),
         createdAt: n.createdAt,
       },
       scenes: n.scenes,

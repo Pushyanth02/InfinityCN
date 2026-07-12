@@ -8,7 +8,7 @@
  */
 
 import { NextResponse } from 'next/server'
-import { timingSafeEqual } from 'node:crypto'
+import { createHash, timingSafeEqual } from 'node:crypto'
 import { rateLimit as tokenBucketRateLimit } from './rate-limit'
 import { createLogger } from '../logger'
 
@@ -16,13 +16,17 @@ const logger = createLogger('security')
 
 /**
  * Constant-time string comparison to prevent timing side-channel attacks.
- * Returns false immediately if lengths differ (this leaks length, not content).
+ *
+ * Both inputs are SHA-256 hashed to a fixed 32-byte digest *before* the
+ * constant-time compare, so the comparison always runs over equal-length
+ * buffers regardless of the supplied secret's length. This removes the
+ * length-mismatch early-return that would otherwise leak the API key's
+ * length to an attacker observing response timing.
  */
 function safeEqual(a: string, b: string): boolean {
-  const bufA = Buffer.from(a)
-  const bufB = Buffer.from(b)
-  if (bufA.length !== bufB.length) return false
-  return timingSafeEqual(bufA, bufB)
+  const hashA = createHash('sha256').update(a).digest()
+  const hashB = createHash('sha256').update(b).digest()
+  return timingSafeEqual(hashA, hashB)
 }
 
 // ─── Production Startup Guard ────────────────────────────────────────────────

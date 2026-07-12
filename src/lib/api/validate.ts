@@ -11,8 +11,21 @@ import { z } from 'zod'
 
 // ─── Common primitives ────────────────────────────────────────────────────
 
-/** CUID/UUID pattern for ID validation. */
-export const idSchema = z.string().regex(/^[a-z0-9]{20,30}$|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, 'Invalid ID format')
+/**
+ * ID pattern matching `isValidId` in middleware/validate-id.ts:
+ *   - CUID  (c + 20-30 lowercase alphanumeric)
+ *   - CUID2 (24-32 lowercase alphanumeric)
+ *   - UUID  (8-4-4-4-12 hex)
+ * The two validation paths MUST agree, or valid Prisma IDs (e.g. cuid2()) are
+ * rejected by one route family and accepted by another. If you change the
+ * accepted formats, update both this schema and validate-id.ts together.
+ */
+export const idSchema = z
+  .string()
+  .regex(
+    /^c[a-z0-9]{20,30}$|^[a-z0-9]{24,32}$|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+    'Invalid ID format',
+  )
 
 /** Positive integer. */
 export const positiveIntSchema = z.number().int().positive()

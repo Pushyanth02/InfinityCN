@@ -10,7 +10,7 @@
 #
 # The seed is copied ONLY when the target DB is absent, so existing data in
 # the volume is never overwritten. DATABASE_URL uses an absolute path so
-# Prisma resolves it unambiguously (see docs/ARCHITECTURE.md §6).
+# Prisma resolves it unambiguously (see CLAUDE.md — "SQLite path resolution").
 # =============================================================================
 set -e
 

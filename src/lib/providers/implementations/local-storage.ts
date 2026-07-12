@@ -33,9 +33,9 @@ export class LocalStorageProvider implements IStorageProvider {
 
   async exists(key: string): Promise<boolean> {
     try {
-      uploadPath(key) // throws on path traversal
+      const p = uploadPath(key) // throws on path traversal
       const fs = await import('node:fs/promises')
-      await fs.access(uploadPath(key))
+      await fs.access(p)
       return true
     } catch {
       return false
