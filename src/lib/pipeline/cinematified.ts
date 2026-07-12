@@ -334,8 +334,6 @@ type SceneAnalysis = Array<{ scene: CinematifiedScene; joined: string; sentences
 
 const DISCOVERY_VERBS = new Set(['discovered', 'found', 'realized', 'noticed', 'spotted', 'uncovered', 'revealed', 'learned', 'saw'])
 const RESOLUTION_VERBS = new Set(['resolved', 'agreed', 'accepted', 'forgave', 'reconciled', 'ended', 'concluded', 'settled', 'decided'])
-const ACTION_VERB_RE = /\b(ran|jumped|grabbed|struck|fell|drew|slammed|threw|lunged|sprang|dashed|rushed|charged|climbed|ducked|dodged|swung|slashed|punched|kicked|seized|clutched|pulled|pushed|lifted|dropped|smashed|crashed|burst|bolted|sprinted)\b/
-
 function detectEvents(sceneAnalysis: SceneAnalysis, characters: CinematifiedCharacter[]): CinematifiedEvent[] {
   const events: CinematifiedEvent[] = []
   let idx = 0
@@ -349,7 +347,7 @@ function detectEvents(sceneAnalysis: SceneAnalysis, characters: CinematifiedChar
       else if (words.some((w) => CONFLICT_LEXICON.has(w))) { type = 'CONFLICT'; intensity = 60 }
       else if (words.some((w) => VIOLENCE_LEXICON.has(w))) { type = 'CONFLICT'; intensity = 80 }
       else if (words.some((w) => RESOLUTION_VERBS.has(w))) { type = 'RESOLUTION'; intensity = 40 }
-      else if (words.some((w) => ACTION_VERB_RE.test(w))) { type = 'ACTION'; intensity = 35 }
+      else if (words.some((w) => ACTION_VERBS_LEXICON.has(w))) { type = 'ACTION'; intensity = 35 }
       else if (isLikelyDialogue(sent.text)) { type = 'DIALOGUE'; intensity = 15 }
       else continue
       events.push({

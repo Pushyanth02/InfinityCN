@@ -206,10 +206,16 @@ export async function upsertReadingProgress(
 }
 
 /**
- * Get all narratives that have active reading progress.
+ * Get narratives with active reading progress (>5%, not yet finished).
+ *
+ * Mirrors the legacy `/api/reading-progress` contract: filters to scrollPct
+ * in (5, 100), orders by progress descending, and caps at 6 so the library
+ * "continue reading" rail stays bounded. Includes fileHash so the client can
+ * dedupe across re-uploads of the same source file.
  */
 export async function getReadingList() {
-  const progress = await db.readingProgress.findMany({
+  const progressRecords = await db.readingProgress.findMany({
+    where: { scrollPct: { gt: 5, lt: 100 } },
     include: {
       narrative: {
         select: {
@@ -219,13 +225,25 @@ export async function getReadingList() {
           sceneCount: true,
           wordCount: true,
           readingTimeMin: true,
-          document: { select: { id: true, originalName: true } },
+          document: { select: { id: true, originalName: true, fileHash: true } },
         },
       },
     },
-    orderBy: { updatedAt: 'desc' },
+    orderBy: { scrollPct: 'desc' },
+    take: 6,
   })
-  return progress
+  return progressRecords
+    .filter((p) => p.narrative)
+    .map((p) => ({
+      narrativeId: p.narrative.id,
+      docId: p.narrative.document.id,
+      title: p.narrative.title,
+      originalName: p.narrative.document.originalName,
+      fileHash: p.narrative.document.fileHash,
+      scrollPct: p.scrollPct,
+      sceneIndex: p.sceneIndex,
+      mode: p.narrative.mode,
+    }))
 }
 
 // ─── Bookmarks ────────────────────────────────────────────────────────────
