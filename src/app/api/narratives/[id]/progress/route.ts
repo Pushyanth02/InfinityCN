@@ -2,10 +2,19 @@
  * GET  /api/narratives/[id]/progress — get reading progress
  * POST /api/narratives/[id]/progress — upsert reading progress
  *   body: { scrollPct, sceneIndex, paragraphIdx }
+ *
+ * Legacy (unversioned) surface. Delegates to the service layer for all
+ * business logic (including the P2003 / stale-id guard) but preserves its
+ * flat `{ progress }` / `{ error }` response envelope — the frontend and the
+ * progress regression tests depend on this exact shape. The versioned twin
+ * lives at /api/v1/narratives/[id]/progress and uses the standard envelope.
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { Prisma } from '@prisma/client'
-import { db } from '@/lib/db'
+import {
+  getReadingProgress,
+  upsertReadingProgress,
+} from '@/lib/services/narrative.service'
+import { isDomainError, getErrorStatusCode } from '@/lib/domain/errors'
 import { securityCheck } from '@/lib/middleware/security'
 import { getClientIP } from '@/lib/middleware/rate-limit'
 import { validateIdParam } from '@/lib/middleware/validate-id'
@@ -18,7 +27,10 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   const { id } = await ctx.params
   const invalid = validateIdParam(id, 'narrativeId')
   if (invalid) return invalid
-  const progress = await db.readingProgress.findUnique({ where: { narrativeId: id } })
+
+  const progress = await getReadingProgress(id)
+  // Legacy contract: 200 with `{ progress: null }` when none exists yet —
+  // the reader treats absence as "no saved position", not a 404.
   return NextResponse.json({ progress })
 }
 
@@ -39,33 +51,21 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
+  // Defensive clamping — the v1 route validates via Zod, but this legacy
+  // surface must stay tolerant of loose client input (e.g. scrollPct: 999).
   const scrollPct = clamp(toInt(body.scrollPct), 0, 100)
   const sceneIndex = Math.max(0, toInt(body.sceneIndex))
   const paragraphIdx = Math.max(0, toInt(body.paragraphIdx))
 
-  // Guard the foreign key: the client may hold a stale narrative id (e.g. the
-  // narrative was deleted in another tab). Verify existence before the upsert
-  // so a missing parent yields a clean 404 instead of a Prisma P2003 crash.
-  const narrative = await db.narrative.findUnique({ where: { id }, select: { id: true } })
-  if (!narrative) {
-    return NextResponse.json({ error: 'Narrative not found' }, { status: 404 })
-  }
-
   try {
-    const progress = await db.readingProgress.upsert({
-      where: { narrativeId: id },
-      create: { narrativeId: id, scrollPct, sceneIndex, paragraphIdx },
-      update: { scrollPct, sceneIndex, paragraphIdx },
-    })
+    const progress = await upsertReadingProgress(id, scrollPct, sceneIndex, paragraphIdx)
     return NextResponse.json({ progress })
   } catch (err) {
-    // Race: narrative deleted between the existence check and the write.
-    // P2003 = foreign key constraint violation. Treat as a benign no-op
-    // rather than surfacing a 500 for progress that no longer has a home.
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2003') {
-      return NextResponse.json({ error: 'Narrative not found' }, { status: 404 })
-    }
-    throw err
+    // Stale narrative id (deleted in another tab) → 404, matching the
+    // P2003-regression contract pinned by progress.test.ts.
+    const status = getErrorStatusCode(err)
+    const message = isDomainError(err) ? err.message : 'Failed to save progress'
+    return NextResponse.json({ error: message }, { status })
   }
 }
 

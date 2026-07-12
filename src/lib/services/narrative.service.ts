@@ -6,6 +6,7 @@
  */
 
 import { db } from '@/lib/db'
+import { Prisma } from '@prisma/client'
 import { NotFoundError } from '@/lib/domain/errors'
 
 // ─── Types ────────────────────────────────────────────────────────────────
@@ -191,6 +192,12 @@ export async function getReadingProgress(narrativeId: string) {
 
 /**
  * Upsert reading progress for a narrative.
+ *
+ * Guards the foreign key: a client may hold a stale narrative id (deleted in
+ * another tab). Verify existence before the upsert so a missing parent yields a
+ * clean NotFoundError (404) instead of a Prisma P2003 crash. The subsequent
+ * upsert can still race with a between-check-and-write delete; P2003 is caught
+ * and translated to NotFoundError for the same reason.
  */
 export async function upsertReadingProgress(
   narrativeId: string,
@@ -198,11 +205,26 @@ export async function upsertReadingProgress(
   sceneIndex: number,
   paragraphIdx: number,
 ) {
-  return db.readingProgress.upsert({
-    where: { narrativeId },
-    create: { narrativeId, scrollPct, sceneIndex, paragraphIdx },
-    update: { scrollPct, sceneIndex, paragraphIdx },
-  })
+  const narrative = await db.narrative.findUnique({ where: { id: narrativeId }, select: { id: true } })
+  if (!narrative) {
+    throw new NotFoundError(`Narrative '${narrativeId}' not found`)
+  }
+
+  try {
+    return await db.readingProgress.upsert({
+      where: { narrativeId },
+      create: { narrativeId, scrollPct, sceneIndex, paragraphIdx },
+      update: { scrollPct, sceneIndex, paragraphIdx },
+    })
+  } catch (err) {
+    // Race: narrative deleted between the existence check and the write.
+    // P2003 = foreign key constraint violation. Treat as a benign 404 rather
+    // than surfacing a 500 for progress that no longer has a home.
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2003') {
+      throw new NotFoundError(`Narrative '${narrativeId}' not found`)
+    }
+    throw err
+  }
 }
 
 /**
