@@ -163,6 +163,10 @@ export interface UploadResult {
  * Shared by the library header button and the upload-zone drop area so the
  * FormData construction, error parsing, and response shape live in one place.
  * Throws an `Error` with a user-safe message on a non-OK response.
+ *
+ * Hits the versioned `POST /api/v1/documents` endpoint (multipart form-data).
+ * The v1 envelope wraps the upload result in `{ data: { jobId, documentId } }`;
+ * errors arrive as `{ error: { code, message } }`.
  */
 export async function uploadDocument(
   file: File,
@@ -171,10 +175,16 @@ export async function uploadDocument(
   const fd = new FormData()
   fd.append('file', file)
   fd.append('mode', mode)
-  const res = await fetch('/api/documents/upload', { method: 'POST', body: fd })
-  const data = await res.json().catch(() => ({}))
+  const res = await fetch('/api/v1/documents', { method: 'POST', body: fd })
+  const json = (await res.json().catch(() => null)) as
+    | { data?: { jobId?: string; documentId?: string }; error?: { message?: string } }
+    | null
   if (!res.ok) {
-    throw new Error(data?.error || 'Upload failed')
+    throw new Error(json?.error?.message || 'Upload failed')
+  }
+  const data = json?.data
+  if (!data?.jobId || !data?.documentId) {
+    throw new Error('Upload succeeded but the response was malformed.')
   }
   return { jobId: data.jobId, documentId: data.documentId }
 }

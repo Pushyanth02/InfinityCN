@@ -13,6 +13,7 @@ import { motion } from 'framer-motion'
 import { revealUp } from '@/lib/motion'
 import { useLemniscate } from '../store'
 import { useToast } from '@/hooks/use-toast'
+import { apiFetch, ApiError } from '@/lib/api/client'
 
 // ─── Floating amber particles ──────────────────────────────────────────────
 export function FloatingParticles() {
@@ -92,9 +93,10 @@ export function useSampleHandler() {
     if (loading) return
     setLoading(true)
     try {
-      const res = await fetch('/api/sample?mode=BOTH', { method: 'POST' })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data?.error || 'Sample creation failed')
+      const data = await apiFetch<{ jobId: string; documentId: string; sampleTitle: string }>(
+        '/api/v1/sample',
+        { method: 'POST', params: { mode: 'BOTH' } },
+      )
       toast({
         title: 'Sample narrative queued',
         description:
@@ -104,7 +106,7 @@ export function useSampleHandler() {
     } catch (err) {
       toast({
         title: 'Could not start sample',
-        description: (err as Error).message,
+        description: err instanceof ApiError ? err.message : 'Sample creation failed',
         variant: 'destructive',
       })
     } finally {

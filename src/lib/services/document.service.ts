@@ -11,7 +11,6 @@ import { db } from '@/lib/db'
 import { Prisma } from '@prisma/client'
 import { hashBuffer } from '@/lib/pipeline/extract'
 import { getStorageProvider } from '@/lib/providers'
-import { buildStorageName } from '@/lib/storage'
 import { createLogger } from '@/lib/logger'
 import {
   ValidationError,
@@ -111,6 +110,7 @@ export async function uploadDocument(input: UploadInput): Promise<UploadResult> 
   if (existing) {
     documentId = existing.id
   } else {
+    const { buildStorageName } = await import('@/lib/storage')
     const storageName = buildStorageName(safeName, fileHash)
     const storage = await getStorageProvider()
     let stored = false

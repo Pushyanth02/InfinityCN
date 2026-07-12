@@ -26,7 +26,7 @@ function getDatabasePath(): string | null {
   // DATABASE_URL format: file:./db/custom.db or file:../relative/path.db
   if (!url.startsWith('file:')) return null
   const filePath = url.slice(5)
-  return path.resolve(filePath)
+  return path.resolve(/* turbopackIgnore: true */ filePath)
 }
 
 /**
@@ -45,7 +45,7 @@ export async function performBackup(): Promise<string | null> {
   }
 
   // Ensure backup directory exists
-  const backupDir = path.resolve(BACKUP_DIR)
+  const backupDir = path.resolve(/* turbopackIgnore: true */ BACKUP_DIR)
   if (!fs.existsSync(backupDir)) {
     fs.mkdirSync(backupDir, { recursive: true })
   }

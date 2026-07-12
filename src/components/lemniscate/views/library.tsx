@@ -47,6 +47,7 @@ import {
 import { StatsStrip, EmptyState, SkeletonGrid } from './library-states'
 import { UploadZone } from './library-upload-zone'
 import { BookCard } from './library-book-card'
+import { apiFetch, ApiError } from '@/lib/api/client'
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -90,17 +91,15 @@ export function LibraryView() {
     async (initial = false) => {
       if (initial) setLoading(true)
       try {
-        const [docsRes, statsRes] = await Promise.all([
-          fetch('/api/documents'),
-          fetch('/api/stats'),
+        // Both v1 endpoints unwrap to their `data` payload via apiFetch.
+        // /api/v1/documents → apiPaginated → data is the documents array.
+        // /api/v1/stats → data is the stats object.
+        const [documents, dashboardStats] = await Promise.all([
+          apiFetch<LibraryDocument[]>('/api/v1/documents'),
+          apiFetch<StatsResponse>('/api/v1/stats'),
         ])
-        if (docsRes.ok) {
-          const data = await docsRes.json()
-          setDocs(Array.isArray(data.documents) ? data.documents : [])
-        }
-        if (statsRes.ok) {
-          setStats(await statsRes.json())
-        }
+        setDocs(Array.isArray(documents) ? documents : [])
+        setStats(dashboardStats ?? null)
       } catch {
         if (initial) {
           toast({ title: 'Failed to load library', variant: 'destructive' })
@@ -121,29 +120,25 @@ export function LibraryView() {
 
   // ─── Fetch reading progress for all narratives in a single bulk query ─────
   // Previously this did O(docs × narratives) sequential fetches (N+1 problem).
-  // The /api/reading-progress endpoint returns all in-progress narratives in
+  // The /api/v1/reading-progress endpoint returns all in-progress narratives in
   // one DB query with a single joined include, replacing dozens of round-trips.
   React.useEffect(() => {
     if (!docs) return
     let cancelled = false
     ;(async () => {
       try {
-        const res = await fetch('/api/reading-progress')
-        if (!res.ok) return
-        const data = (await res.json()) as {
-          items?: Array<{
-            narrativeId: string
-            docId: string
-            title: string
-            originalName: string
-            fileHash: string
-            scrollPct: number
-            sceneIndex?: number
-            mode: string
-          }>
-        }
+        const data = await apiFetch<{ items: Array<{
+          narrativeId: string
+          docId: string
+          title: string
+          originalName: string
+          fileHash: string
+          scrollPct: number
+          sceneIndex?: number
+          mode: string
+        }> }>('/api/v1/reading-progress')
         if (cancelled) return
-        const items: typeof continueReading = (data.items ?? []).map((item) => ({
+        const items: typeof continueReading = data.items.map((item) => ({
           narrativeId: item.narrativeId,
           docId: item.docId,
           title: item.title,
@@ -204,9 +199,11 @@ export function LibraryView() {
   const handleSample = React.useCallback(async () => {
     setUploading(true)
     try {
-      const res = await fetch(`/api/sample?mode=${uploadMode}`, { method: 'POST' })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Sample creation failed')
+      const data = await apiFetch<{
+        jobId: string
+        documentId: string
+        sampleTitle: string
+      }>(`/api/v1/sample`, { method: 'POST', params: { mode: uploadMode } })
       toast({
         title: 'Sample narrative queued',
         description: `"${data.sampleTitle}" → ${uploadMode} mode.`,
@@ -215,7 +212,7 @@ export function LibraryView() {
     } catch (err) {
       toast({
         title: 'Sample failed',
-        description: (err as Error).message,
+        description: err instanceof ApiError ? err.message : 'Sample creation failed',
         variant: 'destructive',
       })
     } finally {
@@ -247,10 +244,9 @@ export function LibraryView() {
         return
       }
       try {
-        const res = await fetch(`/api/documents/${doc.id}/narratives`)
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const data = await res.json()
-        const narrs: { id: string; mode: string }[] = data.narratives ?? []
+        const narrs = await apiFetch<{ id: string; mode: string }[]>(
+          `/api/v1/documents/${doc.id}/narratives`,
+        )
         const cinema = narrs.find((n) => n.mode === 'CINEMATIFIED')
         const orig = narrs.find((n) => n.mode === 'ORIGINAL')
         const target = cinema || orig
@@ -286,15 +282,18 @@ export function LibraryView() {
       )
         return
       try {
-        const res = await fetch(`/api/documents/${doc.id}`, { method: 'DELETE' })
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        await apiFetch(`/api/v1/documents/${doc.id}`, { method: 'DELETE' })
         toast({
           title: 'Document deleted',
           description: title,
         })
         refresh(false)
-      } catch {
-        toast({ title: 'Delete failed', variant: 'destructive' })
+      } catch (err) {
+        toast({
+          title: 'Delete failed',
+          description: err instanceof ApiError ? err.message : undefined,
+          variant: 'destructive',
+        })
       }
     },
     [refresh, toast],

@@ -18,7 +18,6 @@ import { DeterministicDocumentParser } from './implementations/deterministic-doc
 import { DeterministicCharacterAnalyzer } from './implementations/deterministic-character-analyzer'
 import { DeterministicRelationshipAnalyzer } from './implementations/deterministic-relationship-analyzer'
 import { DeterministicSearchProvider } from './implementations/deterministic-search'
-import { LocalStorageProvider } from './implementations/local-storage'
 import { SqliteQueueProvider } from './implementations/sqlite-queue'
 
 // ─── Registration flag (prevents double-registration) ─────────────────────
@@ -45,8 +44,12 @@ export function registerDefaultProviders(): void {
   // Search
   registerProvider('search', 'deterministic', () => new DeterministicSearchProvider())
 
-  // Storage
-  registerProvider('storage', 'local', () => new LocalStorageProvider())
+  // Storage — lazy import to avoid Turbopack NFT tracing the dynamic path
+  // operations in @/lib/storage at build time.
+  registerProvider('storage', 'local', async () => {
+    const { LocalStorageProvider } = await import('./implementations/local-storage')
+    return new LocalStorageProvider()
+  })
 
   // Queue
   registerProvider('queue', 'sqlite', () => new SqliteQueueProvider())

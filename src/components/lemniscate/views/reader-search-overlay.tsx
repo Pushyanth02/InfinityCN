@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge'
 import { spring } from '@/lib/motion'
 import { Search, Loader2, FileText, Film, Users, ChevronRight } from 'lucide-react'
 import { useDebouncedValue, useFocusTrap } from '../hooks'
+import { apiFetch } from '@/lib/api/client'
 
 interface ReaderSearchResult {
   type: 'paragraph' | 'scene' | 'character'
@@ -105,13 +106,13 @@ export function SearchOverlay({
     }
     const controller = new AbortController()
     setLoading(true)
-    fetch(
-      `/api/narratives/${narrativeId}/search?q=${encodeURIComponent(q)}`,
-      { signal: controller.signal },
+    // v1 search → { data: { results, total } }; apiFetch unwraps to that.
+    apiFetch<{ results: ReaderSearchResult[]; total: number }>(
+      `/api/v1/narratives/${narrativeId}/search`,
+      { params: { q }, signal: controller.signal },
     )
-      .then((r) => r.json())
       .then((data) => {
-        setResults((data.results as ReaderSearchResult[]) || [])
+        setResults(data.results || [])
         setTotal(data.total || 0)
         setLoading(false)
       })

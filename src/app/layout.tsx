@@ -4,6 +4,11 @@ import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from "@/components/lemniscate/theme-provider";
 
 export const metadata: Metadata = {
+  metadataBase: new URL(
+    process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : "http://localhost:3000",
+  ),
   title: "Lemniscate — Document-to-Storytelling",
   description:
     "Transform PDF, DOCX, and TXT files into structured cinematic narratives through deterministic, offline, classical-NLP processing. No LLMs. No AI APIs. Privacy-first.",

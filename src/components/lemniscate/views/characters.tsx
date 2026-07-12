@@ -19,6 +19,7 @@ import { useLemniscate } from '../store'
 import { Flourish } from '../logo'
 import { staggerContainer, revealScale, hoverLift, spring } from '@/lib/motion'
 import { cn } from '@/lib/utils'
+import { apiFetch } from '@/lib/api/client'
 import {
   ArrowLeft,
   Film,
@@ -96,13 +97,17 @@ export function CharactersView() {
     const controller = new AbortController()
     setLoading(true)
     setError(null)
-    fetch(`/api/narratives/${narrativeId}`, { signal: controller.signal })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d) => {
+    // v1 narrative detail → { data: { narrative, pagination } }; apiFetch
+    // unwraps to that object, so we read `.narrative` off the result.
+    apiFetch<{ narrative: NarrativeData }>(`/api/v1/narratives/${narrativeId}`, {
+      signal: controller.signal,
+    })
+      .then((data) => {
         if (cancelled) return
-        setData(d.narrative)
-        if (d.narrative?.characters?.length)
-          setSelected(d.narrative.characters[0])
+        const narrative = data.narrative
+        setData(narrative)
+        if (narrative?.characters?.length)
+          setSelected(narrative.characters[0])
       })
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === 'AbortError') return

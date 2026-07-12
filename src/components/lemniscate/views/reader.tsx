@@ -53,6 +53,7 @@ import type {
 } from './reader-types'
 import { useTheme } from 'next-themes'
 import { cn } from '@/lib/utils'
+import { apiFetch } from '@/lib/api/client'
 
 // ─── Main ReaderView ─────────────────────────────────────────────────────────
 
@@ -177,24 +178,28 @@ export function ReaderView() {
       return
     }
     const controller = new AbortController()
+    let cancelled = false
     setLoading(true)
     setError(null)
-    fetch(`/api/narratives/${narrativeId}`, { signal: controller.signal })
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const data = await res.json()
+    apiFetch<{ narrative: ReaderNarrative }>(`/api/v1/narratives/${narrativeId}`, { signal: controller.signal })
+      .then((data) => {
+        if (cancelled) return
         if (!data.narrative) throw new Error('No narrative in response')
-        setNarrative(data.narrative as ReaderNarrative)
+        setNarrative(data.narrative)
         setLoading(false)
       })
       .catch((err: unknown) => {
+        if (cancelled) return
         if (err instanceof DOMException && err.name === 'AbortError') return
         const message =
           err instanceof Error ? err.message : 'Unknown fetch error'
         setError(message)
         setLoading(false)
       })
-    return () => controller.abort()
+    return () => {
+      cancelled = true
+      controller.abort()
+    }
   }, [narrativeId])
 
   React.useEffect(() => {
@@ -224,11 +229,9 @@ export function ReaderView() {
   React.useEffect(() => {
     if (!activeDocumentId) return
     let cancelled = false
-    fetch(`/api/documents/${activeDocumentId}/narratives`)
-      .then((r) => r.json())
-      .then((data) => {
+    apiFetch<{ id: string; mode: string }[]>(`/api/v1/documents/${activeDocumentId}/narratives`)
+      .then((narrs) => {
         if (cancelled) return
-        const narrs: { id: string; mode: string }[] = data.narratives ?? []
         const map: Record<ReaderMode, string | null> = { ORIGINAL: null, CINEMATIFIED: null }
         for (const n of narrs) {
           if (n.mode === 'ORIGINAL') map.ORIGINAL = n.id
@@ -277,12 +280,10 @@ export function ReaderView() {
     } else {
       const controller = new AbortController()
       setLoading(true)
-      fetch(`/api/narratives/${effectiveNarrativeId}`, { signal: controller.signal })
-        .then(async (res) => {
-          if (!res.ok) throw new Error(`HTTP ${res.status}`)
-          const data = await res.json()
+      apiFetch<{ narrative: ReaderNarrative }>(`/api/v1/narratives/${effectiveNarrativeId}`, { signal: controller.signal })
+        .then((data) => {
           if (!data.narrative) throw new Error('No narrative in response')
-          setNarrative(data.narrative as ReaderNarrative)
+          setNarrative(data.narrative)
           setLoading(false)
           applyScrollPct(scrollPct)
         })
@@ -312,12 +313,13 @@ export function ReaderView() {
     let cancelled = false
     // Re-enable position restoration for the freshly-loaded narrative.
     setProgressRestored(false)
-    fetch(`/api/narratives/${effectiveNarrativeId}/progress`)
-      .then((r) => r.json())
-      .then((data) => {
+    // v1 progress GET returns 200 with null data when no progress exists
+    // (the normal initial state), so absence is "no saved position", not 404.
+    apiFetch<ReaderProgress | null>(`/api/v1/narratives/${effectiveNarrativeId}/progress`)
+      .then((progress) => {
         if (cancelled) return
-        if (data.progress) {
-          setSavedProgress(data.progress as ReaderProgress)
+        if (progress) {
+          setSavedProgress(progress)
         } else {
           setSavedProgress(null)
         }
@@ -411,10 +413,11 @@ export function ReaderView() {
       const sceneIndex = isCine ? currentSceneIdxRef.current : 0
 
       lastSaveRef.current = now
-      fetch(`/api/narratives/${targetId}/progress`, {
+      // v1 progress POST → apiSuccess(progress). We fire-and-forget the save;
+      // apiFetch throws on non-OK, but the caller swallows errors (.catch).
+      apiFetch(`/api/v1/narratives/${targetId}/progress`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scrollPct, sceneIndex, paragraphIdx }),
+        body: { scrollPct, sceneIndex, paragraphIdx },
       }).catch(() => {})
     },
     // No deps: the target id is read from a ref so this callback is stable
@@ -440,10 +443,9 @@ export function ReaderView() {
   // (effectiveNarrativeId so bookmarks follow a mode switch to the sibling row.)
   const refreshBookmarks = React.useCallback(() => {
     if (!effectiveNarrativeId) return
-    fetch(`/api/narratives/${effectiveNarrativeId}/bookmarks`)
-      .then((r) => r.json())
-      .then((data) =>
-        setBookmarks((data.bookmarks as ReaderBookmark[]) || []),
+    apiFetch<ReaderBookmark[]>(`/api/v1/narratives/${effectiveNarrativeId}/bookmarks`)
+      .then((bookmarks) =>
+        setBookmarks(bookmarks || []),
       )
       .catch(() => {})
   }, [effectiveNarrativeId])
@@ -700,9 +702,9 @@ export function ReaderView() {
             (bm) => Math.abs((bm.offset || 0) - progress) < 3,
           )
       if (existing) {
-        fetch(
-          `/api/narratives/${effectiveNarrativeId}/bookmarks?bookmarkId=${existing.id}`,
-          { method: 'DELETE' },
+        apiFetch(
+          `/api/v1/narratives/${effectiveNarrativeId}/bookmarks`,
+          { method: 'DELETE', params: { bookmarkId: existing.id } },
         )
           .then(() => {
             refreshBookmarks()
@@ -722,15 +724,14 @@ export function ReaderView() {
             : ''
         }`
       : `${scrollPct}% through`
-    fetch(`/api/narratives/${effectiveNarrativeId}/bookmarks`, {
+    apiFetch(`/api/v1/narratives/${effectiveNarrativeId}/bookmarks`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+      body: {
         sceneIndex,
         paragraphIdx: currentParagraphIdx,
         offset: scrollPct,
         label,
-      }),
+      },
     })
       .then(() => {
         refreshBookmarks()
@@ -770,9 +771,9 @@ export function ReaderView() {
   const onDeleteBookmark = React.useCallback(
     (id: string) => {
       if (!effectiveNarrativeId) return
-      fetch(
-        `/api/narratives/${effectiveNarrativeId}/bookmarks?bookmarkId=${id}`,
-        { method: 'DELETE' },
+      apiFetch(
+        `/api/v1/narratives/${effectiveNarrativeId}/bookmarks`,
+        { method: 'DELETE', params: { bookmarkId: id } },
       )
         .then(() => {
           refreshBookmarks()
@@ -823,10 +824,9 @@ export function ReaderView() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
     setShowContinueHint(false)
     if (effectiveNarrativeId) {
-      fetch(`/api/narratives/${effectiveNarrativeId}/progress`, {
+      apiFetch(`/api/v1/narratives/${effectiveNarrativeId}/progress`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scrollPct: 0, sceneIndex: 0, paragraphIdx: 0 }),
+        body: { scrollPct: 0, sceneIndex: 0, paragraphIdx: 0 },
       }).catch(() => {})
     }
   }, [effectiveNarrativeId])

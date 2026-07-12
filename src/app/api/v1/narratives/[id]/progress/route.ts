@@ -12,7 +12,6 @@ import { securityCheck } from '@/lib/middleware/security'
 import { getClientIP } from '@/lib/middleware/rate-limit'
 import { validateIdParam } from '@/lib/middleware/validate-id'
 import { validate, readingProgressSchema } from '@/lib/api/validate'
-import { NotFoundError } from '@/lib/domain/errors'
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
@@ -24,7 +23,9 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     if (invalid) return invalid
 
     const progress = await getReadingProgress(id)
-    if (!progress) throw new NotFoundError(`No reading progress for narrative '${id}'`)
+    // "No progress yet" is the normal initial state for every new narrative,
+    // not an error. Return 200 with null data (matching the legacy contract)
+    // so the reader treats absence as "no saved position" rather than 404.
     return apiSuccess(progress)
   } catch (err) {
     return apiError(err)

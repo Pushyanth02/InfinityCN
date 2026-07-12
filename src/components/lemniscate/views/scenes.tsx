@@ -18,6 +18,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useLemniscate } from '../store'
 import { Flourish } from '../logo'
 import { staggerContainer, spring } from '@/lib/motion'
+import { apiFetch } from '@/lib/api/client'
 import {
   ArrowLeft,
   Film,
@@ -52,12 +53,14 @@ export function ScenesView() {
     if (!narrativeId) return
     setLoading(true)
     setError(null)
-    fetch(`/api/narratives/${narrativeId}`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d) => {
-        setData(d.narrative)
+    // v1 narrative detail → { data: { narrative, pagination } }; apiFetch
+    // unwraps to that object, so we read `.narrative` off the result.
+    apiFetch<{ narrative: NarrativeData }>(`/api/v1/narratives/${narrativeId}`)
+      .then((data) => {
+        const narrative = data.narrative
+        setData(narrative)
         setError(null)
-        if (d.narrative?.scenes?.length) setSelected(d.narrative.scenes[0])
+        if (narrative?.scenes?.length) setSelected(narrative.scenes[0])
       })
       .catch((err: unknown) => {
         setError(err instanceof Error ? err.message : 'Failed to load narrative')

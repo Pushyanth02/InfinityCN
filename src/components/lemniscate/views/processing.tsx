@@ -19,6 +19,7 @@ import { useLemniscate } from '../store'
 import { useRealtime } from '../use-realtime'
 import { InfinityFlow } from '../logo'
 import { spring } from '@/lib/motion'
+import { apiFetch } from '@/lib/api/client'
 import {
   ArrowLeft,
   Film,
@@ -51,16 +52,22 @@ export function ProcessingView() {
     const tick = async () => {
       if (cancelled) return
       try {
-        const [jr, dr] = await Promise.all([
-          fetch(`/api/jobs/${jobId}`, { signal: controller.signal }).then((r) => r.json()),
+        // v1 envelopes unwrap via apiFetch: /jobs/:id → job object,
+        // /documents/:id → document object.
+        const [jobData, docData] = await Promise.all([
+          apiFetch<ProcessingJob | null>(`/api/v1/jobs/${jobId}`, {
+            signal: controller.signal,
+          }),
           documentId
-            ? fetch(`/api/documents/${documentId}`, { signal: controller.signal }).then((r) => r.json())
+            ? apiFetch<ProcessingDoc | null>(`/api/v1/documents/${documentId}`, {
+                signal: controller.signal,
+              })
             : Promise.resolve(null),
         ])
         if (cancelled) return
-        setJob(jr.job)
-        if (dr?.document) setDoc(dr.document)
-        if (jr.job?.status === 'COMPLETED' || jr.job?.status === 'FAILED') return
+        if (jobData) setJob(jobData)
+        if (docData) setDoc(docData)
+        if (jobData?.status === 'COMPLETED' || jobData?.status === 'FAILED') return
       } catch {
         /* ignore */
       }

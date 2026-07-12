@@ -17,8 +17,13 @@ import { createLogger } from '../logger'
 
 const logger = createLogger('rate-limit')
 
-// Log startup warning about ephemeral state
-if (process.env.NODE_ENV === 'production' && !process.env.REDIS_URL) {
+// Log startup warning about ephemeral state — suppressed during `next build`
+// page-data collection (NEXT_PHASE is set to 'phase-production-build' there).
+if (
+  process.env.NODE_ENV === 'production' &&
+  !process.env.REDIS_URL &&
+  !process.env.NEXT_PHASE
+) {
   logger.warn(
     'Rate limiter is using in-memory storage. State will be lost on restart. ' +
     'Consider deploying with Redis (REDIS_URL) for persistent rate limiting.',

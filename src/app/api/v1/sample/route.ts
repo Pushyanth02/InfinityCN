@@ -11,7 +11,6 @@
 import { NextRequest } from 'next/server'
 import '@/lib/providers'
 import { db } from '@/lib/db'
-import { saveBuffer, buildStorageName } from '@/lib/storage'
 import { hashText } from '@/lib/pipeline/extract'
 import { apiSuccess, apiError, apiValidationError } from '@/lib/api/response'
 import { securityCheck } from '@/lib/middleware/security'
@@ -151,6 +150,7 @@ export async function POST(req: NextRequest) {
 
     const fileHash = await hashText(SAMPLE)
     const buf = Buffer.from(SAMPLE, 'utf-8')
+    const { saveBuffer, buildStorageName } = await import('@/lib/storage')
     const storageName = buildStorageName('the-last-lighthouse-of-veyrn.txt', fileHash)
     await saveBuffer(storageName, buf)
 

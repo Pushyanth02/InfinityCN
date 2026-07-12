@@ -34,7 +34,7 @@ function resolveUploadRoot(): string {
       /* ignore */
     }
   }
-  return path.join(process.cwd(), 'public', 'uploads')
+  return path.normalize(process.cwd() + '/public/uploads')
 }
 
 /**
