@@ -10,7 +10,6 @@
  */
 
 import { db } from '@/lib/db'
-import { claimNextJob, rehydrateStalledJobs, executeJobWithRetry } from '@/lib/pipeline/job-runner'
 import { createLogger } from '@/lib/logger'
 import { NotFoundError, ValidationError } from '@/lib/domain/errors'
 
@@ -27,31 +26,6 @@ export interface ProcessingStatus {
 }
 
 // ─── Service methods ──────────────────────────────────────────────────────
-
-/**
- * Claim and process the next available queued job (non-blocking).
- * Used by the embedded poller and the standalone worker.
- */
-export async function processNextJob(): Promise<boolean> {
-  const claim = await claimNextJob()
-  if (!claim) return false
-
-  // Fire-and-forget: the job runs in the background.
-  executeJobWithRetry(claim, '[processing-service]').catch((err) => {
-    logger.error('Background job execution failed', {
-      jobId: claim.jobId,
-      error: (err as Error).message,
-    })
-  })
-  return true
-}
-
-/**
- * Re-hydrate stalled processing jobs (called on startup).
- */
-export async function recoverStalledJobs(staleThresholdMs?: number): Promise<number> {
-  return rehydrateStalledJobs(staleThresholdMs)
-}
 
 /**
  * Cancel a queued or processing job.
