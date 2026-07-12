@@ -6,10 +6,11 @@
  * between pipeline stages and will abort if it sees CANCELLED.
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
 import { validateIdParam } from '@/lib/middleware/validate-id'
 import { securityCheck } from '@/lib/middleware/security'
 import { getClientIP } from '@/lib/middleware/rate-limit'
+import { cancelJob } from '@/lib/services/processing.service'
+import { apiError } from '@/lib/api/response'
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const blocked = await securityCheck(req, `job-cancel:${getClientIP(req)}`, 10)
@@ -19,26 +20,10 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const invalid = validateIdParam(id, 'jobId')
   if (invalid) return invalid
 
-  // Atomically cancel only if the job is in a cancellable state
-  const result = await db.job.updateMany({
-    where: {
-      id,
-      status: { in: ['QUEUED', 'PROCESSING'] },
-    },
-    data: {
-      status: 'CANCELLED',
-      stage: 'CANCELLED',
-      error: 'Cancelled by user',
-      completedAt: new Date(),
-    },
-  })
-
-  if (result.count === 0) {
-    return NextResponse.json(
-      { error: 'Job not found or not in a cancellable state' },
-      { status: 404 },
-    )
+  try {
+    await cancelJob(id)
+    return NextResponse.json({ ok: true, jobId: id, message: 'Job cancelled' })
+  } catch (err) {
+    return apiError(err)
   }
-
-  return NextResponse.json({ ok: true, jobId: id, message: 'Job cancelled' })
 }

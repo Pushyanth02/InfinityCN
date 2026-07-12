@@ -94,6 +94,8 @@ function NavButton({
       onClick={onClick}
       whileHover={{ y: -1 }}
       whileTap={{ y: 0 }}
+      aria-current={active ? 'page' : undefined}
+      aria-label={label}
       className={`relative flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors ${
         active ? 'text-amber' : 'text-slate hover:text-ivory'
       }`}

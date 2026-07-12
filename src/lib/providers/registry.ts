@@ -5,7 +5,6 @@
  * Provider selection is driven by environment variables:
  *
  *   DOCUMENT_PARSER_PROVIDER     = deterministic (default)
- *   NARRATIVE_ANALYZER_PROVIDER  = deterministic (default)
  *   CHARACTER_ANALYZER_PROVIDER  = deterministic (default)
  *   RELATIONSHIP_ANALYZER_PROVIDER = deterministic (default)
  *   EMBEDDING_PROVIDER           = (none by default — UNIMPLEMENTED SEAM; see note)
@@ -29,7 +28,6 @@
 
 import type {
   IDocumentParser,
-  INarrativeAnalyzer,
   ICharacterAnalyzer,
   IRelationshipAnalyzer,
   IEmbeddingProvider,
@@ -45,7 +43,6 @@ const logger = createLogger('provider-registry')
 
 export type ProviderSlot =
   | 'documentParser'
-  | 'narrativeAnalyzer'
   | 'characterAnalyzer'
   | 'relationshipAnalyzer'
   | 'embedding'
@@ -68,7 +65,6 @@ const instances = new Map<ProviderSlot, unknown>()
 /** Map of slot → env var name. */
 const envVarMap: Record<ProviderSlot, string> = {
   documentParser: 'DOCUMENT_PARSER_PROVIDER',
-  narrativeAnalyzer: 'NARRATIVE_ANALYZER_PROVIDER',
   characterAnalyzer: 'CHARACTER_ANALYZER_PROVIDER',
   relationshipAnalyzer: 'RELATIONSHIP_ANALYZER_PROVIDER',
   embedding: 'EMBEDDING_PROVIDER',
@@ -80,7 +76,6 @@ const envVarMap: Record<ProviderSlot, string> = {
 /** Default provider name for each slot. */
 const defaults: Partial<Record<ProviderSlot, string>> = {
   documentParser: 'deterministic',
-  narrativeAnalyzer: 'deterministic',
   characterAnalyzer: 'deterministic',
   relationshipAnalyzer: 'deterministic',
   search: 'deterministic',
@@ -163,10 +158,6 @@ export function hasProvider(slot: ProviderSlot, name: string): boolean {
 
 export async function getDocumentParser(): Promise<IDocumentParser> {
   return resolveProvider<IDocumentParser>('documentParser')
-}
-
-export async function getNarrativeAnalyzer(): Promise<INarrativeAnalyzer> {
-  return resolveProvider<INarrativeAnalyzer>('narrativeAnalyzer')
 }
 
 export async function getCharacterAnalyzer(): Promise<ICharacterAnalyzer> {

@@ -13,6 +13,8 @@
  * CanonicalDocument — nothing downstream changes.
  */
 
+import type { DocumentType } from '@/lib/domain/enums'
+
 export type SourceFormat = 'pdf' | 'docx' | 'txt' | 'md' | 'unknown'
 
 export type CanonicalParagraphType =
@@ -97,6 +99,8 @@ export interface CanonicalDocument {
   originalName: string
   mimeType: string
   sourceFormat: SourceFormat
+  /** Domain category — routes Document Intelligence Engine modules. */
+  documentType: DocumentType
   rawText: string
   cleanText: string
   paragraphs: CanonicalParagraph[]
@@ -110,6 +114,7 @@ export interface CanonicalDocumentBuildOptions {
   originalName: string
   mimeType: string
   sourceFormat: SourceFormat
+  documentType: DocumentType
   rawText: string
   cleanText: string
   paragraphs: CanonicalParagraph[]
@@ -126,6 +131,7 @@ export function createCanonicalDocument(
     originalName: opts.originalName,
     mimeType: opts.mimeType,
     sourceFormat: opts.sourceFormat,
+    documentType: opts.documentType,
     rawText: opts.rawText,
     cleanText: opts.cleanText,
     paragraphs: opts.paragraphs,

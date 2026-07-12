@@ -25,7 +25,8 @@ const logger = createLogger('document-service')
 
 // ─── Constants ────────────────────────────────────────────────────────────
 
-const MAX_BYTES = 25 * 1024 * 1024 // 25 MB
+const DEFAULT_MAX_BYTES = 25 * 1024 * 1024 // 25 MB
+const MAX_BYTES = parseMaxUploadBytes(process.env.MAX_UPLOAD_BYTES, DEFAULT_MAX_BYTES)
 const ALLOWED_MIME = new Set([
   'application/pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -57,6 +58,7 @@ export interface UploadResult {
 
 export interface DocumentListOptions {
   status?: string
+  documentType?: string
   limit: number
   offset: number
   sortBy?: string
@@ -110,9 +112,11 @@ export async function uploadDocument(input: UploadInput): Promise<UploadResult> 
     documentId = existing.id
   } else {
     const storageName = buildStorageName(safeName, fileHash)
+    const storage = await getStorageProvider()
+    let stored = false
     try {
-      const storage = await getStorageProvider()
       await storage.save(storageName, fileBuffer)
+      stored = true
 
       const doc = await db.document.create({
         data: {
@@ -126,6 +130,14 @@ export async function uploadDocument(input: UploadInput): Promise<UploadResult> 
       })
       documentId = doc.id
     } catch (err) {
+      if (stored) {
+        await storage.delete(storageName).catch((deleteErr: unknown) => {
+          logger.warn('Failed to clean up orphaned upload file', {
+            storageName,
+            error: deleteErr instanceof Error ? deleteErr.message : String(deleteErr),
+          })
+        })
+      }
       // P2002 = unique constraint (fileHash) — concurrent upload won the race
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
         const existingDoc = await db.document.findFirst({
@@ -196,11 +208,12 @@ export async function uploadDocument(input: UploadInput): Promise<UploadResult> 
 export async function listDocuments(options: DocumentListOptions) {
   const where: Prisma.DocumentWhereInput = {}
   if (options.status) where.status = options.status
+  if (options.documentType) where.documentType = options.documentType
 
   const orderBy: Prisma.DocumentOrderByWithRelationInput = {}
   const sortBy = options.sortBy || 'createdAt'
   const sortOrder = options.sortOrder || 'desc'
-  if (sortBy === 'createdAt' || sortBy === 'originalName' || sortBy === 'sizeBytes') {
+  if (sortBy === 'createdAt' || sortBy === 'originalName' || sortBy === 'sizeBytes' || sortBy === 'documentType') {
     orderBy[sortBy] = sortOrder
   }
 
@@ -282,6 +295,7 @@ function sanitizeFileName(name: string): string {
 }
 
 function validateMagicBytes(buf: Buffer, ext: string): boolean {
+  if (ext === '.txt' || ext === '.md') return buf.length > 0 && isValidUtf8Text(buf)
   if (buf.length < 4) return false
   if (ext === '.pdf') return buf[0] === 0x25 && buf[1] === 0x50 && buf[2] === 0x44 && buf[3] === 0x46
   if (ext === '.docx') return buf[0] === 0x50 && buf[1] === 0x4B && buf[2] === 0x03 && buf[3] === 0x04
@@ -292,8 +306,13 @@ function validateMagicBytes(buf: Buffer, ext: string): boolean {
       buf[4] === 0xA1 && buf[5] === 0xB1 && buf[6] === 0x1A && buf[7] === 0xE1
     )
   }
-  if (ext === '.txt' || ext === '.md') return isValidUtf8Text(buf)
   return false
+}
+
+function parseMaxUploadBytes(value: string | undefined, fallback: number): number {
+  if (!value) return fallback
+  const parsed = Number.parseInt(value, 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
 }
 
 function isValidUtf8Text(buf: Buffer): boolean {

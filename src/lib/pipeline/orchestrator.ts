@@ -1,7 +1,15 @@
 /**
- * Lemniscate — Pipeline Orchestrator
+ * Lemniscate — Pipeline Orchestrator (v2)
  * ----------------------------------------------------------------------------
- * Ties together: extraction → original transform → cinematified transform.
+ * Ties together: extraction → canonical model → document intelligence →
+ * original/cinematified transforms → persistence.
+ *
+ * v2 changes:
+ *   - All DB writes delegated to PersistenceService (single responsibility).
+ *   - CanonicalDocument is the explicit contract between stages.
+ *   - Document type detection feeds the pipeline for future domain routing.
+ *   - The orchestrator is a pure coordinator — no inline persistence logic.
+ *
  * Emits ProgressEvents via the EventBus so the worker + websocket service
  * can stream live progress to the UI.
  *
@@ -9,15 +17,23 @@
  */
 
 import { db } from '../db'
-import { extractText, hashText } from './extract'
 import { transformOriginal, type OriginalResult } from './original'
-import { transformCinematified, type CinematifiedResult } from './cinematified'
-import { detectDocumentMetadata, type DetectedMetadata } from './metadata'
-import { computeStats } from '../nlp/core'
+import { detectDocumentMetadata } from './metadata'
 import { eventBus } from '../events/bus'
 import type { ProgressEvent, PipelineStage } from '../types'
 import { uploadPath } from '../storage'
 import { buildCanonicalDocument, type CanonicalDocument } from '../canonical'
+import { resolveIntelligenceEngine } from '../intelligence'
+import { getDocumentParser } from '../providers'
+import {
+  persistExtraction,
+  persistDocumentMetadata,
+  persistDocumentType,
+  markDocumentProcessed,
+  persistOriginalNarrative,
+  persistCinematifiedNarrative,
+  resetJobArtifacts,
+} from '../services/persistence.service'
 
 export interface PipelineRunOptions {
   jobId: string
@@ -30,14 +46,13 @@ export interface PipelineRunResult {
   sceneCount: number
   characterCount: number
   durationMs: number
+  documentType: string
 }
 
 export async function runPipeline(opts: PipelineRunOptions): Promise<PipelineRunResult> {
   const startedAt = Date.now()
   const { jobId, documentId, mode } = opts
 
-  // Announce the QUEUED→PROCESSING transition so clients see the job wake up
-  // before the (potentially blocking) extraction begins.
   await setJobStage(jobId, 'EXTRACT', 5, 'Extracting text from source document…')
   const doc = await db.document.findUnique({ where: { id: documentId } })
   if (!doc) throw new Error(`Document ${documentId} not found`)
@@ -46,7 +61,11 @@ export async function runPipeline(opts: PipelineRunOptions): Promise<PipelineRun
   const filePath = uploadPath(doc.storageName)
   let extracted
   try {
-    extracted = await extractText(filePath, doc.mimeType)
+    // Extraction runs through the pluggable documentParser provider so new
+    // formats (EPUB/HTML) or cloud parsers can be swapped in via env config
+    // without touching the orchestrator.
+    const parser = await getDocumentParser()
+    extracted = await parser.parse({ filePath, mimeType: doc.mimeType, originalName: doc.originalName })
   } catch (err) {
     await failJob(jobId, `Extraction error: ${(err as Error).message}`)
     throw err
@@ -64,27 +83,10 @@ export async function runPipeline(opts: PipelineRunOptions): Promise<PipelineRun
     throw new Error('Empty extraction')
   }
 
-  await db.rawText.upsert({
-    where: { documentId },
-    create: {
-      documentId,
-      content: extracted.text,
-      charCount: extracted.charCount,
-      wordCount: extracted.wordCount,
-      lineCount: extracted.lineCount,
-      language: extracted.language,
-      encoding: extracted.encoding,
-    },
-    update: {
-      content: extracted.text,
-      charCount: extracted.charCount,
-      wordCount: extracted.wordCount,
-      lineCount: extracted.lineCount,
-      language: extracted.language,
-      encoding: extracted.encoding,
-    },
-  })
-  await db.document.update({ where: { id: documentId }, data: { status: 'EXTRACTED' } })
+  await throwIfJobCancelled(jobId)
+
+  // Delegate persistence to the service layer
+  await persistExtraction(documentId, extracted)
   await log(
     jobId,
     'EXTRACT',
@@ -97,11 +99,9 @@ export async function runPipeline(opts: PipelineRunOptions): Promise<PipelineRun
   await setJobStage(jobId, 'SEGMENT', 20, `Extracted ${extracted.wordCount} words. Segmenting…`)
 
   // ---- 2. Reconstruct paragraphs ONCE -----------------------------------
-  // The same paragraph reconstruction feeds metadata detection, ORIGINAL
-  // persistence, and CINEMATIFIED scene segmentation. Computing it once (rather
-  // than 2–3× as before) is both correct and a measurable performance win.
   const filenameBase = doc.originalName.replace(/\.[^.]+$/, '')
   const baseOriginal = transformOriginal(extracted.text, filenameBase)
+  await throwIfJobCancelled(jobId)
 
   // ---- 2b. Detect document metadata (title/author/series/chapters/…) -----
   const metadata = detectDocumentMetadata({
@@ -130,11 +130,7 @@ export async function runPipeline(opts: PipelineRunOptions): Promise<PipelineRun
     },
   )
 
-  // ---- 2c. Build CanonicalDocument --------------------------------------
-  // The unified internal representation that all downstream engines consume.
-  // This bridges the format-specific extraction into a single normalized model
-  // so scene detection, character analysis, and narrative intelligence never
-  // need to know about the original file format.
+  // ---- 2c. Build CanonicalDocument (the single contract) ----------------
   const canonical: CanonicalDocument = buildCanonicalDocument({
     documentId,
     originalName: doc.originalName,
@@ -143,13 +139,24 @@ export async function runPipeline(opts: PipelineRunOptions): Promise<PipelineRun
     originalResult: baseOriginal,
     metadata,
   })
+
+  // Persist the detected document type
+  await persistDocumentType(documentId, canonical.documentType)
   await log(
     jobId,
     'SEGMENT',
     'DEBUG',
-    `CanonicalDocument built: ${canonical.paragraphs.length} paragraphs, source=${canonical.sourceFormat}.`,
-    { sourceFormat: canonical.sourceFormat, paragraphCount: canonical.paragraphs.length },
+    `CanonicalDocument built: ${canonical.paragraphs.length} paragraphs, source=${canonical.sourceFormat}, type=${canonical.documentType}.`,
+    { sourceFormat: canonical.sourceFormat, documentType: canonical.documentType, paragraphCount: canonical.paragraphs.length },
   )
+
+  // Idempotency: clear any narratives from a previous (failed) attempt of this
+  // job so a retry doesn't create duplicates. Cascade removes all child rows.
+  // No-op on the first attempt.
+  const clearedArtifacts = await resetJobArtifacts(jobId)
+  if (clearedArtifacts > 0) {
+    await log(jobId, 'SEGMENT', 'WARN', `Cleared ${clearedArtifacts} narrative artifact(s) from a previous attempt (idempotent retry).`, { clearedArtifacts })
+  }
 
   // ---- 3. Original mode -------------------------------------------------
   const narrativeIds: string[] = []
@@ -159,32 +166,38 @@ export async function runPipeline(opts: PipelineRunOptions): Promise<PipelineRun
   const runOriginal = mode === 'ORIGINAL' || mode === 'BOTH'
   const runCinema = mode === 'CINEMATIFIED' || mode === 'BOTH'
 
-  let original: OriginalResult | null = null
   if (runOriginal) {
     await setJobStage(jobId, 'ORIGINAL', 35, 'Reconstructing paragraphs (ORIGINAL MODE)…')
-    original = retitleOriginal(baseOriginal, metadata.title)
+    const original = retitleOriginal(baseOriginal, metadata.title)
+    await throwIfJobCancelled(jobId)
     await log(jobId, 'ORIGINAL', 'INFO', `Reconstructed ${original.paragraphs.length} paragraphs.`, { transforms: original.transforms })
-    const nid = await persistNarrative(jobId, documentId, 'ORIGINAL', original)
+    // Persist via service
+    const nid = await persistOriginalNarrative(jobId, documentId, original)
     narrativeIds.push(nid)
     await setJobStage(jobId, 'ORIGINAL', 55, `Original narrative ready (${original.paragraphs.length} paragraphs).`)
   }
 
-  // ---- 4. Cinematified mode ---------------------------------------------
+  // ---- 4. Cinematified mode (Document Intelligence Engine) ---------------
   if (runCinema) {
     await setJobStage(jobId, 'CINEMATIFY', 65, 'Detecting scenes, characters, and locations (CINEMATIFIED MODE)…')
-    // Reuse the already-reconstructed paragraphs; pass the detected title.
-    const cinema = transformCinematified(extracted.text, baseOriginal.paragraphs, metadata.title)
+    // Resolve the intelligence engine for this document's detected domain.
+    // Today the NovelIntelligenceEngine handles every documentType; specialized
+    // engines can be registered without changing the orchestrator.
+    const engine = resolveIntelligenceEngine(canonical.documentType)
+    const cinema = engine.analyze({ canonical, paragraphs: baseOriginal.paragraphs })
+    await throwIfJobCancelled(jobId)
     sceneCount = cinema.sceneCount
     characterCount = cinema.characters.length
-    await log(jobId, 'CINEMATIFY', 'INFO', `${cinema.sceneCount} scenes, ${cinema.characters.length} characters, ${cinema.locations.length} locations, ${cinema.events.length} events.`, { transforms: cinema.transforms })
+    await log(jobId, 'CINEMATIFY', 'INFO', `${cinema.sceneCount} scenes, ${cinema.characters.length} characters, ${cinema.locations.length} locations, ${cinema.events.length} events.`, { transforms: cinema.transforms, engine: engine.name, documentType: canonical.documentType })
     await setJobStage(jobId, 'ANALYZE', 80, `Detected ${cinema.sceneCount} scenes & ${cinema.characters.length} characters. Building narrative…`)
-    const nid = await persistCinematified(jobId, documentId, cinema)
+    // Persist via service with CanonicalDocument for document type metadata
+    const nid = await persistCinematifiedNarrative(jobId, documentId, canonical, cinema)
     narrativeIds.push(nid)
   }
 
   // ---- 5. Finalize ------------------------------------------------------
   await setJobStage(jobId, 'FINALIZE', 95, 'Finalizing narrative artifacts…')
-  await db.document.update({ where: { id: documentId }, data: { status: 'PROCESSED' } })
+  await markDocumentProcessed(documentId)
   const durationMs = Date.now() - startedAt
   await db.job.update({
     where: { id: jobId },
@@ -202,42 +215,18 @@ export async function runPipeline(opts: PipelineRunOptions): Promise<PipelineRun
     result: { narrativeIds, sceneCount, characterCount, durationMs },
   }
   eventBus.publish(completeEvt)
-  // Free the per-job event history after a short delay (lets late-joiners replay).
   setTimeout(() => eventBus.clear(jobId), 60_000)
 
-  return { narrativeIds, sceneCount, characterCount, durationMs }
+  return { narrativeIds, sceneCount, characterCount, durationMs, documentType: canonical.documentType }
 }
 
 // ---------------------------------------------------------------------------
-// Persistence
+// Helpers
 // ---------------------------------------------------------------------------
-
-/** Persist detected document metadata so the library can display real titles. */
-async function persistDocumentMetadata(documentId: string, m: DetectedMetadata): Promise<void> {
-  await db.document.update({
-    where: { id: documentId },
-    data: {
-      title: m.title,
-      titleSource: m.titleSource,
-      author: m.author,
-      subtitle: m.subtitle,
-      series: m.series,
-      language: m.language,
-      wordCount: m.wordCount,
-      readingTimeMin: m.readingTimeMin,
-      chapterCount: m.chapterCount,
-      detectedMeta: JSON.stringify({
-        titleSource: m.titleSource,
-        chapters: m.chapters,
-      }),
-    },
-  })
-}
 
 /**
  * Apply the detected title to an already-computed ORIGINAL result without
- * re-running the (expensive) paragraph reconstruction. Only the title and the
- * leading H1 of the rendered markdown change; content is otherwise identical.
+ * re-running the (expensive) paragraph reconstruction.
  */
 function retitleOriginal(r: OriginalResult, title: string): OriginalResult {
   if (r.title === title) return r
@@ -245,250 +234,18 @@ function retitleOriginal(r: OriginalResult, title: string): OriginalResult {
   return { ...r, title, content }
 }
 
-async function persistNarrative(jobId: string, documentId: string, mode: 'ORIGINAL', r: OriginalResult): Promise<string> {
-  const stats = r.stats
-  const narrative = await db.narrative.create({
-    data: {
-      documentId,
-      jobId,
-      mode,
-      title: r.title,
-      content: r.content,
-      plainText: r.plainText,
-      wordCount: stats.wordCount,
-      charCount: stats.charCount,
-      readingTimeMin: stats.readingTimeMin,
-      paragraphCount: r.paragraphs.length,
-      sceneCount: 0,
-      metadata: JSON.stringify({ transforms: r.transforms, stats }),
-    },
-  })
-  await db.paragraph.createMany({
-    data: r.paragraphs.map((p) => ({
-      narrativeId: narrative.id,
-      index: p.index,
-      text: p.text,
-      type: p.type,
-      speaker: p.speaker ?? null,
-      rawText: p.rawText,
-      wordCount: p.wordCount,
-      charCount: p.charCount,
-      startOffset: p.startOffset,
-      endOffset: p.endOffset,
-    })),
-  })
-  return narrative.id
-}
-
-async function persistCinematified(jobId: string, documentId: string, r: CinematifiedResult): Promise<string> {
-  const cinemaStats = computeStats(r.plainText)
-  const narrative = await db.narrative.create({
-    data: {
-      documentId,
-      jobId,
-      mode: 'CINEMATIFIED',
-      title: r.title,
-      content: r.content,
-      plainText: r.plainText,
-      wordCount: cinemaStats.wordCount,
-      charCount: cinemaStats.charCount,
-      readingTimeMin: cinemaStats.readingTimeMin,
-      paragraphCount: r.scenes.reduce((a, s) => a + s.paragraphCount, 0),
-      sceneCount: r.sceneCount,
-      // Rich, deterministic analysis artifacts persisted as JSON metadata
-      // (hybrid persistence: scalar metrics are promoted to columns; graphs and
-      // timelines live here). All bounded in size.
-      metadata: JSON.stringify({
-        transforms: r.transforms,
-        arcs: r.arcs.length,
-        peaks: r.peaks.length,
-        events: r.events.length,
-        intelligence: r.intelligence,
-        coOccurrence: r.coOccurrence,
-        emotionTimeline: r.emotionTimeline,
-        momentumTimeline: r.momentumTimeline,
-        structure: r.structure,
-      }),
-    },
-  })
-
-  // paragraphs (flatten all scenes' source paragraphs)
-  let pIdx = 0
-  const paraRows: Array<{
-    narrativeId: string
-    index: number
-    text: string
-    type: string
-    speaker: string | null
-    rawText: string
-    wordCount: number
-    charCount: number
-    startOffset: number
-    endOffset: number
-  }> = []
-  for (const scene of r.scenes) {
-    for (const p of scene.paragraphs) {
-      paraRows.push({
-        narrativeId: narrative.id,
-        index: pIdx++,
-        text: p.text,
-        type: p.type,
-        speaker: p.speaker ?? null,
-        rawText: p.rawText,
-        wordCount: p.wordCount,
-        charCount: p.charCount,
-        startOffset: p.startOffset,
-        endOffset: p.endOffset,
-      })
-    }
-  }
-  if (paraRows.length) await db.paragraph.createMany({ data: paraRows })
-
-  // scenes
-  if (r.scenes.length) {
-    await db.scene.createMany({
-      data: r.scenes.map((s) => ({
-        narrativeId: narrative.id,
-        index: s.index,
-        title: s.title,
-        summary: s.summary,
-        location: s.location,
-        timeOfDay: s.timeOfDay,
-        mood: s.mood,
-        tensionScore: s.tensionScore,
-        emotionScore: s.emotionScore,
-        dominantEmotion: s.dominantEmotion,
-        momentumScore: s.momentumScore,
-        arousalScore: s.arousalScore,
-        valence: s.valence,
-        structurePhase: s.structurePhase,
-        startOffset: s.startOffset,
-        endOffset: s.endOffset,
-        charCount: s.charCount,
-        paragraphCount: s.paragraphCount,
-        dialogueRatio: s.dialogueRatio,
-        eventCount: s.eventCount,
-      })),
-    })
-  }
-
-  // characters
-  if (r.characters.length) {
-    await db.character.createMany({
-      data: r.characters.map((c) => ({
-        narrativeId: narrative.id,
-        name: c.name,
-        aliases: JSON.stringify(c.aliases),
-        mentions: c.mentions,
-        firstAppearanceOffset: c.firstAppearanceOffset,
-        role: c.role,
-        dialogueLines: c.dialogueLines,
-        description: null,
-        // Promoted scalar metrics.
-        importanceScore: c.importanceScore,
-        confidenceScore: c.confidenceScore,
-        speakingCount: c.speakingCount,
-        lastAppearanceOffset: c.lastAppearanceOffset,
-        // JSON metadata: honorifics, gender, scene participation, stable id.
-        metadata: JSON.stringify({
-          id: c.id,
-          honorifics: c.honorifics,
-          gender: c.gender,
-          scenes: c.scenes,
-        }),
-      })),
-    })
-  }
-
-  // locations
-  if (r.locations.length) {
-    await db.location.createMany({
-      data: r.locations.map((l) => ({
-        narrativeId: narrative.id,
-        name: l.name,
-        mentions: l.mentions,
-        type: l.type,
-        firstAppearanceOffset: l.firstAppearanceOffset,
-      })),
-    })
-  }
-
-  // events (need scene ids)
-  const sceneRows = await db.scene.findMany({ where: { narrativeId: narrative.id }, orderBy: { index: 'asc' } })
-  if (r.events.length) {
-    await db.event.createMany({
-      data: r.events.map((e) => ({
-        narrativeId: narrative.id,
-        sceneId: sceneRows[e.sceneIndex]?.id ?? null,
-        index: e.index,
-        type: e.type,
-        description: e.description,
-        participants: JSON.stringify(e.participants),
-        offset: e.offset,
-        intensity: e.intensity,
-      })),
-    })
-  }
-
-  // arcs
-  if (r.arcs.length) {
-    await db.narrativeArc.createMany({
-      data: r.arcs.map((a) => ({
-        narrativeId: narrative.id,
-        name: a.name,
-        arcType: a.arcType,
-        startSceneIdx: a.startSceneIdx,
-        endSceneIdx: a.endSceneIdx,
-        intensity: a.intensity,
-        summary: a.summary,
-      })),
-    })
-  }
-
-  // emotional peaks
-  if (r.peaks.length) {
-    await db.emotionalPeak.createMany({
-      data: r.peaks.map((p) => ({
-        narrativeId: narrative.id,
-        sceneId: p.sceneIndex !== null ? sceneRows[p.sceneIndex]?.id ?? null : null,
-        offset: p.offset,
-        intensity: p.intensity,
-        emotion: p.emotion,
-        snippet: p.snippet,
-      })),
-    })
-  }
-
-  return narrative.id
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 async function setJobStage(jobId: string, stage: PipelineStage, progress: number, message: string) {
+  await throwIfJobCancelled(jobId)
   await db.job.update({ where: { id: jobId }, data: { stage, progress, status: 'PROCESSING', startedAt: stage === 'EXTRACT' ? new Date() : undefined } })
   await log(jobId, stage, 'INFO', message)
   const evt: ProgressEvent = { type: 'stage', jobId, stage, progress, message, timestamp: Date.now() }
   eventBus.publish(evt)
   eventBus.publish({ type: 'progress', jobId, progress, timestamp: Date.now() })
-  // Yield to the event loop so the just-published ProgressEvent flushes to
-  // Socket.IO clients before the next (potentially blocking) stage runs.
-  // Without this, all six stages execute in one event-loop tick and the UI
-  // never observes intermediate progress (the "instant completion" bug).
   await nextTick()
-  // Minimum observable dwell: the frontend's HTTP-polling fallback runs on a
-  // 2s interval, and small documents complete the whole pipeline in <100ms —
-  // so a poll-only client would otherwise see only the final COMPLETED state.
-  // Hold each stage briefly so published progress is observable even through
-  // the slowest client channel. Real workloads (large docs) dominate this.
-  // Set LEMNISCATE_STAGE_DWELL_MS=0 to disable (e.g. tests, batch runs).
   const dwell = STAGE_DWELL_MS
   if (dwell > 0) await sleep(dwell)
 }
 
-/** A single event-loop yield. Lets pending I/O (DB writes, socket fan-out,
- *  the frontend's HTTP poll) settle between pipeline stages. */
 function nextTick(): Promise<void> {
   return new Promise((resolve) => setImmediate(resolve))
 }
@@ -497,12 +254,6 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-/**
- * Per-stage minimum dwell in ms. Keeps each pipeline stage observable for
- * poll-based clients (no realtime worker in the default embedded setup).
- * Defaults to 250ms (~1.5s total across six stages — well under the 5-min
- * job timeout, and dwarfed by real extraction/analysis on large documents).
- */
 const STAGE_DWELL_MS = Math.max(0, parseInt(process.env.LEMNISCATE_STAGE_DWELL_MS ?? '250', 10))
 
 async function log(jobId: string, stage: string, level: 'INFO' | 'WARN' | 'ERROR' | 'DEBUG', message: string, metadata?: Record<string, unknown>) {
@@ -514,11 +265,25 @@ async function log(jobId: string, stage: string, level: 'INFO' | 'WARN' | 'ERROR
 }
 
 async function failJob(jobId: string, error: string) {
+  const job = await db.job.findUnique({ where: { id: jobId }, select: { status: true } })
+  if (job?.status === 'CANCELLED') return
   await db.job.update({ where: { id: jobId }, data: { status: 'FAILED', stage: 'FAILED', error, completedAt: new Date() } })
   await log(jobId, 'FAILED', 'ERROR', error)
   eventBus.publish({ type: 'error', jobId, stage: 'FAILED', message: error, timestamp: Date.now() })
-  // Free the per-job event history after a short delay (lets late-joiners replay).
   setTimeout(() => eventBus.clear(jobId), 60_000)
 }
 
-export { hashText, computeStats }
+async function throwIfJobCancelled(jobId: string): Promise<void> {
+  const job = await db.job.findUnique({ where: { id: jobId }, select: { status: true } })
+  if (job?.status === 'CANCELLED') {
+    eventBus.publish({
+      type: 'error',
+      jobId,
+      stage: 'CANCELLED',
+      message: 'Job cancelled by user.',
+      timestamp: Date.now(),
+    })
+    setTimeout(() => eventBus.clear(jobId), 60_000)
+    throw new Error('Job cancelled by user')
+  }
+}

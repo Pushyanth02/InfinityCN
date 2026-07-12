@@ -20,7 +20,7 @@ Every other "document AI" tool ships your text to a third-party LLM. Lemniscate 
 ## Core Modes
 
 ### ORIGINAL MODE
-Preserve source meaning. Repair formatting. Reconstruct proper paragraphs. Improve readability only.
+Preserve source meaning. Repair formatting. Reconstruct proper paragraphs. Improve readability only. Output is **verbatim** story text — only structural/classification annotations are generated.
 
 - Smart-quote & whitespace repair
 - Line-break hyphenation repair (`exam-\nple` → `example`)
@@ -29,7 +29,7 @@ Preserve source meaning. Repair formatting. Reconstruct proper paragraphs. Impro
 - Readability stats (Flesch-Kincaid, sentence/word/syllable metrics)
 
 ### CINEMATIFIED MODE
-Detect scenes, characters, locations, events, narrative arcs, tension, and emotional peaks. Reconstruct content into cinematic storytelling. **Never invents facts. Never adds characters. Never alters chronology.**
+Detect scenes, characters, locations, events, narrative arcs, tension, and emotional peaks; reconstruct content into cinematic storytelling. **Never invents facts, never adds characters, never alters chronology** — every line of story text is sourced verbatim from the input.
 
 - **Scene detection** — boundaries from location/time/topic shifts, headings, transitions
 - **Character detection** — capitalized proper nouns, attribution verbs (`said Elizabeth`), honorifics, dialogue attribution; role classification (Protagonist / Antagonist / Supporting / Minor)
@@ -86,19 +86,49 @@ Detect scenes, characters, locations, events, narrative arcs, tension, and emoti
 7. The browser's processing dashboard renders live progress + logs
 8. On completion, the user opens the narrative viewer (Original or Cinematified)
 
+### Document Intelligence Engine & providers
+
+Processing is organized behind stable seams so capabilities can evolve without
+rewrites:
+
+- **CanonicalDocument** (`src/lib/canonical/`) — the single normalized model
+  every parser produces and every downstream stage consumes.
+- **Document Intelligence Engine** (`src/lib/intelligence/`) — turns a
+  `CanonicalDocument` into structured intelligence. Engines are resolved per
+  `documentType` by a router; the deterministic `NovelIntelligenceEngine`
+  (wrapping the cinematified analysis) is today's default for every domain, so
+  narrative analysis is *one module* of a broader engine rather than the whole
+  platform. New domain engines (research paper, legal, manual, …) register in
+  the router without touching the orchestrator, persistence, or the reader.
+- **Provider seams** (`src/lib/providers/`) — env-selected pluggable
+  implementations for `documentParser`, `relationshipAnalyzer`, `search`,
+  `storage`, and `queue` (each defaulting to a deterministic/local impl). New
+  formats or backends drop in via environment variables.
+- **Services** (`src/lib/services/`) — own the business logic (documents, jobs,
+  search, persistence, export, analytics, …) so API routes stay thin. A
+  versioned **`/api/v1`** surface (typed response envelope, request validation,
+  OpenAPI, metrics) sits alongside the legacy `/api/*` routes.
+
 ### Production scaling
 
 The queue is backed by the SQLite `Job` table: the worker polls for `QUEUED`
 rows and claims one atomically with a compare-and-set (`updateMany` guarded by
 `status`). This is durable and restart-safe — stalled `PROCESSING` jobs are
-re-queued on boot. For single-node self-hosting (the primary use case) no
-external broker is required.
+re-queued on boot, and a failed-then-retried job clears its own partial
+artifacts first so retries never duplicate narratives. For single-node
+self-hosting (the primary use case) no external broker is required.
 
-Horizontal scaling beyond a single node would require moving off SQLite (e.g.
-Postgres or Turso via Prisma's swappable `datasource`) and, optionally, a
-Redis-backed queue + `lemniscate:events` pub/sub fan-out for multiple Socket.IO
-gateways. **These are not implemented today** — `REDIS_URL` is reserved for
-that future work.
+**Redis** (`REDIS_URL`) is optional. When set, it backs **rate limiting** with
+an atomic fixed-window counter that survives restarts and is shared across
+instances (in-memory fallback otherwise); the bundled `docker-compose.yml`
+provisions a `redis` service and wires it to the app + worker. Redis-backed
+**queue coordination / `lemniscate:events` pub-sub** for multiple Socket.IO
+gateways remains a reserved, unimplemented seam — the SQLite CAS queue is the
+queue regardless of `REDIS_URL`.
+
+Horizontal scaling beyond a single node would also require moving off SQLite
+(e.g. Postgres, or Turso via the bundled libSQL adapter / Prisma's swappable
+`datasource`).
 
 ---
 
@@ -129,7 +159,8 @@ src/
 │   │   ├── reading-progress/     # cross-narrative in-progress list
 │   │   ├── sample/               # built-in sample story
 │   │   ├── stats/                # dashboard aggregates
-│   │   └── health/               # liveness + database check
+│   │   ├── health/               # liveness + database check
+│   │   └── v1/                   # versioned API mirror + metrics + openapi.json
 │   ├── globals.css               # Lemniscate design system (OKLCH tokens)
 │   ├── layout.tsx
 │   └── page.tsx                  # single-page app shell
@@ -156,10 +187,16 @@ src/
 │   ├── backup.ts                 # scheduled SQLite backup scheduler
 │   ├── storage/index.ts          # local file storage (read/write/delete/url)
 │   ├── events/bus.ts             # in-process EventBus (ring buffer, 200 events/job)
-│   ├── middleware/               # security, rate-limit, validate-id, body-size
-│   ├── nlp/
+│   ├── middleware/               # security, rate-limit (Redis/memory), validate-id, body-size
+│   ├── canonical/                # CanonicalDocument model + builder + document-type detection
+│   ├── domain/                   # entities, enums, structured error taxonomy
+│   ├── services/                 # business logic (document, job, search, persistence, export, …)
+│   ├── providers/                # pluggable seams: parser, search, storage, queue, relationship
+│   ├── intelligence/             # Document Intelligence Engine + domain router (NovelIntelligenceEngine)
+│   ├── api/                      # response envelope, request validation, OpenAPI
+│   ├── nlp/                      # deterministic sub-engines (characters, emotion, momentum,
+│   │   │                         #   relationships, scenes, structure, intelligence)
 │   │   ├── core.ts               # tokenize, splitSentences, POS-lite, stats
-│   │   ├── core.test.ts          # unit tests for NLP primitives
 │   │   └── lexicons.ts           # AFINN valence, Plutchik, gazetteers, arc signals
 │   └── pipeline/
 │       ├── extract.ts            # PDF/DOCX/TXT extraction

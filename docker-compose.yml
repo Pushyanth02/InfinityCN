@@ -30,6 +30,12 @@ services:
       # The dedicated `worker` service below processes the job queue, so the
       # app container disables its in-process poller to avoid redundant polling.
       - DISABLE_EMBEDDED_WORKER=1
+      # Redis for persistent, shared rate-limit counters (see the redis service below).
+      # Rate limiting falls back to in-memory automatically if Redis is unreachable.
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+    depends_on:
+      redis:
+        condition: service_healthy
     security_opt:
       - no-new-privileges:true
     mem_limit: ${APP_MEM_LIMIT:-512m}
@@ -61,6 +67,7 @@ services:
       - WORKER_CONCURRENCY=2
       - WORKER_POLL_INTERVAL_MS=800
       - LEMNISCATE_ALLOWED_ORIGINS=${LEMNISCATE_ALLOWED_ORIGINS:-http://localhost:81}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
     security_opt:
       - no-new-privileges:true
     mem_limit: ${WORKER_MEM_LIMIT:-1g}
@@ -68,12 +75,44 @@ services:
     depends_on:
       app:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3003/health"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
+    restart: unless-stopped
+
+  # --- Redis (persistent, shared rate-limit counters) ---
+  redis:
+    image: redis:7-alpine
+    # Append-only persistence so counters survive restarts; bounded memory with
+    # LRU eviction so a burst of keys can never exhaust the host.
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --maxmemory
+      - "256mb"
+      - --maxmemory-policy
+      - allkeys-lru
+    # Internal-only — reached by app + worker over the compose network.
+    # Do NOT publish 6379 to the host.
+    expose:
+      - "6379"
+    volumes:
+      - redis-data:/data
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: ${REDIS_MEM_LIMIT:-320m}
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
     restart: unless-stopped
 
   # --- Caddy Reverse Proxy ---
@@ -95,5 +134,6 @@ services:
 volumes:
   db-data:
   uploads:
+  redis-data:
   caddy-data:
   caddy-config:

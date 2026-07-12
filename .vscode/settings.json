@@ -1,0 +1,9 @@
+{
+  // Tailwind CSS v4 uses at-rules (@theme, @custom-variant, @apply, @utility,
+  // @source, …) that the built-in VS Code CSS language server does not know,
+  // producing false "Unknown at rule" diagnostics on src/app/globals.css.
+  // Ignoring unknown at-rules removes the false positives without touching the
+  // CSS or the build. The Tailwind CSS IntelliSense extension (see
+  // .vscode/extensions.json) validates these at-rules natively.
+  "css.lint.unknownAtRules": "ignore"
+}

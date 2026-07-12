@@ -140,6 +140,11 @@ export async function executeJobWithRetry(
       lastError = err as Error
       const msg = lastError.message
 
+      if (isCancellationError(msg)) {
+        logger.info('Job cancelled', { jobId, source: logPrefix })
+        return
+      }
+
       // Non-retryable errors: don't waste time retrying
       if (isNonRetryableError(msg)) {
         logger.error('Job failed (non-retryable)', { jobId, error: msg, source: logPrefix })
@@ -193,4 +198,8 @@ function isNonRetryableError(msg: string): boolean {
     'Invalid mode',
   ]
   return nonRetryable.some((pattern) => msg.includes(pattern))
+}
+
+function isCancellationError(msg: string): boolean {
+  return msg.includes('Job cancelled')
 }

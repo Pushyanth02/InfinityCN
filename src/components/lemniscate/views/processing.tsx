@@ -1,57 +1,36 @@
 'use client'
 
+/**
+ * Lemniscate — Processing view
+ * ----------------------------------------------------------------------------
+ * Orchestrator for the live processing view: polls the job/document, subscribes
+ * to realtime progress, and renders the header, progress bar, pipeline stages,
+ * log terminal, and completion/failure panels. The stages strip and log
+ * terminal live in sibling `processing-*` modules; shapes and stage config in
+ * `processing-shared`.
+ */
+
 import * as React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { useLemniscate } from '../store'
 import { useRealtime } from '../use-realtime'
 import { InfinityFlow } from '../logo'
-import { staggerContainer, revealUp, spring } from '@/lib/motion'
+import { spring } from '@/lib/motion'
 import {
   ArrowLeft,
-  FileSearch,
-  Layers,
   Film,
   Type,
-  ScanLine,
-  Sparkles,
   CheckCircle2,
   AlertCircle,
-  Terminal,
   Cpu,
 } from 'lucide-react'
 
-interface ProcessingNarrative {
-  id: string
-  mode: string
-  title: string
-  sceneCount: number
-}
-
-interface ProcessingJob {
-  stage?: string
-  progress?: number
-  status?: string
-  mode?: string
-  error?: string | null
-  narratives?: ProcessingNarrative[]
-}
-
-interface ProcessingDoc {
-  originalName?: string
-}
-
-const STAGES = [
-  { key: 'EXTRACT', label: 'Extract', icon: FileSearch, desc: 'Reading the source document' },
-  { key: 'SEGMENT', label: 'Segment', icon: ScanLine, desc: 'Splitting into sentences & paragraphs' },
-  { key: 'ORIGINAL', label: 'Original', icon: Type, desc: 'Reconstructing paragraphs' },
-  { key: 'CINEMATIFY', label: 'Cinematify', icon: Film, desc: 'Detecting scenes & characters' },
-  { key: 'ANALYZE', label: 'Analyze', icon: Layers, desc: 'Scoring tension & emotion' },
-  { key: 'FINALIZE', label: 'Finalize', icon: Sparkles, desc: 'Persisting narrative artifacts' },
-] as const
+import type { ProcessingJob, ProcessingDoc } from './processing-shared'
+import { PipelineStages } from './processing-stages'
+import { LogTerminal } from './processing-log'
 
 export function ProcessingView() {
   const jobId = useLemniscate((s) => s.activeJobId)
@@ -162,8 +141,14 @@ export function ProcessingView() {
                   animate={{ scale: 1, opacity: 1 }}
                   transition={spring.snappy}
                   className="font-serif text-4xl font-medium text-amber-gradient"
+                  // Announce progress to screen readers. Assertive would be too noisy
+                  // (fires on every percent); polite lets the SR pick a natural gap.
+                  role="status"
+                  aria-live="polite"
+                  aria-atomic="true"
                 >
-                  {progress}%
+                  <span aria-hidden="true">{progress}%</span>
+                  <span className="sr-only">{progress} percent — {status}</span>
                 </motion.div>
                 <p className="text-[10px] uppercase tracking-[0.15em] text-slate">{status}</p>
               </div>
@@ -171,7 +156,14 @@ export function ProcessingView() {
           </CardHeader>
           <CardContent className="space-y-6 p-6">
             {/* Progress bar */}
-            <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-midnight/60">
+            <div
+              className="relative h-1.5 w-full overflow-hidden rounded-full bg-midnight/60"
+              role="progressbar"
+              aria-label="Processing progress"
+              aria-valuenow={progress}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
               <motion.div
                 className="h-full rounded-full bg-linear-to-r from-amber via-amber to-burgundy"
                 animate={{ width: `${progress}%` }}
@@ -188,69 +180,10 @@ export function ProcessingView() {
             {message && <p className="text-xs italic text-slate">{message}</p>}
 
             {/* Pipeline stages */}
-            <motion.div variants={staggerContainer} initial="initial" animate="animate" className="grid grid-cols-3 gap-2 sm:grid-cols-6">
-              {STAGES.map((s, i) => {
-                const stageOrder = ['EXTRACT', 'SEGMENT', 'ORIGINAL', 'CINEMATIFY', 'ANALYZE', 'FINALIZE']
-                const currentIdx = stageOrder.indexOf(stage)
-                const done = currentIdx > i || status === 'COMPLETED'
-                const active = currentIdx === i && status !== 'COMPLETED' && status !== 'FAILED'
-                const Icon = s.icon
-                return (
-                  <motion.div
-                    key={s.key}
-                    variants={revealUp}
-                    className={`relative flex flex-col items-center gap-1.5 rounded-xl border p-2.5 text-center transition-colors ${
-                      done
-                        ? 'border-calm/25 bg-calm/5'
-                        : active
-                          ? 'border-amber/40 bg-amber/8 pulse-amber'
-                          : 'border-amber/8 bg-midnight/30'
-                    }`}
-                  >
-                    <Icon className={`h-4 w-4 ${done ? 'text-calm' : active ? 'text-amber' : 'text-slate/40'}`} />
-                    <span className={`text-[10px] font-medium ${done || active ? 'text-ivory' : 'text-slate/50'}`}>{s.label}</span>
-                    {i < STAGES.length - 1 && (
-                      <div className="absolute right-[-8px] top-1/2 h-px w-4 -translate-y-1/2 bg-amber/10" />
-                    )}
-                  </motion.div>
-                )
-              })}
-            </motion.div>
+            <PipelineStages stage={stage} status={status} />
 
             {/* Log terminal */}
-            <div>
-              <h4 className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-amber/60">
-                <Terminal className="h-3.5 w-3.5" /> Processing Log
-              </h4>
-              <div className="rounded-xl border border-amber/10 bg-midnight/50 p-3 font-mono">
-                <ScrollArea className="h-44 scrollbar-lemniscate">
-                  {logs.length === 0 ? (
-                    <p className="text-xs italic text-slate/50">Awaiting log stream…</p>
-                  ) : (
-                    <div className="space-y-0.5 text-[11px] leading-relaxed">
-                      <AnimatePresence>
-                        {logs.map((l, i) => (
-                          <motion.div
-                            key={i}
-                            initial={{ opacity: 0, x: -8 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={spring.snappy}
-                            className="flex gap-2"
-                          >
-                            <span className="shrink-0 text-slate/40">{new Date(l.timestamp).toLocaleTimeString([], { hour12: false })}</span>
-                            <span className={`shrink-0 font-semibold ${l.level === 'ERROR' ? 'text-burgundy' : l.level === 'WARN' ? 'text-amber' : l.level === 'DEBUG' ? 'text-slate/50' : 'text-calm'}`}>
-                              [{l.level}]
-                            </span>
-                            <span className="shrink-0 text-amber/60">{l.stage}</span>
-                            <span className="text-ivory/80">{l.message}</span>
-                          </motion.div>
-                        ))}
-                      </AnimatePresence>
-                    </div>
-                  )}
-                </ScrollArea>
-              </div>
-            </div>
+            <LogTerminal logs={logs} />
 
             {/* Completion */}
             <AnimatePresence>

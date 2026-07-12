@@ -57,20 +57,26 @@ export async function recoverStalledJobs(staleThresholdMs?: number): Promise<num
  * Cancel a queued or processing job.
  */
 export async function cancelJob(jobId: string): Promise<void> {
- const job = await db.job.findUnique({ where: { id: jobId }, select: { status: true } })
+  const job = await db.job.findUnique({ where: { id: jobId }, select: { status: true } })
   if (!job) throw new NotFoundError(`Job '${jobId}' not found`)
 
-  if (job.status === 'COMPLETED') {
-    throw new ValidationError('Cannot cancel a completed job')
-  }
   if (job.status === 'CANCELLED') {
     return // Already cancelled — idempotent
   }
+  if (job.status !== 'QUEUED' && job.status !== 'PROCESSING') {
+    throw new ValidationError('Job is not in a cancellable state')
+  }
 
-  await db.job.update({
-    where: { id: jobId },
-    data: { status: 'CANCELLED', stage: 'CANCELLED', completedAt: new Date() },
+  const result = await db.job.updateMany({
+    where: { id: jobId, status: { in: ['QUEUED', 'PROCESSING'] } },
+    data: {
+      status: 'CANCELLED',
+      stage: 'CANCELLED',
+      error: 'Cancelled by user',
+      completedAt: new Date(),
+    },
   })
+  if (result.count === 0) throw new ValidationError('Job is not in a cancellable state')
   logger.info('Job cancelled', { jobId })
 }
 

@@ -2,6 +2,12 @@
 
 import { motion } from 'framer-motion'
 
+/** The single hand-tuned ∞ path used by every infinity mark in the logo set.
+ *  Defined once so all variants stay perfectly in sync — previously this `d`
+ *  string was duplicated across InfinityMark, InfinityFlow, and InfinityHero. */
+const INFINITY_PATH =
+  'M8 16 C 8 8, 18 8, 24 16 S 40 24, 46 16 S 56 8, 56 16 S 46 24, 40 16 S 24 8, 18 16 S 8 24, 8 16 Z'
+
 /** The Lemniscate ∞ mark — hand-tuned SVG path with animated draw + flow */
 export function InfinityMark({
   className = 'h-8 w-8',
@@ -22,7 +28,7 @@ export function InfinityMark({
       aria-hidden="true"
     >
       <motion.path
-        d="M8 16 C 8 8, 18 8, 24 16 S 40 24, 46 16 S 56 8, 56 16 S 46 24, 40 16 S 24 8, 18 16 S 8 24, 8 16 Z"
+        d={INFINITY_PATH}
         initial={animated ? { pathLength: 0, opacity: 0 } : false}
         animate={animated ? { pathLength: 1, opacity: 1 } : false}
         transition={animated ? { duration: 2, ease: [0.16, 1, 0.3, 1] } : {}}
@@ -44,7 +50,7 @@ export function InfinityFlow({ className = 'h-12 w-12' }: { className?: string }
       aria-hidden="true"
     >
       <path
-        d="M8 16 C 8 8, 18 8, 24 16 S 40 24, 46 16 S 56 8, 56 16 S 46 24, 40 16 S 24 8, 18 16 S 8 24, 8 16 Z"
+        d={INFINITY_PATH}
         strokeDasharray="6 4"
         className="lemniscate-flow"
       />
@@ -76,7 +82,7 @@ export function InfinityHero({ className = 'h-32 w-64' }: { className?: string }
         </filter>
       </defs>
       <motion.path
-        d="M8 16 C 8 8, 18 8, 24 16 S 40 24, 46 16 S 56 8, 56 16 S 46 24, 40 16 S 24 8, 18 16 S 8 24, 8 16 Z"
+        d={INFINITY_PATH}
         stroke="url(#inf-grad)"
         strokeWidth="0.6"
         strokeLinecap="round"
@@ -86,7 +92,7 @@ export function InfinityHero({ className = 'h-32 w-64' }: { className?: string }
         transition={{ duration: 3, ease: [0.16, 1, 0.3, 1] }}
       />
       <motion.path
-        d="M8 16 C 8 8, 18 8, 24 16 S 40 24, 46 16 S 56 8, 56 16 S 46 24, 40 16 S 24 8, 18 16 S 8 24, 8 16 Z"
+        d={INFINITY_PATH}
         stroke="url(#inf-grad)"
         strokeWidth="0.3"
         strokeDasharray="3 5"

@@ -38,6 +38,7 @@ model Document {
   readingTimeMin Int?
   chapterCount   Int      @default(0)
   detectedMeta   String   @default("{}") // JSON: { chapters: [...], titleSource, ... }
+  documentType   String   @default("GENERAL") // NOVEL | RESEARCH_PAPER | LEGAL_DOCUMENT | etc.
 
   rawText       RawText?
   jobs          Job[]

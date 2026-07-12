@@ -21,3 +21,4 @@ export type {
 
 export { createCanonicalDocument } from './types'
 export { buildCanonicalDocument, type BuildCanonicalInput } from './builder'
+export { detectDocumentType } from './detect-type'

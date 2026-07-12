@@ -26,9 +26,9 @@ e2e-run*.txt
 /build
 
 # ─── Environment Files ──────────────────────────────────────────────────────
-# All .env files are ignored by default.  Only .env.example is committed.
+# All .env files are ignored by default.  Non-secret templates remain tracked.
 .env*
-!.env.example
+!.env*.example
 
 # ─── OS Files ────────────────────────────────────────────────────────────────
 .DS_Store
@@ -67,14 +67,32 @@ next-env.d.ts
 .vercel
 
 # ─── AI / Agent Config (user-specific) ──────────────────────────────────────
-local-*
+# These are per-developer tooling configs that must not be shared:
+#   .claude/        — Claude Code local settings
+#   .kiro/          — Kiro IDE steering/hooks
+#   .agents/        — agent skill packs (supabase, frontend-design, …)
+#   .crush/         — Crush local DB/logs
+#   agent-ctx/      — agent context briefs
+#   skills-lock.json — agent skill lockfile
+#   .z-ai-config    — AI tool config
+# Files here may be tracked historically; git rm --cached untracks them
+# without deleting the local copy.
+/local-*
 .claude
 .z-ai-config
 .kiro/
+.agents/
+.crush/
 test
 prompt
 agent-ctx/
 skills-lock.json
+.zscripts/dev.pid
+
+# ─── Local dev helper scripts (per-developer; not part of the build) ────────
+# The repo's canonical build/dev entry points live in package.json scripts
+# and the Dockerfiles. .zscripts/ are optional local convenience wrappers.
+.zscripts/
 
 # ─── Skills ──────────────────────────────────────────────────────────────────
 /skills/
@@ -84,7 +102,19 @@ dump.rdb
 appendonly.aof
 
 # ─── Bun ─────────────────────────────────────────────────────────────────────
-bun.lock
+# NOTE: bun.lock IS tracked (Bun is the canonical package manager — see
+# CLAUDE.md). Do NOT ignore it. The line below ignores stray per-user Bun
+# caches/credentials only.
+bun.config.local
+bunfig.local.toml
+
+# ─── Lockfiles ───────────────────────────────────────────────────────────────
+# Keep the root lockfiles that production tooling references. The current
+# Dockerfile and Vercel config use `npm ci`, so root package-lock.json must
+# remain trackable alongside bun.lock until those paths are migrated to Bun.
+yarn.lock
+# The worker mini-service is a Bun app too; its npm lockfile is not canonical.
+mini-services/**/package-lock.json
 
 # ─── PID Files ───────────────────────────────────────────────────────────────
 *.pid

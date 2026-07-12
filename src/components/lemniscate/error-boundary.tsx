@@ -23,6 +23,8 @@ interface ErrorBoundaryProps {
  * error state and re-renders the children.
  */
 export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  private fallbackRef = React.createRef<HTMLDivElement>()
+
   constructor(props: ErrorBoundaryProps) {
     super(props)
     this.state = { hasError: false, error: null }
@@ -36,14 +38,32 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
     console.error('[Lemniscate] View crashed:', error, errorInfo)
   }
 
+  componentDidUpdate(_prevProps: ErrorBoundaryProps, prevState: ErrorBoundaryState) {
+    // Move focus into the fallback so keyboard / screen-reader users land on
+    // the error announcement rather than being stranded on the trigger.
+    if (!prevState.hasError && this.state.hasError) {
+      this.fallbackRef.current?.focus()
+    }
+  }
+
   handleRetry = () => {
     this.setState({ hasError: false, error: null })
   }
 
   render() {
     if (this.state.hasError) {
+      // Only surface the message in development. In production a bare message
+      // can leak implementation details; show a stable identifier instead.
+      const isDev = process.env.NODE_ENV !== 'production'
+      const detail = isDev ? this.state.error?.message : this.state.error?.name
       return (
-        <div className="flex min-h-[70vh] items-center justify-center px-6 py-20">
+        <div
+          ref={this.fallbackRef}
+          role="alert"
+          aria-live="assertive"
+          tabIndex={-1}
+          className="flex min-h-[70vh] items-center justify-center px-6 py-20 outline-none"
+        >
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
@@ -59,10 +79,10 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
               An unexpected error occurred while rendering this view. You can try
               again — your data is safe.
             </p>
-            {this.state.error && (
+            {detail && (
               <p className="mx-auto mt-2 max-w-md text-xs text-slate/60">
                 <code className="rounded bg-midnight/50 px-1.5 py-0.5 text-amber/60">
-                  {this.state.error.message}
+                  {detail}
                 </code>
               </p>
             )}

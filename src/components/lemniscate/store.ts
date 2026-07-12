@@ -31,13 +31,29 @@ interface ReaderPreferences {
   readerSidebarCollapsed: boolean
 }
 
+/**
+ * Resolve the initial reduced-motion preference.
+ *
+ * Honors the user's OS-level `prefers-reduced-motion: reduce` setting on first
+ * load (before they've explicitly toggled the preference in Settings). Once a
+ * user has set an explicit preference it is persisted and takes precedence —
+ * `reducedMotion` is part of the persisted `ReaderPreferences`, so a `true`
+ * here is only a default that a stored value overrides via rehydration.
+ *
+ * Safe on SSR / non-browser environments: `window` is guarded.
+ */
+function detectReducedMotion(): boolean {
+  if (typeof window === 'undefined' || !window.matchMedia) return false
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
 const DEFAULT_PREFERENCES: ReaderPreferences = {
   readerFontSize: 'md',
   readerTheme: 'dark',
   readerLineHeight: 'normal',
   readerFontFamily: 'serif',
   readerWidth: 'medium',
-  reducedMotion: false,
+  reducedMotion: detectReducedMotion(),
   readerSidebarCollapsed: false,
 }
 

@@ -8,6 +8,7 @@ import { NextRequest } from 'next/server'
 import '@/lib/providers'
 import { db } from '@/lib/db'
 import { getConfiguredProviderName } from '@/lib/providers/registry'
+import { listIntelligenceEngines } from '@/lib/intelligence'
 import { apiSuccess, apiError } from '@/lib/api/response'
 import { securityCheck } from '@/lib/middleware/security'
 import { getClientIP } from '@/lib/middleware/rate-limit'
@@ -47,7 +48,6 @@ export async function GET(req: NextRequest) {
     // Provider configuration
     const providers = {
       documentParser: getConfiguredProviderName('documentParser'),
-      narrativeAnalyzer: getConfiguredProviderName('narrativeAnalyzer'),
       characterAnalyzer: getConfiguredProviderName('characterAnalyzer'),
       relationshipAnalyzer: getConfiguredProviderName('relationshipAnalyzer'),
       embedding: getConfiguredProviderName('embedding'),
@@ -105,6 +105,9 @@ export async function GET(req: NextRequest) {
         completedCount: completedJobs.length,
       },
       providers,
+      // Narrative analysis moved from a provider slot to the Document
+      // Intelligence Engine registry (M2/M3) — report the registered engines.
+      intelligenceEngines: listIntelligenceEngines().map((e) => e.name),
       version: health.version,
       uptime: process.uptime ? Math.round(process.uptime()) : null,
       memory: process.memoryUsage ? {

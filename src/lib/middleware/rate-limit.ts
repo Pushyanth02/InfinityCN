@@ -8,8 +8,8 @@
  *
  * NOTE: REDIS_URL does NOT enable Redis-backed job queue coordination — the
  * queue remains the SQLite `Job` table with CAS claiming regardless. See
- * docs/ARCHITECTURE.md ("No Redis") and CLAUDE.md. Redis queueing is a
- * reserved, unimplemented seam.
+ * CLAUDE.md ("Queue & workers"). Redis queueing is a reserved, unimplemented
+ * seam.
  */
 
 import Redis from 'ioredis'

@@ -18,6 +18,8 @@ import type {
 import type { ExtractedText } from '@/lib/pipeline/extract'
 import type { OriginalParagraph, OriginalResult } from '@/lib/pipeline/original'
 import type { DetectedMetadata } from '@/lib/pipeline/metadata'
+import type { DocumentType } from '@/lib/domain/enums'
+import { detectDocumentType } from './detect-type'
 
 export interface BuildCanonicalInput {
   documentId: string
@@ -26,10 +28,30 @@ export interface BuildCanonicalInput {
   extracted: ExtractedText
   originalResult: OriginalResult
   metadata: DetectedMetadata
+  /** Override document type detection (skip heuristic). */
+  documentType?: DocumentType
 }
 
 export function buildCanonicalDocument(input: BuildCanonicalInput): CanonicalDocument {
   const { documentId, originalName, mimeType, extracted, originalResult, metadata } = input
+
+  // Detect the document type (or use override from caller)
+  const documentType: DocumentType =
+    input.documentType ??
+    detectDocumentType(
+      extracted.text,
+      originalResult.paragraphs.map((p: OriginalParagraph) => ({
+        index: p.index,
+        text: p.text,
+        rawText: p.rawText,
+        type: p.type,
+        speaker: p.speaker ?? null,
+        wordCount: p.wordCount,
+        charCount: p.charCount,
+        startOffset: p.startOffset,
+        endOffset: p.endOffset,
+      })),
+    )
 
   const sourceFormat: SourceFormat = (() => {
     switch (extracted.extractor) {
@@ -101,6 +123,7 @@ export function buildCanonicalDocument(input: BuildCanonicalInput): CanonicalDoc
     originalName,
     mimeType,
     sourceFormat,
+    documentType,
     rawText: extracted.text,
     cleanText: originalResult.plainText,
     paragraphs,

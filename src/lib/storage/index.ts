@@ -17,21 +17,43 @@ import path from 'node:path'
  */
 function resolveUploadRoot(): string {
   if (process.env.UPLOAD_DIR) return process.env.UPLOAD_DIR
-  try {
-    // bun / ESM: import.meta.dir gives the directory of this file
-    const here = (import.meta as ImportMeta & { dir?: string }).dir
-    if (here) return path.resolve(here, '../../..', 'public', 'uploads')
-  } catch {
-    /* ignore */
+  // Dev-only: resolve the project's public/uploads relative to THIS module so
+  // the standalone Bun worker (whose cwd is mini-services/lemniscate-worker)
+  // shares the Next.js app's upload directory. Gated on NODE_ENV so the
+  // production build statically eliminates the module-relative `../../..`
+  // computation — Turbopack inlines NODE_ENV and tree-shakes this branch, which
+  // stops its NFT tracer from treating the upward path traversal as a signal to
+  // trace the ENTIRE project into the standalone output. Production always sets
+  // UPLOAD_DIR (see docker-compose), so this branch is never needed there.
+  if (process.env.NODE_ENV !== 'production') {
+    try {
+      // bun / ESM: import.meta.dir is the directory of this file.
+      const here = (import.meta as ImportMeta & { dir?: string }).dir
+      if (here) return path.resolve(here, '../../..', 'public', 'uploads')
+    } catch {
+      /* ignore */
+    }
   }
   return path.join(process.cwd(), 'public', 'uploads')
 }
 
-const UPLOAD_ROOT = resolveUploadRoot()
+/**
+ * Lazily resolve + memoize the upload root. Deferred out of module scope so the
+ * production NFT tracer never encounters a filesystem-path computation at import
+ * time (which it treats as a signal to trace the whole project into the
+ * standalone output). Deterministic — the resolved value is identical to
+ * computing it at module load, so behavior is unchanged.
+ */
+let cachedUploadRoot: string | null = null
+function uploadRoot(): string {
+  if (cachedUploadRoot === null) cachedUploadRoot = resolveUploadRoot()
+  return cachedUploadRoot
+}
 
 export async function ensureUploadDir(): Promise<string> {
-  await fs.mkdir(UPLOAD_ROOT, { recursive: true })
-  return UPLOAD_ROOT
+  const root = uploadRoot()
+  await fs.mkdir(root, { recursive: true })
+  return root
 }
 
 /**
@@ -40,9 +62,14 @@ export async function ensureUploadDir(): Promise<string> {
  * defense-in-depth — callers already sanitize names, but this is a backstop).
  */
 export function uploadPath(storageName: string): string {
-  const resolved = path.resolve(UPLOAD_ROOT, storageName)
-  const root = path.resolve(UPLOAD_ROOT)
-  if (!resolved.startsWith(root + path.sep) && resolved !== root) {
+  const root = path.resolve(uploadRoot())
+  const resolved = path.resolve(root, storageName)
+  // `path.relative` is robust against Windows drive jumps and alternate path
+  // forms that a naive `startsWith` prefix check can miss. If the resolved
+  // path escapes the root, the relative path starts with `..`; if it lands on
+  // a different root, `path.isAbsolute` catches it.
+  const relative = path.relative(root, resolved)
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
     throw new Error('Path traversal detected: storage name escapes upload directory')
   }
   return resolved

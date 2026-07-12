@@ -10,6 +10,12 @@ const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // Pin BOTH the Turbopack root and the Node-File-Tracing root to this project.
+  // Without the NFT root pin, a stray lockfile in a parent directory (e.g. the
+  // user's home folder) makes Next infer a higher workspace root and trace far
+  // more than needed — the source of the "Encountered unexpected file in NFT
+  // list / whole project traced" warning. Build-only; no runtime effect.
+  outputFileTracingRoot: projectRoot,
   turbopack: { root: projectRoot },
   serverExternalPackages: ["mammoth"],
   reactStrictMode: true,

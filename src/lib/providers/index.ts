@@ -15,9 +15,9 @@ import { registerProvider } from './registry'
 
 // Import implementations
 import { DeterministicDocumentParser } from './implementations/deterministic-document-parser'
-import { DeterministicNarrativeAnalyzer } from './implementations/deterministic-narrative-analyzer'
 import { DeterministicCharacterAnalyzer } from './implementations/deterministic-character-analyzer'
 import { DeterministicRelationshipAnalyzer } from './implementations/deterministic-relationship-analyzer'
+import { DeterministicSearchProvider } from './implementations/deterministic-search'
 import { LocalStorageProvider } from './implementations/local-storage'
 import { SqliteQueueProvider } from './implementations/sqlite-queue'
 
@@ -36,14 +36,14 @@ export function registerDefaultProviders(): void {
   // Document parsing
   registerProvider('documentParser', 'deterministic', () => new DeterministicDocumentParser())
 
-  // Narrative analysis
-  registerProvider('narrativeAnalyzer', 'deterministic', () => new DeterministicNarrativeAnalyzer())
-
   // Character analysis
   registerProvider('characterAnalyzer', 'deterministic', () => new DeterministicCharacterAnalyzer())
 
   // Relationship analysis
   registerProvider('relationshipAnalyzer', 'deterministic', () => new DeterministicRelationshipAnalyzer())
+
+  // Search
+  registerProvider('search', 'deterministic', () => new DeterministicSearchProvider())
 
   // Storage
   registerProvider('storage', 'local', () => new LocalStorageProvider())
@@ -65,7 +65,6 @@ export {
   getConfiguredProviderName,
   hasProvider,
   getDocumentParser,
-  getNarrativeAnalyzer,
   getCharacterAnalyzer,
   getRelationshipAnalyzer,
   getEmbeddingProvider,
@@ -76,7 +75,6 @@ export {
 
 export type {
   IDocumentParser,
-  INarrativeAnalyzer,
   ICharacterAnalyzer,
   IRelationshipAnalyzer,
   IEmbeddingProvider,

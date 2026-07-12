@@ -14,6 +14,23 @@
 
 export type DocumentStatus = 'UPLOADED' | 'EXTRACTED' | 'PROCESSED' | 'FAILED'
 
+/**
+ * The high-level domain category of a document. The Document Intelligence
+ * Engine uses this to route to the appropriate analysis modules. New document
+ * types can be added without changing existing processing paths.
+ */
+export type DocumentType =
+  | 'NOVEL'
+  | 'NOVELLA'
+  | 'SHORT_STORY'
+  | 'RESEARCH_PAPER'
+  | 'TECHNICAL_DOC'
+  | 'LEGAL_DOCUMENT'
+  | 'REPORT'
+  | 'MANUAL'
+  | 'EDUCATIONAL'
+  | 'GENERAL'
+
 // ─── Job lifecycle ────────────────────────────────────────────────────────
 
 export type JobStatus =
@@ -33,6 +50,7 @@ export type PipelineStage =
   | 'ANALYZE'
   | 'FINALIZE'
   | 'COMPLETED'
+  | 'CANCELLED'
   | 'FAILED'
 
 export type JobMode = 'ORIGINAL' | 'CINEMATIFIED' | 'BOTH'

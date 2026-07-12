@@ -25,8 +25,8 @@ import type {
 } from '@/lib/domain/entities'
 import type {
   JobMode,
-  NarrativeMode,
 } from '@/lib/domain/enums'
+import type { ExtractedText } from '@/lib/pipeline/extract'
 
 // ─── Document Parser ──────────────────────────────────────────────────────
 
@@ -39,124 +39,15 @@ export interface ParserInput {
   originalName?: string
 }
 
-export interface ParserPageMeta {
-  pageCount?: number
-}
-
-export interface ParserEmbeddedMeta {
-  title?: string
-  author?: string
-  subject?: string
-  keywords?: string
-  creator?: string
-}
-
-export interface ParserOutput {
-  text: string
-  charCount: number
-  wordCount: number
-  lineCount: number
-  language: string
-  encoding: string
-  extractor: string
-  warnings: string[]
-  meta?: ParserPageMeta
-  embedded?: ParserEmbeddedMeta
-}
-
 export interface IDocumentParser {
   readonly name: string
-  parse(input: ParserInput): Promise<ParserOutput>
-}
-
-// ─── Narrative Analyzer ───────────────────────────────────────────────────
-
-export interface NarrativeAnalysisInput {
-  text: string
-  paragraphs: Array<{ text: string; startOffset: number }>
-  title: string
-  mode: NarrativeMode
-}
-
-export interface SceneDetectionResult {
-  scenes: Array<{
-    index: number
-    title: string
-    summary: string
-    location: string | null
-    timeOfDay: string | null
-    mood: string | null
-    tensionScore: number
-    emotionScore: number
-    momentumScore: number
-    arousalScore: number
-    valence: number
-    structurePhase: string | null
-    startOffset: number
-    endOffset: number
-    charCount: number
-    paragraphCount: number
-    dialogueRatio: number
-    eventCount: number
-    paragraphs: Array<{
-      index: number
-      text: string
-      type: string
-      speaker: string | null
-      rawText: string | null
-      wordCount: number
-      charCount: number
-      startOffset: number
-      endOffset: number
-    }>
-  }>
-  sceneCount: number
-}
-
-export interface NarrativeAnalysisResult extends SceneDetectionResult {
-  locations: Array<{
-    name: string
-    mentions: number
-    type: string
-    firstAppearanceOffset: number
-  }>
-  events: Array<{
-    index: number
-    sceneIndex: number
-    type: string
-    description: string
-    participants: string[]
-    offset: number
-    intensity: number
-  }>
-  arcs: Array<{
-    name: string
-    arcType: string
-    startSceneIdx: number
-    endSceneIdx: number
-    intensity: number
-    summary: string
-  }>
-  peaks: Array<{
-    offset: number
-    intensity: number
-    emotion: string
-    snippet: string
-    sceneIndex: number | null
-  }>
-  intelligence: unknown
-  coOccurrence: unknown
-  emotionTimeline: unknown
-  momentumTimeline: unknown
-  structure: unknown
-  transforms: string[]
-  plainText: string
-  content: string
-}
-
-export interface INarrativeAnalyzer {
-  readonly name: string
-  analyze(input: NarrativeAnalysisInput): Promise<NarrativeAnalysisResult>
+  /**
+   * Extract text + diagnostics from a file, returning the canonical
+   * `ExtractedText` contract the pipeline consumes. Using the shared type
+   * (rather than a lossy re-declaration) lets the parser result flow straight
+   * into the CanonicalDocument builder.
+   */
+  parse(input: ParserInput): Promise<ExtractedText>
 }
 
 // ─── Character Analyzer ───────────────────────────────────────────────────
@@ -197,10 +88,12 @@ export interface IEmbeddingProvider {
 
 // ─── Search Provider ──────────────────────────────────────────────────────
 
+export type SearchType = 'paragraph' | 'scene' | 'character' | 'event'
+
 export interface SearchDocument {
   id: string
   narrativeId: string
-  type: 'paragraph' | 'scene' | 'character' | 'event'
+  type: SearchType
   text: string
   metadata?: Record<string, unknown>
 }
@@ -208,24 +101,41 @@ export interface SearchDocument {
 export interface SearchQuery {
   narrativeId: string
   query: string
-  type?: SearchDocument['type']
+  /** Restrict to a single type. Ignored when `types` is provided. */
+  type?: SearchType
+  /** Restrict to a set of types. Overrides `type` when non-empty. */
+  types?: SearchType[]
   limit?: number
   offset?: number
 }
 
-export interface SearchResult {
+export interface SearchHit {
   id: string
-  type: SearchDocument['type']
+  type: SearchType
   text: string
+  /** Deterministic relevance score (higher is more relevant). */
   score: number
+  /** Number of case-insensitive occurrences of the query in the match. */
+  matchCount: number
   highlight?: string
   metadata?: Record<string, unknown>
 }
 
+/** A ranked, paginated page of search hits plus the true total match count. */
+export interface SearchResults {
+  results: SearchHit[]
+  total: number
+}
+
 export interface ISearchProvider {
   readonly name: string
+  /**
+   * Optional index maintenance. LIKE-based providers query the live tables and
+   * implement these as no-ops; indexed providers (FTS/vector) use them to keep
+   * an external index in sync.
+   */
   index(narrativeId: string, documents: SearchDocument[]): Promise<void>
-  search(query: SearchQuery): Promise<SearchResult[]>
+  search(query: SearchQuery): Promise<SearchResults>
   remove(narrativeId: string): Promise<void>
 }
 

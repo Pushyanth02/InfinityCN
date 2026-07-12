@@ -78,10 +78,6 @@ export interface DetectMetadataInput {
 const STRUCTURAL_HEADING_RE =
   /^(chapter|chapitre|kapitel|capitolo|cap[íi]tulo|prologue|prolog|epilogue|epilog|part|book|act|scene|section|introduction|intro|preface|prologo|foreword|afterword|appendix|contents|table of contents|dedication|acknowledge?ments?|about the author|copyright)\b/i
 
-/** A leading structural heading WITH a trailing title, e.g. "Chapter 1: The Heart of a Demon". */
-const LEADING_HEADING_RE =
-  /^(chapter|chapitre|kapitel|capitolo|cap[íi]tulo|prologue|prolog|epilogue|epilog|introduction|preface|foreword|afterword|part|book|act|scene)\b[^\n]{0,120}$/i
-
 /** Chapter-marker detection (multilingual-ish, deterministic). */
 const CHAPTER_MARKER_RE =
   /^\s*(?:(chapter|chapitre|kapitel|capitolo|cap[íi]tulo)\s+(\d{1,3}|[ivxlcdm]{1,7}|[a-z]+)|(prologue|prolog|epilogue|epilog|introduction|preface|foreword|afterword)|(part|book|act)\s+(\d{1,3}|[ivxlcdm]{1,7}|[a-z]+))\b(?:\s*[:.\u2014-]\s*(.+))?$/i
