@@ -23,10 +23,20 @@ const BACKUP_INTERVAL_MS = parseInt(process.env.BACKUP_INTERVAL_HOURS || '24', 1
  */
 function getDatabasePath(): string | null {
   const url = process.env.DATABASE_URL || ''
-  // DATABASE_URL format: file:./db/custom.db or file:../relative/path.db
+  // DATABASE_URL format: file:./db/custom.db
   if (!url.startsWith('file:')) return null
   const filePath = url.slice(5)
-  return path.resolve(/* turbopackIgnore: true */ filePath)
+
+  const safeRoot = path.resolve(process.cwd())
+  const resolvedPath = path.resolve(/* turbopackIgnore: true */ safeRoot, filePath)
+  const relative = path.relative(safeRoot, resolvedPath)
+
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    logger.warn('Rejected DATABASE_URL file path outside safe root', { path: resolvedPath })
+    return null
+  }
+
+  return resolvedPath
 }
 
 /**
