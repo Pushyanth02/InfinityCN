@@ -33,7 +33,15 @@ if (!process.env.LEMNISCATE_GUARDS_SET) {
 }
 
 let started = false
-const POLL_INTERVAL_MS = parseInt(process.env.WORKER_POLL_INTERVAL_MS || '1200', 10)
+const DEFAULT_POLL_INTERVAL_MS = 1200
+const MIN_POLL_INTERVAL_MS = 200
+const MAX_POLL_INTERVAL_MS = 60_000
+
+const rawPollIntervalMs = Number.parseInt(process.env.WORKER_POLL_INTERVAL_MS || `${DEFAULT_POLL_INTERVAL_MS}`, 10)
+const POLL_INTERVAL_MS = Number.isFinite(rawPollIntervalMs)
+  ? Math.min(MAX_POLL_INTERVAL_MS, Math.max(MIN_POLL_INTERVAL_MS, rawPollIntervalMs))
+  : DEFAULT_POLL_INTERVAL_MS
+
 const CONCURRENCY = parseInt(process.env.WORKER_CONCURRENCY || '2', 10)
 let inFlight = 0
 
