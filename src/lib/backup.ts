@@ -14,9 +14,19 @@ import { createLogger } from './logger'
 
 const logger = createLogger('backup')
 
-const BACKUP_DIR = process.env.BACKUP_DIR || './backups'
+const BACKUP_ROOT_DIR = path.resolve('./backups')
+const BACKUP_DIR_CONFIG = process.env.BACKUP_DIR || '.'
 const MAX_BACKUPS = parseInt(process.env.BACKUP_RETENTION_COUNT || '7', 10)
 const BACKUP_INTERVAL_MS = parseInt(process.env.BACKUP_INTERVAL_HOURS || '24', 10) * 60 * 60 * 1000
+
+function resolveSafeBackupDir(): string | null {
+  const resolved = path.resolve(BACKUP_ROOT_DIR, /* turbopackIgnore: true */ BACKUP_DIR_CONFIG)
+  const relative = path.relative(BACKUP_ROOT_DIR, resolved)
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    return null
+  }
+  return resolved
+}
 
 /**
  * Resolve the actual SQLite database file path from DATABASE_URL.
@@ -55,7 +65,11 @@ export async function performBackup(): Promise<string | null> {
   }
 
   // Ensure backup directory exists
-  const backupDir = path.resolve(/* turbopackIgnore: true */ BACKUP_DIR)
+  const backupDir = resolveSafeBackupDir()
+  if (!backupDir) {
+    logger.warn('Invalid BACKUP_DIR: resolved path escapes backup root', { backupRoot: BACKUP_ROOT_DIR })
+    return null
+  }
   if (!fs.existsSync(backupDir)) {
     fs.mkdirSync(backupDir, { recursive: true })
   }
