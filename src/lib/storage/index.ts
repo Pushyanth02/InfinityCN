@@ -16,7 +16,15 @@ import path from 'node:path'
  * Falls back to UPLOAD_DIR env var, then process.cwd()/public/uploads.
  */
 function resolveUploadRoot(): string {
-  if (process.env.UPLOAD_DIR) return process.env.UPLOAD_DIR
+  if (process.env.UPLOAD_DIR) {
+    const configured = process.env.UPLOAD_DIR.trim()
+    if (!configured) throw new Error('UPLOAD_DIR must not be empty')
+    const resolved = path.resolve(configured)
+    if (!path.isAbsolute(resolved)) {
+      throw new Error('UPLOAD_DIR must be an absolute path')
+    }
+    return resolved
+  }
   // Dev-only: resolve the project's public/uploads relative to THIS module so
   // the standalone Bun worker (whose cwd is mini-services/lemniscate-worker)
   // shares the Next.js app's upload directory. Gated on NODE_ENV so the
