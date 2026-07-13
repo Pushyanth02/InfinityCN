@@ -17,12 +17,29 @@
  */
 import { PDFParse } from 'pdf-parse'
 import fs from 'node:fs'
+import path from 'node:path'
+import os from 'node:os'
 
-const filePath = process.argv[2]
-if (!filePath) {
+const inputPath = process.argv[2]
+if (!inputPath) {
   process.stdout.write(JSON.stringify({ text: '', warnings: ['No file path provided'] }) + '\n')
   process.exit(0)
 }
+
+const allowedRoot = path.resolve(os.tmpdir())
+const resolvedPath = path.resolve(allowedRoot, inputPath)
+const relativePath = path.relative(allowedRoot, resolvedPath)
+const isWithinAllowedRoot =
+  relativePath !== '' && !relativePath.startsWith('..') && !path.isAbsolute(relativePath)
+
+if (!isWithinAllowedRoot) {
+  process.stdout.write(
+    JSON.stringify({ text: '', warnings: ['Invalid file path: outside allowed directory'] }) + '\n',
+  )
+  process.exit(0)
+}
+
+const filePath = resolvedPath
 
 /** @type {import('pdf-parse').PDFParse | undefined} */
 let parser
