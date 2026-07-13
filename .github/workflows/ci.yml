@@ -26,6 +26,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
+    # Shared by the Test and Build steps. Locally these come from a gitignored
+    # `.env`; CI has none, so set them here. The integration/e2e tests
+    # (src/__e2e__, progress.test.ts) query a real SQLite DB — its schema is
+    # created by the `prisma db push` step below before the tests run.
+    env:
+      DATABASE_URL: file:/tmp/lemniscate-ci.db
+      NEXT_TELEMETRY_DISABLED: "1"
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -43,6 +51,10 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
+      - name: Prepare test database (schema)
+        # Integration/e2e tests hit a real SQLite DB; create its schema first.
+        run: npx prisma db push --skip-generate
+
       - name: Lint
         run: npm run lint
 
@@ -54,9 +66,6 @@ jobs:
 
       - name: Build
         run: npm run build:unix
-        env:
-          DATABASE_URL: file:/tmp/lemniscate-ci.db
-          NEXT_TELEMETRY_DISABLED: "1"
 
   docker-build:
     name: Docker build verification

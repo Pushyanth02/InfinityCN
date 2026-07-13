@@ -37,7 +37,15 @@ function safeEqual(a: string, b: string): boolean {
 
 const API_KEY = process.env.LEMNISCATE_API_KEY // If unset, auth is disabled (localhost dev)
 
-if (process.env.NODE_ENV === 'production' && !API_KEY) {
+// `next build` evaluates route modules to collect page data. During that phase
+// Next sets NEXT_PHASE=phase-production-build with NODE_ENV=production, yet the
+// runtime secret is legitimately absent (it isn't baked into the image). Skip
+// the fatal guard while building — it still fires at server start, where
+// NEXT_PHASE is not the build phase, and instrumentation.ts additionally
+// enforces required env at boot (see enforceEnvironment).
+const IS_BUILD_PHASE = process.env.NEXT_PHASE === 'phase-production-build'
+
+if (process.env.NODE_ENV === 'production' && !API_KEY && !IS_BUILD_PHASE) {
   logger.error(
     'LEMNISCATE_API_KEY is not set. Authentication cannot be disabled in production. ' +
     'Set LEMNISCATE_API_KEY to a strong secret (minimum 16 characters) and restart.',
