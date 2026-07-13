@@ -32,7 +32,13 @@ import type { ProgressEvent } from '@/lib/types'
 const logger = createLogger('worker')
 
 const PORT = parseInt(process.env.WORKER_PORT || '3003', 10)
-const POLL_INTERVAL_MS = parseInt(process.env.WORKER_POLL_INTERVAL_MS || '800', 10)
+const DEFAULT_POLL_INTERVAL_MS = 800
+const MIN_POLL_INTERVAL_MS = 100
+const MAX_POLL_INTERVAL_MS = 60_000
+const rawPollIntervalMs = Number.parseInt(process.env.WORKER_POLL_INTERVAL_MS || `${DEFAULT_POLL_INTERVAL_MS}`, 10)
+const POLL_INTERVAL_MS = Number.isFinite(rawPollIntervalMs)
+  ? Math.min(MAX_POLL_INTERVAL_MS, Math.max(MIN_POLL_INTERVAL_MS, rawPollIntervalMs))
+  : DEFAULT_POLL_INTERVAL_MS
 const CONCURRENCY = parseInt(process.env.WORKER_CONCURRENCY || '2', 10)
 const GRACEFUL_SHUTDOWN_MS = parseInt(process.env.WORKER_SHUTDOWN_GRACE_MS || '30000', 10)
 const WORKER_MAX_MEMORY_MB = parseInt(process.env.WORKER_MAX_MEMORY_MB || '1024', 10)
