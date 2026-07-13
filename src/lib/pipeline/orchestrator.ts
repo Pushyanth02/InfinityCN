@@ -257,10 +257,18 @@ function sleep(ms: number): Promise<void> {
 // Artificial per-stage dwell so UI progress animations don't snap. Only applied
 // in development — in production the pipeline runs as fast as possible (the UI
 // interpolates progress client-side). Overridable via LEMNISCATE_STAGE_DWELL_MS.
+const MAX_STAGE_DWELL_MS = 5_000
+
+function readBoundedMsFromEnv(raw: string | undefined, fallback: number): number {
+  const parsed = Number.parseInt(raw ?? `${fallback}`, 10)
+  if (!Number.isFinite(parsed)) return fallback
+  return Math.min(MAX_STAGE_DWELL_MS, Math.max(0, parsed))
+}
+
 const STAGE_DWELL_MS =
   process.env.NODE_ENV === 'production'
-    ? Math.max(0, parseInt(process.env.LEMNISCATE_STAGE_DWELL_MS ?? '0', 10))
-    : Math.max(0, parseInt(process.env.LEMNISCATE_STAGE_DWELL_MS ?? '250', 10))
+    ? readBoundedMsFromEnv(process.env.LEMNISCATE_STAGE_DWELL_MS, 0)
+    : readBoundedMsFromEnv(process.env.LEMNISCATE_STAGE_DWELL_MS, 250)
 
 async function log(jobId: string, stage: string, level: 'INFO' | 'WARN' | 'ERROR' | 'DEBUG', message: string, metadata?: Record<string, unknown>) {
   await db.processingLog.create({
