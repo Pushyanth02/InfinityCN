@@ -26,11 +26,31 @@ if (!inputPath) {
   process.exit(0)
 }
 
-const allowedRoot = path.resolve(os.tmpdir())
-const resolvedPath = path.resolve(allowedRoot, inputPath)
-const relativePath = path.relative(allowedRoot, resolvedPath)
-const isWithinAllowedRoot =
-  relativePath !== '' && !relativePath.startsWith('..') && !path.isAbsolute(relativePath)
+// Defense-in-depth against path traversal. The parent process (extract.ts) is
+// the real gatekeeper: it builds paths from sanitized storage names via
+// `uploadPath()`, which already rejects anything escaping the upload root. The
+// worker additionally constrains the path to a small allow-list of legitimate
+// roots so a malicious argv value cannot read arbitrary files.
+//
+// Allowed roots:
+//   1. process.cwd()      — covers dev uploads (public/uploads) and fixtures
+//   2. UPLOAD_DIR          — the configured production upload directory
+//   3. os.tmpdir()         — transient/scratch paths
+//
+// Both absolute and cwd-relative paths are accepted. An absolute path must
+// live under one of the allowed roots; a relative path is resolved against
+// cwd and then checked. `path.relative` is robust against Windows drive jumps
+// that a naive `startsWith` would miss.
+const allowedRoots = [
+  path.resolve(process.cwd()),
+  ...(process.env.UPLOAD_DIR ? [path.resolve(process.env.UPLOAD_DIR.trim())] : []),
+  path.resolve(os.tmpdir()),
+]
+const resolvedPath = path.isAbsolute(inputPath) ? inputPath : path.resolve(process.cwd(), inputPath)
+const isWithinAllowedRoot = allowedRoots.some((root) => {
+  const rel = path.relative(root, resolvedPath)
+  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))
+})
 
 if (!isWithinAllowedRoot) {
   process.stdout.write(

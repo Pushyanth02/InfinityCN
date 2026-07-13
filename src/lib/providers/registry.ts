@@ -11,15 +11,20 @@
  *   SEARCH_PROVIDER              = deterministic (default)
  *   STORAGE_PROVIDER             = local (default)
  *   QUEUE_PROVIDER               = sqlite (default)
+ *   AUTH_PROVIDER                = (none by default — UNIMPLEMENTED SEAM; see note)
  *
- * Future providers (e.g. "azure_di", "openai", "supabase", "redis") are
- * registered here without touching service or API code.
+ * Future providers (e.g. "azure_di", "openai", "supabase", "redis", "appwrite")
+ * are registered here without touching service or API code.
  *
  * NOTE — unimplemented seams (do not treat as wired-up features):
  *   • `embedding` slot: there is NO registered implementation and NO caller in
  *     the codebase (getEmbeddingProvider() short-circuits to null when the env
  *     var is unset). This is an intentional extension point, not a working
  *     feature. Do not assume embeddings are generated anywhere.
+ *   • `auth` slot: there is NO registered implementation. Intentional extension
+ *     point for per-user identity (e.g. Appwrite, Supabase Auth, Auth.js). The
+ *     app ships single-shared-key auth today (see SECURITY.md); wiring a real
+ *     provider here replaces that without touching routes/services.
  *   • `REDIS_URL`: Redis-backed RATE LIMITING is implemented (see
  *     src/lib/middleware/rate-limit.ts — ioredis with memory fallback). Redis
  *     for QUEUE coordination / horizontal scaling is the actual unimplemented
@@ -31,6 +36,7 @@ import type {
   ICharacterAnalyzer,
   IRelationshipAnalyzer,
   IEmbeddingProvider,
+  IAuthProvider,
   ISearchProvider,
   IStorageProvider,
   IQueueProvider,
@@ -49,6 +55,7 @@ export type ProviderSlot =
   | 'search'
   | 'storage'
   | 'queue'
+  | 'auth'
 
 // ─── Factory function types ───────────────────────────────────────────────
 
@@ -68,6 +75,7 @@ const envVarMap: Record<ProviderSlot, string> = {
   characterAnalyzer: 'CHARACTER_ANALYZER_PROVIDER',
   relationshipAnalyzer: 'RELATIONSHIP_ANALYZER_PROVIDER',
   embedding: 'EMBEDDING_PROVIDER',
+  auth: 'AUTH_PROVIDER',
   search: 'SEARCH_PROVIDER',
   storage: 'STORAGE_PROVIDER',
   queue: 'QUEUE_PROVIDER',
@@ -171,6 +179,11 @@ export async function getRelationshipAnalyzer(): Promise<IRelationshipAnalyzer> 
 export async function getEmbeddingProvider(): Promise<IEmbeddingProvider | null> {
   if (!process.env.EMBEDDING_PROVIDER) return null
   return resolveProvider<IEmbeddingProvider>('embedding')
+}
+
+export async function getAuthProvider(): Promise<IAuthProvider | null> {
+  if (!process.env.AUTH_PROVIDER) return null
+  return resolveProvider<IAuthProvider>('auth')
 }
 
 export async function getSearchProvider(): Promise<ISearchProvider> {

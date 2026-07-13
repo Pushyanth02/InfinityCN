@@ -102,8 +102,10 @@ rewrites:
   the router without touching the orchestrator, persistence, or the reader.
 - **Provider seams** (`src/lib/providers/`) — env-selected pluggable
   implementations for `documentParser`, `relationshipAnalyzer`, `search`,
-  `storage`, and `queue` (each defaulting to a deterministic/local impl). New
-  formats or backends drop in via environment variables.
+  `storage`, `queue`, and `auth` (each defaulting to a deterministic/local
+  impl, except `auth` which is an unimplemented extension point for per-user
+  identity — see [`docs/APPWRITE.md`](./docs/APPWRITE.md)). New formats or
+  backends drop in via environment variables.
 - **Services** (`src/lib/services/`) — own the business logic (documents, jobs,
   search, persistence, export, analytics, …) so API routes stay thin. A
   versioned **`/api/v1`** surface (typed response envelope, request validation,
@@ -313,6 +315,35 @@ All lexicons live in `src/lib/nlp/lexicons.ts` and are hand-curated.
 
 ---
 
+## Deployment
+
+### Docker (recommended for self-hosting)
+
+The bundled `docker-compose.yml` provisions the full stack — Next.js app,
+standalone worker, Redis (rate-limit counters), and Caddy reverse proxy.
+
+```bash
+cp .env.example .env          # then set LEMNISCATE_API_KEY (≥16 chars) and LEMNISCATE_ALLOWED_ORIGINS
+docker compose up --build     # app on :3000, worker :3003 (internal), Caddy on :81
+```
+
+The runtime image is a multi-stage, non-root build with a baked schema seed
+(so an empty named volume initializes on first boot) and a healthcheck. See
+[`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) for details.
+
+### Vercel (serverless)
+
+Lemniscate also deploys to Vercel with Turso (libSQL) as the database backend.
+Copy [`.env.vercel.example`](./.env.vercel.example) into the Vercel project's
+environment variables, then deploy — `vercel.json` wires the build command and
+per-route `maxDuration` overrides.
+
+See [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) for the Vercel + Turso setup
+walkthrough, and [`docs/APPWRITE.md`](./docs/APPWRITE.md) for the Appwrite
+integration design (an unimplemented `auth` provider seam today).
+
+---
+
 ## License
 
-Built for storytellers who value their data. Self-hostable.
+MIT — see [`LICENSE`](./LICENSE). Built for storytellers who value their data.

@@ -1,0 +1,27 @@
+# Normalize line endings so git doesn't show whole-file diffs on CRLF/LF
+# checkout differences (the repo is developed on Windows, deployed on Linux).
+* text=auto eol=lf
+
+# Binary files — never diff/merge as text.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.lock binary
+*.db binary
+*.db-shm binary
+*.db-wal binary
+*.db-journal binary
+
+# Treat lockfiles specially so rebase/conflict tools know they're generated.
+bun.lock linguist-generated=true
+package-lock.json linguist-generated=true
+/prisma/migrations/**/migration.sql -linguist-generated
+
+# Mark generated Prisma output.
+/src/app/api/v1/openapi.json linguist-generated=false

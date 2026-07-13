@@ -1,0 +1,76 @@
+# =============================================================================
+# Lemniscate — CI
+# =============================================================================
+# Lint, typecheck, test, and build on every push and pull request. Runs on the
+# canonical npm path (the Dockerfile and Vercel also use npm ci).
+# =============================================================================
+name: CI
+
+on:
+  push:
+    branches: [main, v0]
+  pull_request:
+    branches: [main, v0]
+
+# Cancel in-progress runs for the same ref when a new commit is pushed.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Lint · Typecheck · Test · Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        # --ignore-scripts matches the Dockerfile; prisma generate runs below.
+        run: npm ci --ignore-scripts
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Test
+        run: npm run test
+
+      - name: Build
+        run: npm run build:unix
+        env:
+          DATABASE_URL: file:/tmp/lemniscate-ci.db
+          NEXT_TELEMETRY_DISABLED: "1"
+
+  docker-build:
+    name: Docker build verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build app image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          tags: lemniscate:ci

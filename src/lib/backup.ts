@@ -133,7 +133,7 @@ export function startBackupScheduler(): void {
   logger.info('Backup scheduler started', {
     intervalHours: BACKUP_INTERVAL_MS / (60 * 60 * 1000),
     retentionCount: MAX_BACKUPS,
-    backupDir: BACKUP_DIR,
+    backupDir: BACKUP_DIR_CONFIG,
   })
 
   // Perform initial backup on startup

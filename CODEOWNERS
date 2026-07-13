@@ -1,0 +1,16 @@
+# These owners will be automatically requested for review on PRs that touch
+# the listed paths. Default fallback: @Pushyanth02.
+# Docs: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owner for the whole repo.
+* @Pushyanth02
+
+# Architecture-critical areas — require maintainer review.
+/CLAUDE.md @Pushyanth02
+/prisma/schema.prisma @Pushyanth02
+/src/lib/pipeline/ @Pushyanth02
+/src/lib/nlp/ @Pushyanth02
+/src/lib/middleware/ @Pushyanth02
+/Dockerfile @Pushyanth02
+/docker-compose.yml @Pushyanth02
+/.github/workflows/ @Pushyanth02

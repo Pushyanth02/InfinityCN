@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📖 Read the docs first
+    url: https://github.com/Pushyanth02/Lemniscate/blob/main/README.md
+    about: Architecture, methodology, and setup instructions live in the README and CLAUDE.md.
+  - name: 🔒 Report a security vulnerability
+    url: https://github.com/Pushyanth02/Lemniscate/security/advisories/new
+    about: Do NOT open a public issue for security reports. Use a private Security Advisory (see SECURITY.md).

@@ -170,3 +170,43 @@ export interface IQueueProvider {
   /** Re-queue a dead-lettered job. */
   retryDeadLetter(jobId: string): Promise<boolean>
 }
+
+// ─── Auth Provider (Appwrite seam — UNIMPLEMENTED) ────────────────────────
+//
+// Per-user identity is intentionally absent today: Lemniscate uses a single
+// shared API key (see SECURITY.md). This interface is the extension point for
+// swapping that out for per-user auth (Appwrite, Auth.js, Supabase, etc.)
+// WITHOUT changing services or API routes.
+//
+// Like `IEmbeddingProvider`, there is NO registered implementation and NO
+// caller in the codebase today. Do not assume it is active. See
+// docs/APPWRITE.md for the integration plan.
+
+/** A verified, authenticated principal making an API request. */
+export interface AuthenticatedUser {
+  /** Stable, unique identifier for the user (e.g. Appwrite user ID). */
+  id: string
+  /** Email address, if known. */
+  email?: string
+  /** Display name, if known. */
+  name?: string
+  /** Authorization scopes/roles attached to the principal. */
+  roles?: string[]
+}
+
+/** Result of verifying an incoming credential. */
+export type AuthVerification =
+  | { ok: true; user: AuthenticatedUser }
+  | { ok: false; reason: 'invalid' | 'expired' | 'revoked' | 'unknown' }
+
+export interface IAuthProvider {
+  readonly name: string
+  /**
+   * Verify an incoming credential (session token, JWT, or Appwrite session).
+   * Never throws on bad credentials — return `{ ok: false }` so the caller
+   * (middleware) can map it to a 401.
+   */
+  verifyCredential(credential: string): Promise<AuthVerification>
+  /** Optional: issue a new credential for a principal (not all providers do). */
+  issueCredential?(user: AuthenticatedUser): Promise<string>
+}

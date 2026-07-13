@@ -19,7 +19,8 @@ COPY prisma ./prisma/
 
 # --ignore-scripts prevents lifecycle scripts from untrusted packages.
 # Prisma generate is run explicitly afterward.
-RUN npm ci --ignore-scripts && npx prisma generate
+RUN npm ci --ignore-scripts && npx prisma generate && \
+    npm cache clean --force
 
 # --- Stage 2: Build ---
 FROM node:20-alpine3.21 AS builder
