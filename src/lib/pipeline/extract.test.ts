@@ -5,10 +5,13 @@ import path from 'node:path'
 import { extractText, detectLanguage, hashBuffer, hashText } from './extract'
 
 const tempFiles: string[] = []
+const tempDirs: string[] = []
 
 async function writeTemp(name: string, content: string): Promise<string> {
-  const p = path.join(os.tmpdir(), `lemniscate-test-${Date.now()}-${name}`)
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'lemniscate-test-'))
+  const p = path.join(dir, name)
   await fs.writeFile(p, content, 'utf-8')
+  tempDirs.push(dir)
   tempFiles.push(p)
   return p
 }
@@ -16,6 +19,9 @@ async function writeTemp(name: string, content: string): Promise<string> {
 afterAll(async () => {
   for (const f of tempFiles) {
     await fs.unlink(f).catch(() => {})
+  }
+  for (const d of tempDirs) {
+    await fs.rmdir(d).catch(() => {})
   }
 })
 
