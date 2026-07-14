@@ -51,19 +51,40 @@ if (!inputPath) {
  * Returns the canonical absolute path if safe, otherwise `null`.
  */
 function resolveSafeInputPath(rawPath) {
-  // (1) Reject NUL bytes and any `..` segment on the raw, untrusted string.
-  if (typeof rawPath !== 'string' || rawPath.includes('\0') || rawPath.includes('..')) {
+  // (1) Reject malformed or dangerous raw values before any path work.
+  if (
+    typeof rawPath !== 'string' ||
+    rawPath.length === 0 ||
+    rawPath.length > 4096 ||
+    rawPath.includes('\0')
+  ) {
     return null
   }
 
-  // (2) Canonicalize. `path.resolve` normalizes absolute input and resolves a
-  // relative value against cwd, always yielding an absolute, `..`-free path.
-  const canonical = path.resolve(rawPath)
+  // (2) Canonicalize and resolve symlinks so containment checks can't be
+  // bypassed via symlink traversal.
+  const absolute = path.resolve(rawPath)
+  if (path.extname(absolute).toLowerCase() !== '.pdf') return null
+  let canonical
+  try {
+    canonical = fs.realpathSync.native(absolute)
+  } catch {
+    return null
+  }
 
   // (3) Confine the canonical path to an approved root.
+  const projectRoot = path.resolve(process.cwd())
+  const defaultUploadRoot = path.resolve(projectRoot, 'public', 'uploads')
+  const fixtureRoot = path.resolve(projectRoot, 'src', '__fixtures__')
+  const configuredUploadRoot =
+    process.env.UPLOAD_DIR && process.env.UPLOAD_DIR.trim()
+      ? path.resolve(process.env.UPLOAD_DIR.trim())
+      : null
+
   const allowedRoots = [
-    path.resolve(process.cwd()),
-    ...(process.env.UPLOAD_DIR ? [path.resolve(process.env.UPLOAD_DIR.trim())] : []),
+    defaultUploadRoot,
+    fixtureRoot,
+    ...(configuredUploadRoot ? [configuredUploadRoot] : []),
     path.resolve(os.tmpdir()),
   ]
   const withinAllowedRoot = allowedRoots.some((root) => {
