@@ -26,40 +26,61 @@ if (!inputPath) {
   process.exit(0)
 }
 
-// Defense-in-depth against path traversal. The parent process (extract.ts) is
-// the real gatekeeper: it builds paths from sanitized storage names via
-// `uploadPath()`, which already rejects anything escaping the upload root. The
-// worker additionally constrains the path to a small allow-list of legitimate
-// roots so a malicious argv value cannot read arbitrary files.
-//
-// Allowed roots:
-//   1. process.cwd()      — covers dev uploads (public/uploads) and fixtures
-//   2. UPLOAD_DIR          — the configured production upload directory
-//   3. os.tmpdir()         — transient/scratch paths
-//
-// Both absolute and cwd-relative paths are accepted. An absolute path must
-// live under one of the allowed roots; a relative path is resolved against
-// cwd and then checked. `path.relative` is robust against Windows drive jumps
-// that a naive `startsWith` would miss.
-const allowedRoots = [
-  path.resolve(process.cwd()),
-  ...(process.env.UPLOAD_DIR ? [path.resolve(process.env.UPLOAD_DIR.trim())] : []),
-  path.resolve(os.tmpdir()),
-]
-const resolvedPath = path.isAbsolute(inputPath) ? inputPath : path.resolve(process.cwd(), inputPath)
-const isWithinAllowedRoot = allowedRoots.some((root) => {
-  const rel = path.relative(root, resolvedPath)
-  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))
-})
+/**
+ * Confine an untrusted argv path to a fixed set of approved directories.
+ *
+ * The parent process (extract.ts) is the primary gatekeeper — it builds paths
+ * from sanitized storage names via `uploadPath()`. This worker independently
+ * re-validates its argv so a crafted value can never read files outside the
+ * approved roots, even if invoked directly.
+ *
+ * The validation makes NO security decision based on the raw, unnormalized
+ * input. Instead it:
+ *   1. Rejects obvious traversal/NUL payloads on the raw string up front.
+ *   2. Canonicalizes with `path.resolve` (collapsing any `.`/`..` and
+ *      producing an absolute path) BEFORE any comparison.
+ *   3. Confines the canonical path to an allow-list of roots using
+ *      `path.relative`, which is robust against Windows drive jumps and
+ *      alternate path forms a naive `startsWith` check would miss.
+ *
+ * Approved roots:
+ *   1. process.cwd()  — dev uploads (public/uploads) and committed fixtures
+ *   2. UPLOAD_DIR     — the configured production upload directory
+ *   3. os.tmpdir()    — transient/scratch paths
+ *
+ * Returns the canonical absolute path if safe, otherwise `null`.
+ */
+function resolveSafeInputPath(rawPath) {
+  // (1) Reject NUL bytes and any `..` segment on the raw, untrusted string.
+  if (typeof rawPath !== 'string' || rawPath.includes('\0') || rawPath.includes('..')) {
+    return null
+  }
 
-if (!isWithinAllowedRoot) {
+  // (2) Canonicalize. `path.resolve` normalizes absolute input and resolves a
+  // relative value against cwd, always yielding an absolute, `..`-free path.
+  const canonical = path.resolve(rawPath)
+
+  // (3) Confine the canonical path to an approved root.
+  const allowedRoots = [
+    path.resolve(process.cwd()),
+    ...(process.env.UPLOAD_DIR ? [path.resolve(process.env.UPLOAD_DIR.trim())] : []),
+    path.resolve(os.tmpdir()),
+  ]
+  const withinAllowedRoot = allowedRoots.some((root) => {
+    const rel = path.relative(root, canonical)
+    return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))
+  })
+
+  return withinAllowedRoot ? canonical : null
+}
+
+const filePath = resolveSafeInputPath(inputPath)
+if (!filePath) {
   process.stdout.write(
     JSON.stringify({ text: '', warnings: ['Invalid file path: outside allowed directory'] }) + '\n',
   )
   process.exit(0)
 }
-
-const filePath = resolvedPath
 
 /** @type {import('pdf-parse').PDFParse | undefined} */
 let parser

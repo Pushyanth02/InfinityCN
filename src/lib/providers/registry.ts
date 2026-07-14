@@ -13,7 +13,7 @@
  *   QUEUE_PROVIDER               = sqlite (default)
  *   AUTH_PROVIDER                = (none by default — UNIMPLEMENTED SEAM; see note)
  *
- * Future providers (e.g. "azure_di", "openai", "supabase", "redis", "appwrite")
+ * Future providers (e.g. "azure_di", "openai", "supabase", "redis")
  * are registered here without touching service or API code.
  *
  * NOTE — unimplemented seams (do not treat as wired-up features):
@@ -22,7 +22,7 @@
  *     var is unset). This is an intentional extension point, not a working
  *     feature. Do not assume embeddings are generated anywhere.
  *   • `auth` slot: there is NO registered implementation. Intentional extension
- *     point for per-user identity (e.g. Appwrite, Supabase Auth, Auth.js). The
+ *     point for per-user identity (e.g. Supabase Auth, Auth.js). The
  *     app ships single-shared-key auth today (see SECURITY.md); wiring a real
  *     provider here replaces that without touching routes/services.
  *   • `REDIS_URL`: Redis-backed RATE LIMITING is implemented (see

@@ -104,8 +104,7 @@ rewrites:
   implementations for `documentParser`, `relationshipAnalyzer`, `search`,
   `storage`, `queue`, and `auth` (each defaulting to a deterministic/local
   impl, except `auth` which is an unimplemented extension point for per-user
-  identity — see [`docs/APPWRITE.md`](./docs/APPWRITE.md)). New formats or
-  backends drop in via environment variables.
+  identity). New formats or backends drop in via environment variables.
 - **Services** (`src/lib/services/`) — own the business logic (documents, jobs,
   search, persistence, export, analytics, …) so API routes stay thin. A
   versioned **`/api/v1`** surface (typed response envelope, request validation,
@@ -329,18 +328,18 @@ docker compose up --build     # app on :3000, worker :3003 (internal), Caddy on 
 
 The runtime image is a multi-stage, non-root build with a baked schema seed
 (so an empty named volume initializes on first boot) and a healthcheck. See
-[`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) for details.
+[`docker-compose.yml`](./docker-compose.yml), [`Dockerfile`](./Dockerfile), and
+[`Caddyfile`](./Caddyfile) for the full stack definition.
 
 ### Vercel (serverless)
 
 Lemniscate also deploys to Vercel with Turso (libSQL) as the database backend.
 Copy [`.env.vercel.example`](./.env.vercel.example) into the Vercel project's
-environment variables, then deploy — `vercel.json` wires the build command and
-per-route `maxDuration` overrides.
+environment variables, then deploy — [`vercel.json`](./vercel.json) wires the
+build command and per-route `maxDuration` overrides.
 
-See [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) for the Vercel + Turso setup
-walkthrough, and [`docs/APPWRITE.md`](./docs/APPWRITE.md) for the Appwrite
-integration design (an unimplemented `auth` provider seam today).
+Per-user authentication is an unimplemented `auth` provider seam today (the app
+ships single-shared-key auth — see [`SECURITY.md`](./SECURITY.md)).
 
 ---
 

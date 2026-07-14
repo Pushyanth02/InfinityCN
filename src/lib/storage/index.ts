@@ -65,17 +65,44 @@ export async function ensureUploadDir(): Promise<string> {
 }
 
 /**
+ * A storage name is an opaque token minted by `buildStorageName`:
+ * `<hashPrefix>-<base36stamp><ext>`. It is therefore composed exclusively of
+ * ASCII alphanumerics, dot, dash, and underscore — never a path separator,
+ * drive letter, or `..` segment. Enforcing that shape up front is a strict
+ * allow-list that rejects every path-traversal and absolute-path payload
+ * before any filesystem resolution happens.
+ */
+const SAFE_STORAGE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
+
+/**
  * Resolve a storageName to an absolute path within UPLOAD_ROOT.
- * Throws if the resolved path escapes the upload directory (path traversal
- * defense-in-depth — callers already sanitize names, but this is a backstop).
+ *
+ * Two independent, defense-in-depth checks reject untrusted input:
+ *   1. An allow-list on the raw name — only `[A-Za-z0-9._-]`, no separators,
+ *      no `..`, no leading dot, no NUL. This alone blocks traversal/absolute
+ *      payloads without relying on resolution semantics.
+ *   2. A containment check on the resolved path — `path.relative` is robust
+ *      against Windows drive jumps and alternate path forms a naive
+ *      `startsWith` prefix check would miss.
  */
 export function uploadPath(storageName: string): string {
+  // (1) Allow-list the raw, untrusted name. Reject anything that isn't the
+  // opaque token shape (blocks `..`, `/`, `\`, absolute paths, NUL bytes).
+  if (
+    typeof storageName !== 'string' ||
+    storageName.includes('\0') ||
+    storageName.includes('..') ||
+    !SAFE_STORAGE_NAME.test(storageName)
+  ) {
+    throw new Error('Path traversal detected: storage name escapes upload directory')
+  }
+
   const root = path.resolve(uploadRoot())
   const resolved = path.resolve(root, storageName)
-  // `path.relative` is robust against Windows drive jumps and alternate path
-  // forms that a naive `startsWith` prefix check can miss. If the resolved
-  // path escapes the root, the relative path starts with `..`; if it lands on
-  // a different root, `path.isAbsolute` catches it.
+
+  // (2) Containment backstop: if the resolved path escapes the root, the
+  // relative path starts with `..`; if it lands on a different root,
+  // `path.isAbsolute` catches it.
   const relative = path.relative(root, resolved)
   if (relative.startsWith('..') || path.isAbsolute(relative)) {
     throw new Error('Path traversal detected: storage name escapes upload directory')

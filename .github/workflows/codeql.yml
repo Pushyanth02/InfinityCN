@@ -1,0 +1,65 @@
+# =============================================================================
+# Lemniscate — CodeQL
+# =============================================================================
+# Static analysis for security vulnerabilities and coding errors. Runs on
+# pushes/PRs to the mainline branches and on a weekly schedule so newly
+# disclosed query packs still catch regressions on a quiet repo.
+#
+# The project is JavaScript/TypeScript only, so CodeQL uses the `none` build
+# mode (no compilation step required — it analyses the source directly).
+# =============================================================================
+name: CodeQL
+
+on:
+  push:
+    branches: [main, v0]
+  pull_request:
+    branches: [main, v0]
+  schedule:
+    # Mondays at 07:00 UTC.
+    - cron: "0 7 * * 1"
+
+# Cancel superseded runs for the same ref.
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    permissions:
+      # Required to upload results to the Security → Code scanning tab.
+      security-events: write
+      # Required by CodeQL to read the workflow run / private repo contents.
+      actions: read
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: javascript-typescript
+            build-mode: none
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        # github/codeql-action is GitHub-owned (trusted publisher); pinned to
+        # the v3 major tag which GitHub maintains as a moving, supported ref.
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          # `security-extended` adds the higher-signal security queries on top
+          # of the default suite (path traversal, unsafe deserialization, etc.).
+          queries: security-extended
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
