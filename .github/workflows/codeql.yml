@@ -65,9 +65,9 @@ jobs:
               core.setOutput("state", data?.state ?? "unknown");
             } catch (error) {
               core.warning(
-                `Could not detect default setup state; proceeding with advanced workflow. ${error.message}`,
+                `Could not detect default setup state; conservatively skipping advanced workflow. ${error.message}`,
               );
-              core.setOutput("state", "unknown");
+              core.setOutput("state", "configured");
             }
 
       - name: Skip advanced CodeQL when default setup is configured
