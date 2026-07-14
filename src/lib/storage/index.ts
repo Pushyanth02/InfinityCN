@@ -23,6 +23,22 @@ function resolveUploadRoot(): string {
     if (!path.isAbsolute(resolved)) {
       throw new Error('UPLOAD_DIR must be an absolute path')
     }
+
+    // Optional hardening: if UPLOAD_DIR_BASE is configured, require UPLOAD_DIR
+    // to stay inside that trusted root.
+    const configuredBase = process.env.UPLOAD_DIR_BASE?.trim()
+    if (configuredBase) {
+      const base = path.resolve(configuredBase)
+      if (!path.isAbsolute(base)) {
+        throw new Error('UPLOAD_DIR_BASE must be an absolute path')
+      }
+      const rel = path.relative(base, resolved)
+      if (rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))) {
+        return resolved
+      }
+      throw new Error('UPLOAD_DIR must be within UPLOAD_DIR_BASE')
+    }
+
     return resolved
   }
   // Dev-only: resolve the project's public/uploads relative to THIS module so
