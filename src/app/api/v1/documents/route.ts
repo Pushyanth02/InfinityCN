@@ -12,6 +12,7 @@ import { securityCheck } from '@/lib/middleware/security'
 import { getClientIP } from '@/lib/middleware/rate-limit'
 import { validate, documentListQuerySchema, uploadFormSchema } from '@/lib/api/validate'
 import { ValidationError } from '@/lib/domain/errors'
+import { dispatchProcessing } from '@/lib/pipeline/dispatch'
 
 // ─── GET: List documents ──────────────────────────────────────────────────
 
@@ -73,6 +74,9 @@ export async function POST(req: NextRequest) {
       mode: modeValidation.data.mode,
       priority: modeValidation.data.priority,
     })
+
+    // Kick off processing (serverless: after() post-response; self-hosted: no-op).
+    void dispatchProcessing(result.jobId)
 
     return apiSuccess(result, 201)
   } catch (err) {

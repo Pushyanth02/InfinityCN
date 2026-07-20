@@ -1,14 +1,35 @@
 import { PrismaClient } from '@prisma/client'
+import { usesLibSQL } from '@/lib/runtime'
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
 }
 
-export const db =
-  globalForPrisma.prisma ??
-  new PrismaClient({
+function createPrismaClient(): PrismaClient {
+  // Vercel / Turso: use the libSQL driver adapter so Prisma talks to a remote
+  // libSQL database instead of a local SQLite file. @prisma/adapter-libsql
+  // + @libsql/client are already dependencies (package.json).
+  if (usesLibSQL()) {
+    const libsql = require('@libsql/client')
+    const { PrismaLibSQL } = require('@prisma/adapter-libsql')
+    const url = process.env.LIBSQL_URL as string
+    const authToken = process.env.LIBSQL_AUTH_TOKEN
+    const client = libsql.createClient({ url, authToken })
+    const adapter = new PrismaLibSQL(client)
+    return new PrismaClient({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      adapter: adapter as any,
+      log: process.env.NODE_ENV === 'production' ? ['error'] : ['error', 'warn'],
+    })
+  }
+
+  // Self-hosted / local dev: local file-backed SQLite.
+  return new PrismaClient({
     log: process.env.NODE_ENV === 'production' ? ['error'] : ['error', 'warn'],
   })
+}
+
+export const db = globalForPrisma.prisma ?? createPrismaClient()
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db
 
@@ -16,22 +37,21 @@ if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db
 // This prevents SQLITE_BUSY errors when the Next.js process and worker
 // access the database simultaneously.
 //
-// Note: these PRAGMAs return a result row (e.g. `journal_mode = wal`),
-// so they must use `$queryRawUnsafe` — `$executeRawUnsafe` rejects any
+// Gated to the local-file path: these PRAGMAs are SQLite-only and only
+// meaningful for the local file backend. Turso (libSQL) manages its own
+// journaling server-side and rejects client-side PRAGMAs.
+//
+// Note: these PRAGMAs return a result row (e.g. journal_mode = wal),
+// so they must use $queryRawUnsafe — $executeRawUnsafe rejects any
 // statement that returns rows on SQLite.
-db.$queryRawUnsafe('PRAGMA journal_mode = WAL').catch(() => {
-  // Silently ignore — WAL may already be set or DB may not be ready yet.
-})
-db.$queryRawUnsafe('PRAGMA busy_timeout = 5000').catch(() => {})
-// Performance PRAGMAs — safe for WAL mode and dramatically reduce disk I/O:
-//   • synchronous=NORMAL: only fsync at checkpoint (not every commit). Safe
-//     under WAL — the OS page cache is durable enough; single-row corruption
-//     is impossible because WAL writes are append-only.
-//   • cache_size=-20000: 20 MB page cache (negative = KB). Default is ~2 MB.
-//   • temp_store=MEMORY: temp tables/indices live in RAM, not on disk.
-//   • mmap_size=268435456: 256 MB memory-mapped I/O window for faster reads
-//     on large documents. No-op if the OS denies the mapping.
-db.$queryRawUnsafe('PRAGMA synchronous = NORMAL').catch(() => {})
-db.$queryRawUnsafe('PRAGMA cache_size = -20000').catch(() => {})
-db.$queryRawUnsafe('PRAGMA temp_store = MEMORY').catch(() => {})
-db.$queryRawUnsafe('PRAGMA mmap_size = 268435456').catch(() => {})
+if (!usesLibSQL()) {
+  db.$queryRawUnsafe('PRAGMA journal_mode = WAL').catch(() => {
+    // Silently ignore — WAL may already be set or DB may not be ready yet.
+  })
+  db.$queryRawUnsafe('PRAGMA busy_timeout = 5000').catch(() => {})
+  // Performance PRAGMAs — safe for WAL mode and dramatically reduce disk I/O.
+  db.$queryRawUnsafe('PRAGMA synchronous = NORMAL').catch(() => {})
+  db.$queryRawUnsafe('PRAGMA cache_size = -20000').catch(() => {})
+  db.$queryRawUnsafe('PRAGMA temp_store = MEMORY').catch(() => {})
+  db.$queryRawUnsafe('PRAGMA mmap_size = 268435456').catch(() => {})
+}

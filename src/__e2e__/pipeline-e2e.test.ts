@@ -5,7 +5,7 @@
  *   upload route → worker claim → job-runner retry → orchestrator →
  *   extraction → original → cinematified → persistence → narratives GET.
  *
- * Run explicitly:  npx vitest run src/__e2e__/pipeline-e2e.test.ts
+ * Run explicitly:  bunx vitest run src/__e2e__/pipeline-e2e.test.ts
  * Writes a human-readable transcript to e2e-report.txt.
  */
 import { describe, it, expect } from 'vitest'

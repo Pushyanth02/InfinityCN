@@ -2,7 +2,7 @@
 # Lemniscate — CI
 # =============================================================================
 # Lint, typecheck, test, and build on every push and pull request. Runs on the
-# canonical npm path (the Dockerfile and Vercel also use npm ci).
+# canonical Bun path (the Dockerfile and Vercel also use Bun).
 # =============================================================================
 name: CI
 
@@ -38,34 +38,32 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
 
       - name: Install dependencies
         # --ignore-scripts matches the Dockerfile; prisma generate runs below.
-        run: npm ci --ignore-scripts
+        # --frozen-lockfile keeps CI reproducible against the committed bun.lock.
+        run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Generate Prisma client
-        run: npx prisma generate
+        run: bunx prisma generate
 
       - name: Prepare test database (schema)
         # Integration/e2e tests hit a real SQLite DB; create its schema first.
-        run: npx prisma db push --skip-generate
+        run: bunx prisma db push --skip-generate
 
       - name: Lint
-        run: npm run lint
+        run: bun run lint
 
       - name: Typecheck
-        run: npx tsc --noEmit
+        run: bunx tsc --noEmit
 
       - name: Test
-        run: npm run test
+        run: bun run test
 
       - name: Build
-        run: npm run build:unix
+        run: bun run build:unix
 
   docker-build:
     name: Docker build verification

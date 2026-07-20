@@ -4,13 +4,19 @@
  * Self-hosted friendly local storage for uploaded documents.
  * Files are written to `public/uploads/<sha256-prefix>/<storageName>` so they
  * can be served (in dev) and are kept outside source control.
+ *
+ * On Vercel (serverless) the filesystem is read-only except `/tmp`, which is
+ * scoped to a single invocation. Uploads land in `/tmp/lemniscate-uploads`
+ * and are consumed synchronously by the in-request pipeline (see dispatch.ts).
  */
 
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { isVercel } from '@/lib/runtime'
 
 const DEFAULT_UPLOAD_DIR = path.resolve(process.cwd(), 'public', 'uploads')
 const PRODUCTION_UPLOAD_BASE = path.resolve('/app')
+const VERCEL_UPLOAD_BASE = path.resolve('/tmp', 'lemniscate-uploads')
 
 function isWithinRoot(candidate: string, root: string): boolean {
   const rel = path.relative(root, candidate)
@@ -18,6 +24,11 @@ function isWithinRoot(candidate: string, root: string): boolean {
 }
 
 function assertTrustedUploadRoot(resolved: string): void {
+  // Vercel: /tmp is the only writable directory and is scoped per-invocation.
+  // It is trusted by the platform — no containment check needed.
+  if (isVercel()) {
+    return
+  }
   if (process.env.NODE_ENV === 'production') {
     if (!isWithinRoot(resolved, PRODUCTION_UPLOAD_BASE)) {
       throw new Error('UPLOAD_DIR must be within /app in production')
@@ -36,6 +47,12 @@ function assertTrustedUploadRoot(resolved: string): void {
  * Falls back to UPLOAD_DIR env var, then process.cwd()/public/uploads.
  */
 function resolveUploadRoot(): string {
+  // Vercel (serverless): /tmp is the only writable directory. Files are
+  // scoped to a single invocation and consumed synchronously by the
+  // in-request pipeline, so they do not need to survive across requests.
+  if (isVercel()) {
+    return VERCEL_UPLOAD_BASE
+  }
   if (process.env.UPLOAD_DIR) {
     const configured = process.env.UPLOAD_DIR.trim()
     if (!configured) throw new Error('UPLOAD_DIR must not be empty')

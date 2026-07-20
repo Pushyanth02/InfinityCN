@@ -15,6 +15,7 @@ import { hashText } from '@/lib/pipeline/extract'
 import { apiSuccess, apiError, apiValidationError } from '@/lib/api/response'
 import { securityCheck } from '@/lib/middleware/security'
 import { getClientIP } from '@/lib/middleware/rate-limit'
+import { dispatchProcessing } from '@/lib/pipeline/dispatch'
 
 const SAMPLE = `The Last Lighthouse of Veyrn
 
@@ -209,6 +210,8 @@ export async function POST(req: NextRequest) {
     const job = await db.job.create({
       data: { documentId, mode, status: 'QUEUED', progress: 0, stage: 'QUEUED', priority: 8 },
     })
+
+    void dispatchProcessing(job.id)
 
     return apiSuccess({
       documentId,

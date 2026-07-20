@@ -1,19 +1,22 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel/v1.json",
   "framework": "nextjs",
-  "buildCommand": "npm run build:vercel",
-  "installCommand": "npm ci",
+  "buildCommand": "bun run build:vercel",
+  "installCommand": "bun install --frozen-lockfile",
   "functions": {
-    "src/app/api/documents/upload/route.ts": {
+    "src/app/api/v1/documents/route.ts": {
       "maxDuration": 300
     },
-    "src/app/api/documents/[id]/route.ts": {
+    "src/app/api/v1/sample/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/v1/documents/[id]/route.ts": {
       "maxDuration": 60
     },
-    "src/app/api/jobs/[id]/route.ts": {
+    "src/app/api/v1/jobs/[id]/route.ts": {
       "maxDuration": 60
     },
-    "src/app/api/narratives/[id]/route.ts": {
+    "src/app/api/v1/narratives/[id]/route.ts": {
       "maxDuration": 60
     }
   },

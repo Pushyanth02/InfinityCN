@@ -4,8 +4,18 @@
  * Runs once when the Next.js server starts (both dev and production).
  * Used for environment validation and startup checks.
  *
+ * Runtime behavior:
+ *   • Vercel (serverless): env validation runs, but the embedded job poller
+ *     and backup scheduler are SKIPPED — serverless functions freeze between
+ *     invocations, so setInterval-based pollers never fire and file-backed
+ *     backups are impossible (read-only FS). Processing happens in-request
+ *     via dispatch.ts + Next.js after().
+ *   • Self-hosted (Docker / local dev): poller + backup scheduler run.
+ *
  * Spec references: 2.1 (production auth requirement), 2.21 (env validation)
  */
+
+import { isVercel } from '@/lib/runtime'
 
 export async function register() {
   // Only run on the server side
@@ -17,6 +27,16 @@ export async function register() {
     // Future cloud/AI providers are registered in @/lib/providers without
     // touching services or API code.
     await import('@/lib/providers')
+
+    // Vercel: skip the background poller and backup scheduler.
+    //   • The poller uses setInterval, which never fires on serverless (the
+    //     function freezes between invocations). Jobs are processed in-request
+    //     via dispatch.ts (Next.js after()).
+    //   • The backup scheduler copies a SQLite file — impossible on Vercel
+    //     (read-only FS + Turso is a remote DB with no local file to copy).
+    if (isVercel()) {
+      return
+    }
 
     const { startBackupScheduler } = await import('@/lib/backup')
     startBackupScheduler()

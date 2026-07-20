@@ -4,6 +4,7 @@
 # Stage 1: Install dependencies
 # Stage 2: Build Next.js (standalone output)
 # Stage 3: Production runtime
+# Runs entirely on Bun (sole package manager + runtime).
 # =============================================================================
 
 # --- Stage 1: Dependencies ---
@@ -11,19 +12,18 @@
 # requires build-time devDependencies such as typescript, tailwindcss, and
 # @tailwindcss/postcss. The final runtime image (stage 3) copies only the
 # standalone output + Prisma engine, so these build deps never ship to prod.
-FROM node:20-alpine3.21 AS deps
+FROM oven/bun:1-alpine AS deps
 WORKDIR /app
 
-COPY package.json package-lock.json ./
+COPY package.json bun.lock ./
 COPY prisma ./prisma/
 
 # --ignore-scripts prevents lifecycle scripts from untrusted packages.
 # Prisma generate is run explicitly afterward.
-RUN npm ci --ignore-scripts && npx prisma generate && \
-    npm cache clean --force
+RUN bun install --ignore-scripts && bunx prisma generate
 
 # --- Stage 2: Build ---
-FROM node:20-alpine3.21 AS builder
+FROM oven/bun:1-alpine AS builder
 WORKDIR /app
 
 COPY --from=deps /app/node_modules ./node_modules
@@ -33,16 +33,16 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV DATABASE_URL=file:/app/db/custom.db
 
-RUN npx prisma generate && npm run build:unix
+RUN bunx prisma generate && bun run build:unix
 
 # Bake a schema-initialized SQLite database to seed empty volumes at runtime.
 # Uses an absolute path so Prisma resolves it unambiguously (not relative to
 # the schema directory). devDependencies (prisma CLI) are present in this stage.
 RUN mkdir -p /app/db-seed && \
-    DATABASE_URL=file:/app/db-seed/custom.db npx prisma db push --skip-generate
+    DATABASE_URL=file:/app/db-seed/custom.db bunx prisma db push --skip-generate
 
 # --- Stage 3: Production runtime ---
-FROM node:20-alpine3.21 AS runner
+FROM oven/bun:1-alpine AS runner
 WORKDIR /app
 
 LABEL org.opencontainers.image.title="Lemniscate"
@@ -80,4 +80,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
-CMD ["node", "server.js"]
+CMD ["bun", "server.js"]

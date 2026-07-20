@@ -26,8 +26,9 @@ COPY prisma ./prisma/
 COPY src ./src/
 COPY mini-services/lemniscate-worker ./mini-services/lemniscate-worker/
 
-# --ignore-scripts prevents lifecycle scripts from executing during installation.
-RUN bun install --production --ignore-scripts && bunx prisma generate
+# --omit=dev skips devDependencies; --ignore-scripts blocks untrusted lifecycle
+# scripts during install (prisma generate runs explicitly next, under our control).
+RUN bun install --omit=dev --ignore-scripts && bunx prisma generate
 
 # Create db directory with correct permissions
 RUN mkdir -p ./db && chown -R worker:worker ./db

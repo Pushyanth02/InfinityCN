@@ -132,5 +132,5 @@ CSP, ID validation, rate limiting, socket validation, trusted proxy, upload
 validation). Keep these green when touching middleware or upload handling:
 
 ```bash
-npx vitest run src/__tests__/security/
+bunx vitest run src/__tests__/security/
 ```

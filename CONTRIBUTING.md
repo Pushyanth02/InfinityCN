@@ -38,14 +38,14 @@ out-of-the-box (SQLite at `file:./db/custom.db`, auth disabled in dev).
 bun run lint                # eslint
 bun run test                # vitest, single pass
 bun run test:watch          # vitest watch mode
-npx tsc --noEmit            # typecheck (no dedicated script)
+bunx tsc --noEmit            # typecheck (no dedicated script)
 
 # Run a single test file / test name:
-npx vitest run src/lib/nlp/core.test.ts
-npx vitest run -t "detects scene boundary"
+bunx vitest run src/lib/nlp/core.test.ts
+bunx vitest run -t "detects scene boundary"
 
 # E2E (hits a real DB, writes transcript to e2e-report.txt):
-npx vitest run src/__e2e__/pipeline-e2e.test.ts
+bunx vitest run src/__e2e__/pipeline-e2e.test.ts
 ```
 
 **Validate every change.** Build, test, lint, and typecheck before considering

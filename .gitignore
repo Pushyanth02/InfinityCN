@@ -109,12 +109,12 @@ bun.config.local
 bunfig.local.toml
 
 # ─── Lockfiles ───────────────────────────────────────────────────────────────
-# Keep the root lockfiles that production tooling references. The current
-# Dockerfile and Vercel config use `npm ci`, so root package-lock.json must
-# remain trackable alongside bun.lock until those paths are migrated to Bun.
+# Bun is the sole package manager (see CLAUDE.md); bun.lock is the canonical
+# lockfile and is tracked. npm/yarn lockfiles are not canonical anywhere —
+# Docker, Vercel, and CI all run on Bun — so ignore them everywhere to keep
+# them from drifting back in.
+package-lock.json
 yarn.lock
-# The worker mini-service is a Bun app too; its npm lockfile is not canonical.
-mini-services/**/package-lock.json
 
 # ─── PID Files ───────────────────────────────────────────────────────────────
 *.pid

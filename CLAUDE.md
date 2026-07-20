@@ -30,14 +30,14 @@ bun run start               # run the standalone production server
 bun run lint                # eslint
 bun run test                # vitest, single pass
 bun run test:watch          # vitest watch mode
-npx tsc --noEmit            # typecheck (no dedicated script; tsconfig has noEmit)
+bunx tsc --noEmit            # typecheck (no dedicated script; tsconfig has noEmit)
 
 # Run a single test file / test name:
-npx vitest run src/lib/nlp/core.test.ts
-npx vitest run -t "detects scene boundary"
+bunx vitest run src/lib/nlp/core.test.ts
+bunx vitest run -t "detects scene boundary"
 
 # E2E (hits a real DB, writes transcript to e2e-report.txt):
-npx vitest run src/__e2e__/pipeline-e2e.test.ts
+bunx vitest run src/__e2e__/pipeline-e2e.test.ts
 ```
 
 Optional realtime worker (WebSocket live progress; HTTP polling works without it):
@@ -110,7 +110,7 @@ This is an existing, near-production codebase — **not greenfield**.
 - **Think before editing.** Trace imports, data flow, API contracts, DB and worker interactions, and downstream impact before changing anything. Understand the feature fully first.
 - **Preserve repository consistency.** New code matches existing architecture, naming, folder structure, dependency direction, and coding style.
 - **Keep logic in the right layer.** Business logic in services, not API routes or UI; parsing in `pipeline/`/`providers/`, not routes; queue logic separate from business logic.
-- **Validate every change.** Build, test (`bun run test`), lint (`bun run lint`), and typecheck (`npx tsc --noEmit`) before considering work done. Security tests in `src/__tests__/security/` must stay green.
+- **Validate every change.** Build, test (`bun run test`), lint (`bun run lint`), and typecheck (`bunx tsc --noEmit`) before considering work done. Security tests in `src/__tests__/security/` must stay green.
 - **Error handling.** Never silently ignore exceptions; log meaningfully; return structured responses; never leak stack traces to clients.
 - **DB schema changes** need a migration + indexes/constraints/foreign keys. The project uses `db push`, so there is no migration history yet — be deliberate.
 

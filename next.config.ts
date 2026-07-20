@@ -17,7 +17,7 @@ const nextConfig: NextConfig = {
   // list / whole project traced" warning. Build-only; no runtime effect.
   outputFileTracingRoot: projectRoot,
   turbopack: { root: projectRoot },
-  serverExternalPackages: ["mammoth"],
+  serverExternalPackages: ["mammoth", "@libsql/client", "@prisma/adapter-libsql"],
   reactStrictMode: true,
   // Tree-shake barrel exports at build time — reduces bundle size for
   // lucide-react (~6,000 icons), framer-motion, and radix primitives.

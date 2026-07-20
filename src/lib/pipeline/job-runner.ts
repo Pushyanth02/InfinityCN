@@ -58,6 +58,36 @@ export async function claimNextJob(): Promise<ClaimResult | null> {
   }
 }
 
+/**
+ * Atomically claim a SPECIFIC job by ID. Returns null if the job doesn't
+ * exist, isn't QUEUED, or was already claimed by another worker (CAS failure).
+ *
+ * Used by the serverless in-request dispatcher to process the exact job a
+ * route handler just created — without racing the background poller for an
+ * arbitrary QUEUED job (which could double-process).
+ */
+export async function claimSpecificJob(jobId: string): Promise<ClaimResult | null> {
+  // CAS-style claim: only transition QUEUED → PROCESSING if still QUEUED.
+  // This is the same atomic guarantee as claimNextJob but scoped to one ID.
+  const claimed = await db.job.updateMany({
+    where: { id: jobId, status: 'QUEUED' },
+    data: { status: 'PROCESSING', startedAt: new Date() },
+  })
+  if (claimed.count === 0) return null
+
+  const job = await db.job.findUnique({
+    where: { id: jobId },
+    select: { id: true, documentId: true, mode: true },
+  })
+  if (!job) return null
+
+  return {
+    jobId: job.id,
+    documentId: job.documentId,
+    mode: job.mode as JobMode,
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Re-hydrate Stalled Jobs
 // ---------------------------------------------------------------------------
