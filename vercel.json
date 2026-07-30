@@ -5,15 +5,16 @@
   "installCommand": "bun install",
   "framework": "nextjs",
   "regions": ["iad1"],
-  "env": {
-    "DATABASE_URL": "@database_url"
-  },
   "functions": {
     "src/app/api/ai/**/*.ts": {
       "maxDuration": 60
     },
     "src/app/api/documents/**/*.ts": {
       "maxDuration": 60
+    },
+    "src/app/api/stories/route.ts": {
+      "maxDuration": 60
     }
-  }
+  },
+  "crons": []
 }

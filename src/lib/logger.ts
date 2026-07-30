@@ -31,10 +31,12 @@ function formatLog(entry: LogEntry): string {
     entry.level.toUpperCase().padEnd(5),
     entry.message,
   ];
-  const extras = { ...entry };
-  delete extras.timestamp;
-  delete extras.level;
-  delete extras.message;
+  const extras: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(entry)) {
+    if (k !== "timestamp" && k !== "level" && k !== "message") {
+      extras[k] = v;
+    }
+  }
   if (Object.keys(extras).length > 0) {
     parts.push(JSON.stringify(extras));
   }

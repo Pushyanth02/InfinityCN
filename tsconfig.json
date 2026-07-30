@@ -41,6 +41,8 @@
     "upload",
     "examples",
     "tests",
-    ".zscripts"
+    ".zscripts",
+    "skills",
+    "mini-services"
   ]
 }

@@ -15,7 +15,7 @@ export const maxDuration = 60;
 /* ── In-memory job store (single-instance; suitable for this deployment) ── */
 export interface AnkaaJob {
   jobId: string;
-  documentId: string;
+  documentId: string | null;
   docTitle: string;
   prompt: string;
   status: "running" | "complete" | "error";

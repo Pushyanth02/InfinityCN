@@ -29,7 +29,7 @@ import type { ViewName } from "@/lib/types";
 
 type GoFn = (
   view: ViewName,
-  opts?: { documentId?: string; returnTo?: ViewName },
+  opts?: { documentId?: string; returnTo?: ViewName; section?: string },
 ) => void;
 
 type CSSVars = React.CSSProperties &

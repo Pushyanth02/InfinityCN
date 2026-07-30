@@ -1,11 +1,16 @@
 # Render deployment configuration
 # https://render.com/docs/blueprint-spec
+#
+# Prerequisites:
+#   1. Change prisma/schema.prisma provider to "postgresql" before deploying
+#   2. The DATABASE_URL will be automatically set from the Render PostgreSQL database
+#
 services:
   - type: web
     name: lemniscate
     runtime: node
     plan: starter
-    buildCommand: bun install && bun run db:generate && bun run build
+    buildCommand: bun install && bun run db:generate && bun run build:standalone
     startCommand: bun run start
     envVars:
       - key: DATABASE_URL
@@ -14,6 +19,8 @@ services:
           property: connectionString
       - key: NODE_ENV
         value: production
+      - key: LEMNISCATE_AUTH_SECRET
+        generateValue: true
     healthCheckPath: /api/health
     autoDeploy: true
 

@@ -4,6 +4,7 @@ import { useMemo, type ReactNode } from "react";
 import {
   Activity,
   BarChart3,
+  BookOpen,
   CheckCircle2,
   Clock,
   FileStack,
