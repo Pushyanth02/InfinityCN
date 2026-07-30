@@ -6,7 +6,8 @@ import { isValidDocumentId } from "@/lib/security";
 import { buildExcerpt, aiComplete } from "@/lib/ai-helpers";
 import type { ParsedDoc } from "@/lib/types";
 import { ensureSession } from "@/lib/auth";
-import { verifyDocumentOwnership, checkUserQuota } from "@/lib/quota";
+import { verifyDocumentOwnership } from "@/lib/quota";
+import { aiQuotaGate } from "@/lib/ai-guard";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -19,18 +20,21 @@ export async function POST(req: NextRequest) {
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "Rate limit exceeded. Please try again." },
-      { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSec), ...setCookie } },
     );
   }
 
+  const quotaResp = await aiQuotaGate(userId, setCookie);
+  if (quotaResp) return quotaResp;
+
   const { documentId } = await req.json();
   if (!documentId || !isValidDocumentId(documentId))
-    return NextResponse.json({ error: "Valid documentId required" }, { status: 400 });
+    return NextResponse.json({ error: "Valid documentId required" }, { status: 400, headers: setCookie });
 
   const doc = await verifyDocumentOwnership(documentId, userId);
-  if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404, headers: setCookie });
   if (doc.status !== "ready")
-    return NextResponse.json({ error: "Document not ready" }, { status: 400 });
+    return NextResponse.json({ error: "Document not ready" }, { status: 400, headers: setCookie });
 
   let parsed: ParsedDoc | null = null;
   try {
@@ -54,8 +58,8 @@ A short, friendly description (2-3 sentences) covering:
 Use **bold** for the character's key trait. Keep language simple and affectionate. Cover 3-6 characters. Skip minor background figures. Never use the phrase "this document".`;
 
   const user = `Story: ${doc.title}\n\n${excerpt}`;
-  const intro = await aiComplete(system, user);
+  const intro = await aiComplete(system, user, { bot: "system", kind: "meet_characters", documentId, userId });
 
   await logActivity({ type: "ai_characters_intro", documentId, detail: doc.title });
-  return NextResponse.json({ intro });
+  return NextResponse.json({ intro }, { headers: setCookie });
 }

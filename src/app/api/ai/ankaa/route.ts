@@ -4,10 +4,12 @@ import { logActivity } from "@/lib/activity";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { isValidDocumentId } from "@/lib/security";
 import { buildExcerpt, aiComplete, estimateTokens, trackUsage } from "@/lib/ai-helpers";
+import { describeAiError } from "@/lib/ai-client";
 import { ankaaSchema, validate } from "@/lib/api-schemas";
 import type { ParsedDoc } from "@/lib/types";
 import { ensureSession } from "@/lib/auth";
-import { verifyDocumentOwnership, checkUserQuota } from "@/lib/quota";
+import { verifyDocumentOwnership } from "@/lib/quota";
+import { aiQuotaGate } from "@/lib/ai-guard";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -40,6 +42,21 @@ function estimateEta(wordTarget: number): number {
   return Math.max(15, Math.ceil(wordTarget / 30) + 5);
 }
 
+/** Keep the in-memory job store bounded: drop finished jobs after a TTL. */
+const ANKAA_JOB_TTL_MS = 30 * 60_000; // 30 minutes
+function pruneAnkaaJobs(): void {
+  const now = Date.now();
+  for (const [id, job] of ankaaJobs) {
+    const finishedAt = job.completedAt ?? job.createdAt;
+    if (job.status !== "running" && now - finishedAt > ANKAA_JOB_TTL_MS) {
+      ankaaJobs.delete(id);
+    } else if (job.status === "running" && now - job.createdAt > 10 * 60_000) {
+      // Safety: abandon jobs that never completed after 10 minutes.
+      ankaaJobs.delete(id);
+    }
+  }
+}
+
 /**
  * POST — start a long-form creative-writing job.
  * Body: { documentId, prompt, scope?: "chapter"|"novel", chapterIndex?, wordTarget? }
@@ -55,14 +72,17 @@ export async function POST(req: NextRequest) {
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "Ankaa is already weaving a long-form work — please wait for it to finish.", bot: "ankaa" },
-      { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSec), ...setCookie } },
     );
   }
+
+  const quotaResp = await aiQuotaGate(userId, setCookie);
+  if (quotaResp) return quotaResp;
 
   const body = await req.json();
   const v = validate(ankaaSchema, body);
   if (!v.success)
-    return NextResponse.json({ error: v.error }, { status: 400 });
+    return NextResponse.json({ error: v.error }, { status: 400, headers: setCookie });
   const { documentId, prompt, chapterIndex, wordTarget } = v.data;
 
   // documentId is optional — Ankaa can write from the brief alone (blank canvas),
@@ -92,8 +112,9 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const words = Math.min(2000, Math.max(300, typeof wordTarget === "number" ? wordTarget : 800));
+  const words = Math.min(4000, Math.max(300, typeof wordTarget === "number" ? wordTarget : 800));
   const eta = estimateEta(words);
+  pruneAnkaaJobs();
   const jobId = makeJobId();
 
   const job: AnkaaJob = {
@@ -135,26 +156,35 @@ ${sourceBlock}`;
 
 Write the complete work now, from its true beginning to its natural end.`;
 
-      const result = await aiComplete(system, user, { bot: "ankaa", kind: "longform", documentId });
+      const result = await aiComplete(system, user, {
+        bot: "ankaa",
+        kind: "longform",
+        documentId,
+        userId,
+        // Long-form needs a generous output budget (~2 tokens/word + buffer)
+        // and a higher temperature for creative variety.
+        maxTokens: Math.ceil(words * 2) + 600,
+        temperature: 0.9,
+      });
       const stored = ankaaJobs.get(jobId);
       if (stored) {
         stored.status = "complete";
         stored.result = result;
         stored.completedAt = Date.now();
       }
-      await logActivity({ type: "ai_ankaa_complete", documentId: (documentId && isValidDocumentId(documentId)) ? documentId : undefined, detail: `${scopeLabel} (${words}w)` });
+      await logActivity({ type: "ai_ankaa_complete", documentId: (documentId && isValidDocumentId(documentId)) ? documentId : undefined, detail: `${scopeLabel} (${words}w)`, userId });
     } catch (err: any) {
       const stored = ankaaJobs.get(jobId);
       if (stored) {
         stored.status = "error";
-        stored.error = err?.message ?? "Ankaa couldn't complete the work.";
+        stored.error = describeAiError(err).message;
         stored.completedAt = Date.now();
       }
       await trackUsage({ bot: "ankaa", kind: "longform", documentId, tokensEstimate: estimateTokens(prompt), latencyMs: Date.now() - started, status: "error" }).catch(() => {});
     }
   })();
 
-  return NextResponse.json({ jobId, etaSeconds: eta, wordTarget: words, bot: "ankaa" });
+  return NextResponse.json({ jobId, etaSeconds: eta, wordTarget: words, bot: "ankaa" }, { headers: setCookie });
 }
 
 /**

@@ -98,6 +98,7 @@ model Annotation {
 
 model ActivityEvent {
   id         String   @id @default(cuid())
+  userId     String?  // owner — enforces per-user activity isolation
   documentId String?
   type       String   // upload | read | bookmark | annotate | ai_summarize | ai_cinematize
   detail     String?
@@ -107,6 +108,8 @@ model ActivityEvent {
   @@index([createdAt])
   @@index([documentId])
   @@index([documentId, createdAt])
+  @@index([userId])
+  @@index([userId, createdAt])
 }
 
 model AiScene {

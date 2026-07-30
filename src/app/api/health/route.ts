@@ -38,13 +38,12 @@ export async function GET(req: NextRequest) {
     allOk = false;
   }
 
-  // 2. AI provider check (just verify the SDK can be imported)
-  try {
-    await import("z-ai-web-dev-sdk");
+  // 2. AI provider check (verify OpenRouter is configured)
+  if (process.env.OPENROUTER_API_KEY && process.env.OPENROUTER_API_KEY.trim() !== "") {
     checks.ai = "ok";
-  } catch {
-    checks.ai = "error";
-    allOk = false;
+  } else {
+    // Missing key means AI features are disabled, but the app is still usable.
+    checks.ai = "unconfigured";
   }
 
   // 3. Storage check (database IS the storage for this app)

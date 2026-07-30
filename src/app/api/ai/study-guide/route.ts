@@ -6,7 +6,8 @@ import { isValidDocumentId } from "@/lib/security";
 import { buildExcerpt, aiComplete } from "@/lib/ai-helpers";
 import type { ParsedDoc } from "@/lib/types";
 import { ensureSession } from "@/lib/auth";
-import { verifyDocumentOwnership, checkUserQuota } from "@/lib/quota";
+import { verifyDocumentOwnership } from "@/lib/quota";
+import { aiQuotaGate } from "@/lib/ai-guard";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -19,18 +20,21 @@ export async function POST(req: NextRequest) {
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "Rate limit exceeded. Please try again." },
-      { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSec), ...setCookie } },
     );
   }
 
+  const quotaResp = await aiQuotaGate(userId, setCookie);
+  if (quotaResp) return quotaResp;
+
   const { documentId, chapterIndex } = await req.json();
   if (!documentId || !isValidDocumentId(documentId))
-    return NextResponse.json({ error: "Valid documentId required" }, { status: 400 });
+    return NextResponse.json({ error: "Valid documentId required" }, { status: 400, headers: setCookie });
 
   const doc = await verifyDocumentOwnership(documentId, userId);
-  if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404, headers: setCookie });
   if (doc.status !== "ready")
-    return NextResponse.json({ error: "Document not ready" }, { status: 400 });
+    return NextResponse.json({ error: "Document not ready" }, { status: 400, headers: setCookie });
 
   let parsed: ParsedDoc | null = null;
   try {
@@ -75,8 +79,8 @@ A bulleted list of any 3-6 key terms, names, or concepts with a one-line definit
 Be accurate and specific, grounded in the text. Use **bold** for key terms. Never say "this document".`;
 
   const user = `Text: ${scopeLabel}\n\n${excerpt}`;
-  const guide = await aiComplete(system, user);
+  const guide = await aiComplete(system, user, { bot: "ouro", kind: "study_guide", documentId, userId });
 
   await logActivity({ type: "ai_study", documentId, detail: doc.title });
-  return NextResponse.json({ guide, scope: scopeLabel });
+  return NextResponse.json({ guide, scope: scopeLabel }, { headers: setCookie });
 }

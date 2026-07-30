@@ -5,6 +5,8 @@ import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { isValidDocumentId } from "@/lib/security";
 import { buildExcerpt, aiComplete } from "@/lib/ai-helpers";
 import { safeErrorMessage } from "@/lib/safe-error";
+import { ensureSession } from "@/lib/auth";
+import { verifyDocumentOwnership, checkUserQuota } from "@/lib/quota";
 import type { ParsedDoc } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -40,7 +42,7 @@ function estimateEta(chapterCount: number): number {
 }
 
 /** Run the full analysis pipeline as a background job. */
-async function runAnalysis(documentId: string) {
+async function runAnalysis(documentId: string, userId?: string) {
   const job = await db.analysisJob.findUnique({ where: { documentId } });
   if (!job) return;
   const startedAt = Date.now();
@@ -71,7 +73,7 @@ async function runAnalysis(documentId: string) {
 
 Return ONLY the cleaned text, no commentary.`,
       `Document: ${doc.title}\n\n${rawExcerpt}`,
-      { bot: "analysis", kind: "denoise", documentId },
+      { bot: "analysis", kind: "denoise", documentId, userId },
     );
     results.denoised = denoised.slice(0, 16000);
     await db.analysisJob.update({
@@ -83,7 +85,7 @@ Return ONLY the cleaned text, no commentary.`,
     const summary = await aiComplete(
       `You are a literary analyst. Write a comprehensive, evocative summary of the supplied text. 2-3 paragraphs of plain prose. Cover the full arc — beginning, middle, and end. No headings. Do not say "this document".`,
       `Title: ${doc.title}\n\n${results.denoised}`,
-      { bot: "analysis", kind: "summary", documentId },
+      { bot: "analysis", kind: "summary", documentId, userId },
     );
     results.summary = summary;
     // Persist the summary on the document for quick access.
@@ -97,7 +99,7 @@ Return ONLY the cleaned text, no commentary.`,
     const themes = await aiComplete(
       `You are a thematic analyst. Identify 3-5 central themes in the supplied text. For each, name the theme, describe how it develops, and note a key moment. Use Markdown (## theme headings, **bold** for key terms). Grounded in the text only.`,
       `Title: ${doc.title}\n\n${results.denoised}`,
-      { bot: "analysis", kind: "themes", documentId },
+      { bot: "analysis", kind: "themes", documentId, userId },
     );
     results.themes = themes;
     await db.analysisJob.update({
@@ -109,7 +111,7 @@ Return ONLY the cleaned text, no commentary.`,
     const characters = await aiComplete(
       `You are a character analyst. Analyze the key characters in the supplied text. For each, cover personality, motivations, relationships, and arc. Use Markdown (## character headings). 3-5 sentences per character. Grounded in the text only.`,
       `Title: ${doc.title}\n\n${results.denoised}`,
-      { bot: "analysis", kind: "characters", documentId },
+      { bot: "analysis", kind: "characters", documentId, userId },
     );
     results.characters = characters;
     await db.analysisJob.update({
@@ -121,7 +123,7 @@ Return ONLY the cleaned text, no commentary.`,
     const criticism = await aiComplete(
       `You are a literary critic. Evaluate the supplied text: prose style, narrative voice, imagery/symbolism, structure, and authorial intent. Use Markdown (## section headings, **bold** terms). 4-6 paragraphs. Grounded in the text only.`,
       `Title: ${doc.title}\n\n${results.denoised}`,
-      { bot: "analysis", kind: "criticism", documentId },
+      { bot: "analysis", kind: "criticism", documentId, userId },
     );
     results.criticism = criticism;
 
@@ -151,22 +153,34 @@ Return ONLY the cleaned text, no commentary.`,
 
 /** POST — start (or resume polling) the analysis job. */
 export async function POST(req: NextRequest) {
+  const { userId, setCookie } = ensureSession(req);
+
   const rl = checkRateLimit(req, RATE_LIMITS.ai);
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "Rate limit exceeded. Please try again." },
-      { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSec), ...setCookie } },
     );
   }
 
   const { documentId } = await req.json();
   if (!documentId || !isValidDocumentId(documentId))
-    return NextResponse.json({ error: "Valid documentId required" }, { status: 400 });
+    return NextResponse.json({ error: "Valid documentId required" }, { status: 400, headers: setCookie });
 
-  const doc = await db.document.findUnique({ where: { id: documentId } });
-  if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  // Enforce ownership — a user can only analyze their own documents.
+  const doc = await verifyDocumentOwnership(documentId, userId);
+  if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404, headers: setCookie });
   if (doc.status !== "ready")
-    return NextResponse.json({ error: "Document not ready" }, { status: 400 });
+    return NextResponse.json({ error: "Document not ready" }, { status: 400, headers: setCookie });
+
+  // Per-user quota — the pipeline fires several AI calls, so gate on it.
+  const quota = await checkUserQuota(userId);
+  if (!quota.allowed) {
+    return NextResponse.json(
+      { error: `Daily AI limit reached (${quota.dailyUsed}/${quota.dailyLimit}). Try again later.` },
+      { status: 429, headers: { "Retry-After": String(quota.retryAfterSec), ...setCookie } },
+    );
+  }
 
   // Check for an existing job.
   const existing = await db.analysisJob.findUnique({ where: { documentId } });
@@ -182,7 +196,7 @@ export async function POST(req: NextRequest) {
         etaSeconds: existing.etaSeconds,
         results: existing.results ? JSON.parse(existing.results) : null,
         error: existing.error,
-      });
+      }, { headers: setCookie });
     }
     // If errored, delete and restart.
     await db.analysisJob.delete({ where: { documentId } });
@@ -199,11 +213,11 @@ export async function POST(req: NextRequest) {
   const eta = estimateEta(chapterCount);
 
   const job = await db.analysisJob.create({
-    data: { documentId, status: "queued", progress: 0, etaSeconds: eta },
+    data: { documentId, userId, status: "queued", progress: 0, etaSeconds: eta },
   });
 
   // Fire-and-forget the analysis pipeline.
-  void runAnalysis(documentId);
+  void runAnalysis(documentId, userId);
 
   return NextResponse.json({
     jobId: job.id,
@@ -214,17 +228,23 @@ export async function POST(req: NextRequest) {
     etaSeconds: eta,
     results: null,
     error: null,
-  });
+  }, { headers: setCookie });
 }
 
 /** GET — poll the analysis job status. */
 export async function GET(req: NextRequest) {
+  const { userId, setCookie } = ensureSession(req);
+
   const documentId = req.nextUrl.searchParams.get("documentId");
   if (!documentId || !isValidDocumentId(documentId))
-    return NextResponse.json({ error: "Valid documentId required" }, { status: 400 });
+    return NextResponse.json({ error: "Valid documentId required" }, { status: 400, headers: setCookie });
+
+  // Enforce ownership — a user can only poll jobs for their own documents.
+  const owned = await verifyDocumentOwnership(documentId, userId);
+  if (!owned) return NextResponse.json({ error: "Not found" }, { status: 404, headers: setCookie });
 
   const job = await db.analysisJob.findUnique({ where: { documentId } });
-  if (!job) return NextResponse.json({ error: "No analysis job" }, { status: 404 });
+  if (!job) return NextResponse.json({ error: "No analysis job" }, { status: 404, headers: setCookie });
 
   return NextResponse.json({
     jobId: job.id,
@@ -235,5 +255,5 @@ export async function GET(req: NextRequest) {
     etaSeconds: job.etaSeconds,
     results: job.results ? JSON.parse(job.results) : null,
     error: job.error,
-  });
+  }, { headers: setCookie });
 }

@@ -407,7 +407,9 @@ async function parseDocx(buf: Buffer, name: string): Promise<ParsedDoc> {
   // Lazy-load fflate if available; otherwise bail with a clear message.
   let fflate: any;
   try {
-    fflate = await import("fflate");
+    // Optional dependency: resolved dynamically so the build doesn't require it.
+    const mod: string = "fflate";
+    fflate = await import(mod);
   } catch {
     throw new Error("DOCX parsing requires the fflate package");
   }
@@ -432,7 +434,9 @@ async function parseDocx(buf: Buffer, name: string): Promise<ParsedDoc> {
 async function parseEpub(buf: Buffer, name: string): Promise<ParsedDoc> {
   let fflate: any;
   try {
-    fflate = await import("fflate");
+    // Optional dependency: resolved dynamically so the build doesn't require it.
+    const mod: string = "fflate";
+    fflate = await import(mod);
   } catch {
     throw new Error("EPUB parsing requires the fflate package");
   }

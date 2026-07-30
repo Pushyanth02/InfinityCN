@@ -1,18 +1,22 @@
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 import { db } from "@/lib/db";
+import { ensureSession } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
 /**
- * GET /api/ai/usage — usage monitoring stats across all AI bots.
+ * GET /api/ai/usage — AI usage stats for the CURRENT user (last 24h).
  * Returns per-bot request counts, token estimates, error rates, and recent
- * activity. Powers the usage widget on the dashboard/settings.
+ * activity. Scoped to the caller's session so one user can't see another's
+ * usage. Powers the usage widget on the dashboard/settings.
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const { userId, setCookie } = ensureSession(req);
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000); // last 24h
 
   const rows = await db.usageEvent.findMany({
-    where: { createdAt: { gte: since } },
+    where: { userId, createdAt: { gte: since } },
     select: { bot: true, kind: true, tokensEstimate: true, latencyMs: true, status: true, createdAt: true },
     orderBy: { createdAt: "desc" },
     take: 500,
@@ -50,5 +54,5 @@ export async function GET() {
       status: r.status,
       at: r.createdAt.toISOString(),
     })),
-  });
+  }, { headers: setCookie });
 }

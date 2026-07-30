@@ -22,10 +22,6 @@ import { chunkText, countWords, parseFile, uid } from "./parse";
 
 const MAX_INPUT_BYTES = 200 * 1024 * 1024; // 200 MB hard cap
 const MIN_CHAPTER_CHARS = 100; // merge chapters shorter than this
-const MAX_CHAPTER_CHARS = 20_000; // split chapters longer than this
-
-/** Maximum chapters to run OCR refinement on per pass (for rate-limit safety). */
-const OCR_REFINE_CHAPTER_LIMIT = 3;
 
 export interface IngestionResult {
   parsed: ParsedDoc;
@@ -208,34 +204,6 @@ export function organizeChapters(chapters: Chapter[]): Chapter[] {
   return merged.map((ch, i) => ({ ...ch, ordinal: i }));
 }
 
-/**
- * Find a paragraph boundary (\n\n) nearest to the midpoint of `body` and
- * split there. Falls back to a hard midpoint cut if no paragraph boundary
- * is found within 10% of the midpoint.
- */
-function splitAtMidpoint(body: string): [string, string] {
-  const mid = Math.floor(body.length / 2);
-  // Search outward from the midpoint for the nearest "\n\n".
-  const win = Math.max(200, Math.floor(body.length * 0.1));
-  let best = -1;
-  let bestDist = Infinity;
-  for (let i = mid - win; i <= mid + win; i++) {
-    if (i < 0 || i >= body.length - 1) continue;
-    if (body[i] === "\n" && body[i + 1] === "\n") {
-      const d = Math.abs(i - mid);
-      if (d < bestDist) {
-        bestDist = d;
-        best = i;
-      }
-    }
-  }
-  if (best >= 0) {
-    return [body.slice(0, best).trim(), body.slice(best + 2).trim()];
-  }
-  // Fallback: hard cut at midpoint.
-  return [body.slice(0, mid).trim(), body.slice(mid).trim()];
-}
-
 // ---------------------------------------------------------------------------
 // Quality scoring
 // ---------------------------------------------------------------------------
@@ -283,31 +251,17 @@ export function scoreQuality(parsed: ParsedDoc): number {
 // Language detection (lightweight)
 // ---------------------------------------------------------------------------
 
-const ENGLISH_MARKERS = [
-  "the ", "and ", "of ", "to ", "a ", "in ", "is ", "it ", "that ", "was ",
-  "for ", "on ", "are ", "as ", "with ", "his ", "her ", "not ", "but ",
-  "had ", "has ", "this ", "from ", "they ", "we ", "you ", "an ", "be ",
-];
-
 /**
- * Cheap language heuristic: count occurrences of common English function
- * words in the first ~8 KB of text. If the rate is high enough, declare
- * English. Otherwise default to "en" anyway — Lemniscate's reader doesn't
- * ship other-language models and this is purely informational.
+ * Language tag for a parsed document.
+ *
+ * Lemniscate's reader only ships English and nothing downstream branches on
+ * a detected language, so this always reports "en". It is kept as a single
+ * seam so a real detector can be dropped in later without touching callers.
+ * (The previous implementation scanned for English function words but then
+ * returned "en" on every branch, so the scan was dead code.)
  */
-export function detectLanguage(text: string): string {
-  const sample = text.slice(0, 8000).toLowerCase();
-  if (!sample) return "en";
-  let hits = 0;
-  for (const marker of ENGLISH_MARKERS) {
-    let idx = 0;
-    while ((idx = sample.indexOf(marker, idx)) !== -1) {
-      hits++;
-      idx += marker.length;
-    }
-  }
-  // ~50 hits in 8 KB of English text is a very low bar — clears it easily.
-  return hits >= 25 ? "en" : "en";
+export function detectLanguage(_text: string): string {
+  return "en";
 }
 
 // ---------------------------------------------------------------------------

@@ -6,7 +6,8 @@ import { isValidDocumentId } from "@/lib/security";
 import { buildExcerpt, aiComplete } from "@/lib/ai-helpers";
 import type { ParsedDoc } from "@/lib/types";
 import { ensureSession } from "@/lib/auth";
-import { verifyDocumentOwnership, checkUserQuota } from "@/lib/quota";
+import { verifyDocumentOwnership } from "@/lib/quota";
+import { aiQuotaGate } from "@/lib/ai-guard";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -19,18 +20,21 @@ export async function POST(req: NextRequest) {
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "Rate limit exceeded. Please try again." },
-      { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSec), ...setCookie } },
     );
   }
 
+  const quotaResp = await aiQuotaGate(userId, setCookie);
+  if (quotaResp) return quotaResp;
+
   const { documentId, chapterIndex } = await req.json();
   if (!documentId || !isValidDocumentId(documentId))
-    return NextResponse.json({ error: "Valid documentId required" }, { status: 400 });
+    return NextResponse.json({ error: "Valid documentId required" }, { status: 400, headers: setCookie });
 
   const doc = await verifyDocumentOwnership(documentId, userId);
-  if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404, headers: setCookie });
   if (doc.status !== "ready")
-    return NextResponse.json({ error: "Document not ready" }, { status: 400 });
+    return NextResponse.json({ error: "Document not ready" }, { status: 400, headers: setCookie });
 
   let parsed: ParsedDoc | null = null;
   try {
@@ -64,8 +68,8 @@ Your retelling should:
 Write 200-350 words. No headings — just the story, flowing like a bedtime tale. You may use *italics* for whispered or special words.`;
 
   const user = `Original story — ${scopeLabel}:\n\n${excerpt}`;
-  const story = await aiComplete(system, user);
+  const story = await aiComplete(system, user, { bot: "system", kind: "retell_kids", documentId, userId });
 
   await logActivity({ type: "ai_kids", documentId, detail: doc.title });
-  return NextResponse.json({ story, scope: scopeLabel });
+  return NextResponse.json({ story, scope: scopeLabel }, { headers: setCookie });
 }

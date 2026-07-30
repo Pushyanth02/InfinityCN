@@ -11,6 +11,9 @@ import { z } from "zod";
 const envSchema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  // AI provider (OpenRouter). Optional at boot — AI routes surface a clear
+  // error if the key is missing, so the rest of the app still runs.
+  OPENROUTER_API_KEY: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

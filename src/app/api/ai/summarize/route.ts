@@ -5,7 +5,9 @@ import { db } from "@/lib/db";
 import { logActivity } from "@/lib/activity";
 import type { ParsedDoc } from "@/lib/types";
 import { ensureSession } from "@/lib/auth";
-import { verifyDocumentOwnership, checkUserQuota } from "@/lib/quota";
+import { verifyDocumentOwnership } from "@/lib/quota";
+import { aiQuotaGate } from "@/lib/ai-guard";
+import { chatCompletionCompat } from "@/lib/ai-client";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -38,9 +40,13 @@ export async function POST(req: NextRequest) {
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "Rate limit exceeded. Please try again." },
-      { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSec), ...setCookie } },
     );
   }
+
+  const quotaResp = await aiQuotaGate(userId, setCookie);
+  if (quotaResp) return quotaResp;
+
   const body: SummarizeRequest = await req.json();
   const { documentId, scope, chapterIndex, regenerate } = body;
 
@@ -68,7 +74,7 @@ export async function POST(req: NextRequest) {
   if (scope === "novel") {
     // Return cached summary if present and not regenerating
     if (!regenerate && doc.summary) {
-      return NextResponse.json({ summary: doc.summary, scope: "novel", cached: true });
+      return NextResponse.json({ summary: doc.summary, scope: "novel", cached: true }, { headers: setCookie });
     }
 
     // Build a representative sample: first chunk of each chapter + middle
@@ -83,9 +89,7 @@ export async function POST(req: NextRequest) {
     }
     const excerpt = sample.join("\n\n").slice(0, 12000);
 
-    const ZAI = (await import("z-ai-web-dev-sdk")).default;
-    const zai = await ZAI.create();
-    const completion = await zai.chat.completions.create({
+    const completion = await chatCompletionCompat({
       messages: [
         {
           role: "assistant",
@@ -94,14 +98,13 @@ export async function POST(req: NextRequest) {
         },
         { role: "user", content: `Title: ${doc.title}\n\n${excerpt}` },
       ],
-      thinking: { type: "disabled" },
-    });
+    }, { bot: "system", kind: "summary", documentId, userId });
     const summary = completion.choices[0]?.message?.content?.trim() ?? "";
 
     await db.document.update({ where: { id: documentId }, data: { summary } });
     await logActivity({ type: "ai_summarize", documentId, detail: `${doc.title} (novel)` });
 
-    return NextResponse.json({ summary, scope: "novel", cached: false });
+    return NextResponse.json({ summary, scope: "novel", cached: false }, { headers: setCookie });
   }
 
   // ── Chapter-level summary ────────────────────────────────────────────
@@ -122,7 +125,7 @@ export async function POST(req: NextRequest) {
         chapterIndex,
         chapterTitle: chapter.title,
         cached: true,
-      });
+      }, { headers: setCookie });
     }
   } else {
     await db.aiScene.deleteMany({
@@ -133,9 +136,7 @@ export async function POST(req: NextRequest) {
   // Build the chapter excerpt (first 4000 chars of the chapter)
   const chapterText = chapter.chunks.map((c) => c.text).join("\n\n").slice(0, 4000);
 
-  const ZAI = (await import("z-ai-web-dev-sdk")).default;
-  const zai = await ZAI.create();
-  const completion = await zai.chat.completions.create({
+  const completion = await chatCompletionCompat({
     messages: [
       {
         role: "assistant",
@@ -147,8 +148,7 @@ export async function POST(req: NextRequest) {
         content: `Title: ${doc.title}\nChapter: ${chapter.title}\n\n${chapterText}`,
       },
     ],
-    thinking: { type: "disabled" },
-  });
+  }, { bot: "system", kind: "summary", documentId, userId });
   const summary = completion.choices[0]?.message?.content?.trim() ?? "";
 
   // Cache the chapter summary as an AiScene
@@ -175,5 +175,5 @@ export async function POST(req: NextRequest) {
     chapterIndex,
     chapterTitle: chapter.title,
     cached: false,
-  });
+  }, { headers: setCookie });
 }

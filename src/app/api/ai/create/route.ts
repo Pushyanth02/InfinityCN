@@ -3,9 +3,9 @@ import { db } from "@/lib/db";
 import { logActivity } from "@/lib/activity";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { buildExcerpt, aiComplete } from "@/lib/ai-helpers";
+import { describeAiError } from "@/lib/ai-client";
 import { ensureSession } from "@/lib/auth";
 import { verifyDocumentOwnership, checkUserQuota } from "@/lib/quota";
-import { safeErrorMessage } from "@/lib/safe-error";
 import { z } from "zod";
 import type { ParsedDoc } from "@/lib/types";
 
@@ -140,6 +140,9 @@ export async function POST(req: NextRequest) {
       kind: task,
       documentId: documentId,
       userId,
+      // Creative tasks benefit from a warmer temperature and room to breathe.
+      temperature: 0.9,
+      maxTokens: 1200,
     });
 
     if (documentId) {
@@ -150,9 +153,10 @@ export async function POST(req: NextRequest) {
     response[taskDef.field] = result;
     return NextResponse.json(response, { headers: setCookie });
   } catch (err) {
+    const e = describeAiError(err);
     return NextResponse.json(
-      { error: safeErrorMessage(err, "Creative task failed") },
-      { status: 500, headers: setCookie },
+      { error: e.message },
+      { status: e.status, headers: { ...setCookie, ...(e.retryAfterSec ? { "Retry-After": String(e.retryAfterSec) } : {}) } },
     );
   }
 }

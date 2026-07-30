@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { CoreEngine } from "@/lib/engine/core-engine";
+import { ensureSession } from "@/lib/auth";
+import { verifyDocumentOwnership, checkUserQuota } from "@/lib/quota";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import type { ParsedDoc, Chapter } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -28,20 +31,40 @@ export async function POST(
   ctx: { params: Promise<{ id: string }> },
 ) {
   const { id } = await ctx.params;
+  const { userId, setCookie } = ensureSession(req);
+
+  const rl = checkRateLimit(req, RATE_LIMITS.ai);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Rate limit exceeded. Please try again." },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSec), ...setCookie } },
+    );
+  }
+
   const body = await req.json();
   const { chapterIndex, regenerate } = body;
 
   if (typeof chapterIndex !== "number" || chapterIndex < 0) {
     return NextResponse.json(
       { error: "chapterIndex (number) required" },
-      { status: 400 },
+      { status: 400, headers: setCookie },
     );
   }
 
-  const doc = await db.document.findUnique({ where: { id } });
-  if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  // Enforce ownership — a user can only refine their own documents.
+  const doc = await verifyDocumentOwnership(id, userId);
+  if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404, headers: setCookie });
   if (doc.status !== "ready")
-    return NextResponse.json({ error: "Document not ready" }, { status: 400 });
+    return NextResponse.json({ error: "Document not ready" }, { status: 400, headers: setCookie });
+
+  // Per-user quota — refinement calls the AI provider.
+  const quota = await checkUserQuota(userId);
+  if (!quota.allowed) {
+    return NextResponse.json(
+      { error: `Daily AI limit reached (${quota.dailyUsed}/${quota.dailyLimit}). Try again later.` },
+      { status: 429, headers: { "Retry-After": String(quota.retryAfterSec), ...setCookie } },
+    );
+  }
 
   let parsed: ParsedDoc | null = null;
   try {
@@ -63,7 +86,7 @@ export async function POST(
       cached: true,
       chapterIndex,
       refinedText: chapter.refinedText,
-    });
+    }, { headers: setCookie });
   }
 
   // Run OCR refinement
@@ -77,7 +100,7 @@ export async function POST(
       cached: false,
       chapterIndex,
       error: err?.message ?? "OCR refinement failed",
-    });
+    }, { headers: setCookie });
   }
 
   if (!result.refinedText) {
@@ -86,7 +109,7 @@ export async function POST(
       cached: false,
       chapterIndex,
       error: "Refinement produced no output",
-    });
+    }, { headers: setCookie });
   }
 
   // Persist the refined text back to the chapter's refinedText field
@@ -108,5 +131,5 @@ export async function POST(
     chapterIndex,
     refinedText: result.refinedText,
     titleRefined: result.titleRefined,
-  });
+  }, { headers: setCookie });
 }

@@ -6,7 +6,8 @@ import { isValidDocumentId } from "@/lib/security";
 import { buildExcerpt, aiComplete } from "@/lib/ai-helpers";
 import type { ParsedDoc } from "@/lib/types";
 import { ensureSession } from "@/lib/auth";
-import { verifyDocumentOwnership, checkUserQuota } from "@/lib/quota";
+import { verifyDocumentOwnership } from "@/lib/quota";
+import { aiQuotaGate } from "@/lib/ai-guard";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -19,18 +20,21 @@ export async function POST(req: NextRequest) {
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "Rate limit exceeded. Please try again." },
-      { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSec), ...setCookie } },
     );
   }
 
+  const quotaResp = await aiQuotaGate(userId, setCookie);
+  if (quotaResp) return quotaResp;
+
   const { documentId, chapterIndex } = await req.json();
   if (!documentId || !isValidDocumentId(documentId))
-    return NextResponse.json({ error: "Valid documentId required" }, { status: 400 });
+    return NextResponse.json({ error: "Valid documentId required" }, { status: 400, headers: setCookie });
 
   const doc = await verifyDocumentOwnership(documentId, userId);
-  if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404, headers: setCookie });
   if (doc.status !== "ready")
-    return NextResponse.json({ error: "Document not ready" }, { status: 400 });
+    return NextResponse.json({ error: "Document not ready" }, { status: 400, headers: setCookie });
 
   let parsed: ParsedDoc | null = null;
   try {
@@ -55,8 +59,8 @@ Stay faithful to:
 Write only the continuation — no headings, no preamble, no "Here is the next passage". Just the prose itself, ready to append to the chapter. Use Markdown for any emphasis (italics) the style calls for.`;
 
   const user = `Title: ${doc.title}\nChapter: ${ch.title}\n\n${body}`;
-  const continuation = await aiComplete(system, user);
+  const continuation = await aiComplete(system, user, { bot: "system", kind: "continue", documentId, userId });
 
   await logActivity({ type: "ai_continue", documentId, detail: doc.title });
-  return NextResponse.json({ continuation, chapterTitle: ch.title });
+  return NextResponse.json({ continuation, chapterTitle: ch.title }, { headers: setCookie });
 }

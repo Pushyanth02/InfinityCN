@@ -6,7 +6,8 @@ import { isValidDocumentId } from "@/lib/security";
 import { buildExcerpt, aiComplete } from "@/lib/ai-helpers";
 import type { ParsedDoc } from "@/lib/types";
 import { ensureSession } from "@/lib/auth";
-import { verifyDocumentOwnership, checkUserQuota } from "@/lib/quota";
+import { verifyDocumentOwnership } from "@/lib/quota";
+import { aiQuotaGate } from "@/lib/ai-guard";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -19,18 +20,21 @@ export async function POST(req: NextRequest) {
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "Rate limit exceeded. Please try again." },
-      { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSec), ...setCookie } },
     );
   }
 
+  const quotaResp = await aiQuotaGate(userId, setCookie);
+  if (quotaResp) return quotaResp;
+
   const { documentId, chapterIndex } = await req.json();
   if (!documentId || !isValidDocumentId(documentId))
-    return NextResponse.json({ error: "Valid documentId required" }, { status: 400 });
+    return NextResponse.json({ error: "Valid documentId required" }, { status: 400, headers: setCookie });
 
   const doc = await verifyDocumentOwnership(documentId, userId);
-  if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404, headers: setCookie });
   if (doc.status !== "ready")
-    return NextResponse.json({ error: "Document not ready" }, { status: 400 });
+    return NextResponse.json({ error: "Document not ready" }, { status: 400, headers: setCookie });
 
   let parsed: ParsedDoc | null = null;
   try {
@@ -72,8 +76,8 @@ One sentence on why this is worth understanding.
 Never say "this document" or "the text". Speak directly to the reader.`;
 
   const user = `Passage — ${scopeLabel}:\n\n${excerpt}`;
-  const explanation = await aiComplete(system, user);
+  const explanation = await aiComplete(system, user, { bot: "system", kind: "explain", documentId, userId });
 
   await logActivity({ type: "ai_explain", documentId, detail: doc.title });
-  return NextResponse.json({ explanation, scope: scopeLabel });
+  return NextResponse.json({ explanation, scope: scopeLabel }, { headers: setCookie });
 }

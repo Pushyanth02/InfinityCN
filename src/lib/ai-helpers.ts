@@ -1,5 +1,9 @@
 import type { ParsedDoc } from "@/lib/types";
-import { db } from "@/lib/db";
+import { openRouterComplete } from "@/lib/ai-client";
+import { estimateTokens, trackUsage } from "@/lib/usage";
+
+// Re-exported for backwards compatibility with existing import sites.
+export { estimateTokens, trackUsage };
 
 /**
  * Build a representative text excerpt from a parsed document for AI prompts.
@@ -29,12 +33,6 @@ export function buildChapterExcerpt(
   if (!ch) return { title: "", excerpt: "", ok: false };
   const body = (ch.refinedText ?? ch.chunks.map((c) => c.text).join("\n\n")).slice(0, perChapter);
   return { title: ch.title, excerpt: `## ${ch.title}\n\n${body}`, ok: true };
-}
-
-/** Rough token estimate (~4 chars per token). Used for usage monitoring. */
-export function estimateTokens(...parts: string[]): number {
-  const total = parts.reduce((a, p) => a + p.length, 0);
-  return Math.ceil(total / 4);
 }
 
 /**
@@ -78,24 +76,26 @@ export async function withRetry<T>(
 export async function aiComplete(
   systemPrompt: string,
   userContent: string,
-  opts: { bot?: string; kind?: string; documentId?: string; userId?: string } = {},
+  opts: {
+    bot?: string;
+    kind?: string;
+    documentId?: string;
+    userId?: string;
+    temperature?: number;
+    maxTokens?: number;
+    reasoning?: boolean;
+  } = {},
 ): Promise<string> {
   const bot = opts.bot ?? "system";
   const kind = opts.kind ?? "chat";
   const started = Date.now();
   try {
-    const ZAI = (await import("z-ai-web-dev-sdk")).default;
-    const zai = await ZAI.create();
-    const completion = await withRetry(() =>
-      zai.chat.completions.create({
-        messages: [
-          { role: "assistant", content: systemPrompt },
-          { role: "user", content: userContent },
-        ],
-        thinking: { type: "disabled" },
-      }),
-    );
-    const reply = completion.choices[0]?.message?.content?.trim() ?? "";
+    const reply = await openRouterComplete(systemPrompt, userContent, {
+      bot,
+      temperature: opts.temperature,
+      maxTokens: opts.maxTokens,
+      reasoning: opts.reasoning,
+    });
     const tokens = estimateTokens(systemPrompt, userContent, reply);
     await trackUsage({ bot, kind, documentId: opts.documentId, userId: opts.userId, tokensEstimate: tokens, latencyMs: Date.now() - started, status: "ok" }).catch(() => {});
     return reply;
@@ -109,24 +109,26 @@ export async function aiComplete(
 export async function aiCompleteJson<T>(
   systemPrompt: string,
   userContent: string,
-  opts: { bot?: string; kind?: string; documentId?: string; userId?: string } = {},
+  opts: {
+    bot?: string;
+    kind?: string;
+    documentId?: string;
+    userId?: string;
+    temperature?: number;
+    maxTokens?: number;
+    reasoning?: boolean;
+  } = {},
 ): Promise<T[]> {
   const bot = opts.bot ?? "system";
   const kind = opts.kind ?? "json";
   const started = Date.now();
   try {
-    const ZAI = (await import("z-ai-web-dev-sdk")).default;
-    const zai = await ZAI.create();
-    const completion = await withRetry(() =>
-      zai.chat.completions.create({
-        messages: [
-          { role: "assistant", content: systemPrompt },
-          { role: "user", content: userContent },
-        ],
-        thinking: { type: "disabled" },
-      }),
-    );
-    const raw = completion.choices[0]?.message?.content?.trim() ?? "";
+    const raw = await openRouterComplete(systemPrompt, userContent, {
+      bot,
+      temperature: opts.temperature,
+      maxTokens: opts.maxTokens,
+      reasoning: opts.reasoning,
+    });
     // Robust JSON extraction: strip code fences, find the first JSON array,
     // and tolerate trailing commas (a common AI output quirk).
     let cleaned = raw
@@ -152,25 +154,4 @@ export async function aiCompleteJson<T>(
   }
 }
 
-/** Fire-and-forget usage tracker. Writes a UsageEvent row for monitoring. */
-export async function trackUsage(p: {
-  bot: string;
-  kind: string;
-  documentId?: string;
-  userId?: string;
-  tokensEstimate: number;
-  latencyMs: number;
-  status: string;
-}): Promise<void> {
-  await db.usageEvent.create({
-    data: {
-      bot: p.bot,
-      kind: p.kind,
-      documentId: p.documentId ?? null,
-      userId: p.userId ?? null,
-      tokensEstimate: p.tokensEstimate,
-      latencyMs: p.latencyMs,
-      status: p.status,
-    },
-  });
-}
+

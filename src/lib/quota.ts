@@ -7,11 +7,23 @@ import { db } from "@/lib/db";
  * and monthly limits on AI requests. Counts are based on UsageEvent rows.
  */
 
-/** Daily limit: AI requests per user per day. */
-export const DAILY_AI_LIMIT = 100;
+/** Positive-integer env override helper. */
+function envInt(name: string, fallback: number): number {
+  const v = Number(process.env[name]);
+  return Number.isFinite(v) && v > 0 ? Math.floor(v) : fallback;
+}
+
+/**
+ * Per-user limits. These are generous by default — the shared OpenRouter
+ * free-tier ceiling is enforced separately (checkGlobalAiBudget), so per-user
+ * caps exist mainly for fairness between anonymous sessions. Tune via env:
+ *   USER_DAILY_AI_LIMIT   (default 300)
+ *   USER_MONTHLY_AI_LIMIT (default 6000)
+ */
+export const DAILY_AI_LIMIT = envInt("USER_DAILY_AI_LIMIT", 300);
 
 /** Monthly limit: AI requests per user per 30 days. */
-export const MONTHLY_AI_LIMIT = 1000;
+export const MONTHLY_AI_LIMIT = envInt("USER_MONTHLY_AI_LIMIT", 6000);
 
 export interface QuotaResult {
   allowed: boolean;

@@ -25,6 +25,9 @@ jobs:
       - name: Generate Prisma client
         run: bun run db:generate
 
+      - name: Test
+        run: bun run test
+
       - name: Lint
         run: bun run lint
 

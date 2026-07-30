@@ -4,7 +4,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import type { ParsedDoc } from "@/lib/types";
 import { ensureSession } from "@/lib/auth";
-import { verifyDocumentOwnership, checkUserQuota } from "@/lib/quota";
+import { verifyDocumentOwnership } from "@/lib/quota";
+import { aiQuotaGate } from "@/lib/ai-guard";
+import { chatCompletionCompat } from "@/lib/ai-client";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -16,15 +18,19 @@ export async function POST(req: NextRequest) {
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "Rate limit exceeded. Please try again." },
-      { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSec), ...setCookie } },
     );
   }
+
+  const quotaResp = await aiQuotaGate(userId, setCookie);
+  if (quotaResp) return quotaResp;
+
   const { documentId, question } = await req.json();
   if (!documentId || !question) {
-    return NextResponse.json({ error: "documentId and question required" }, { status: 400 });
+    return NextResponse.json({ error: "documentId and question required" }, { status: 400, headers: setCookie });
   }
   const doc = await verifyDocumentOwnership(documentId, userId);
-  if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404, headers: setCookie });
 
   let parsed: ParsedDoc | null = null;
   try {
@@ -57,9 +63,7 @@ export async function POST(req: NextRequest) {
     .join("\n\n---\n\n")
     .slice(0, 9000);
 
-  const ZAI = (await import("z-ai-web-dev-sdk")).default;
-  const zai = await ZAI.create();
-  const completion = await zai.chat.completions.create({
+  const completion = await chatCompletionCompat({
     messages: [
       {
         role: "assistant",
@@ -71,8 +75,7 @@ export async function POST(req: NextRequest) {
         content: `Title: ${doc.title}\n\nExcerpts:\n${context}\n\nQuestion: ${question}`,
       },
     ],
-    thinking: { type: "disabled" },
-  });
+  }, { bot: "system", kind: "qa", documentId, userId });
   const answer = completion.choices[0]?.message?.content?.trim() ?? "";
-  return NextResponse.json({ answer, citations: top.slice(0, 3).map((s) => s.chapter) });
+  return NextResponse.json({ answer, citations: top.slice(0, 3).map((s) => s.chapter) }, { headers: setCookie });
 }

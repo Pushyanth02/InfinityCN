@@ -50,7 +50,7 @@ export const ankaaSchema = z.object({
   documentId: z.string().optional(), // optional — Ankaa can write from brief alone
   prompt: z.string().min(3).max(4000),
   chapterIndex: z.number().int().min(0).optional(),
-  wordTarget: z.number().int().min(100).max(2000).optional(),
+  wordTarget: z.number().int().min(100).max(4000).optional(),
 });
 
 /** Schema for the Q&A route. */

@@ -6,7 +6,8 @@ import { aiCompleteJson } from "@/lib/ai-helpers";
 import { scenesSchema, validate } from "@/lib/api-schemas";
 import type { ParsedDoc } from "@/lib/types";
 import { ensureSession } from "@/lib/auth";
-import { verifyDocumentOwnership, checkUserQuota } from "@/lib/quota";
+import { verifyDocumentOwnership } from "@/lib/quota";
+import { aiQuotaGate } from "@/lib/ai-guard";
 
 export const runtime = "nodejs";
 export const maxDuration = 90;
@@ -38,20 +39,23 @@ export async function POST(req: NextRequest) {
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "Rate limit exceeded. Please try again." },
-      { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSec), ...setCookie } },
     );
   }
+
+  const quotaResp = await aiQuotaGate(userId, setCookie);
+  if (quotaResp) return quotaResp;
 
   const body = await req.json();
   const v = validate(scenesSchema, body);
   if (!v.success)
-    return NextResponse.json({ error: v.error }, { status: 400 });
+    return NextResponse.json({ error: v.error }, { status: 400, headers: setCookie });
   const { documentId, regenerate } = v.data;
 
   const doc = await verifyDocumentOwnership(documentId, userId);
-  if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404, headers: setCookie });
   if (doc.status !== "ready")
-    return NextResponse.json({ error: "Document not ready" }, { status: 400 });
+    return NextResponse.json({ error: "Document not ready" }, { status: 400, headers: setCookie });
 
   let parsed: ParsedDoc | null = null;
   try {
@@ -79,7 +83,7 @@ export async function POST(req: NextRequest) {
           characters: s.characters ? JSON.parse(s.characters) : [],
         })),
         cached: true,
-      });
+      }, { headers: setCookie });
     }
   } else {
     await db.aiScene.deleteMany({ where: { documentId, mood: cacheMood } });
@@ -125,7 +129,7 @@ No markdown fences, no commentary, no preamble — only the JSON array.`;
 
   let scenes: Scene[];
   try {
-    const raw = await aiCompleteJson(system, user, { bot: "scenes", kind: "cinematize", documentId });
+    const raw = await aiCompleteJson(system, user, { bot: "scenes", kind: "cinematize", documentId, userId });
     scenes = (raw as any[]).map((s, i) => ({
       ordinal: i,
       title: String(s.title || `Scene ${i + 1}`).slice(0, 120),
@@ -160,5 +164,5 @@ No markdown fences, no commentary, no preamble — only the JSON array.`;
 
   await logActivity({ type: "ai_cinematize", documentId, detail: doc.title });
 
-  return NextResponse.json({ scenes, cached: false });
+  return NextResponse.json({ scenes, cached: false }, { headers: setCookie });
 }

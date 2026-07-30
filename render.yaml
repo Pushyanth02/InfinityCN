@@ -21,6 +21,10 @@ services:
         value: production
       - key: LEMNISCATE_AUTH_SECRET
         generateValue: true
+      # AI provider — set your OpenRouter key in the Render dashboard.
+      # (sync: false means the value is entered in the dashboard, never committed.)
+      - key: OPENROUTER_API_KEY
+        sync: false
     healthCheckPath: /api/health
     autoDeploy: true
 

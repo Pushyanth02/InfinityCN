@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { logActivity } from "@/lib/activity";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { buildExcerpt, aiComplete } from "@/lib/ai-helpers";
+import { describeAiError } from "@/lib/ai-client";
 import { chatSchema, validate } from "@/lib/api-schemas";
 import { ensureSession } from "@/lib/auth";
 import { verifyDocumentOwnership, checkUserQuota } from "@/lib/quota";
@@ -66,10 +67,10 @@ export async function POST(req: NextRequest) {
   let contextLabel: string;
   if (typeof chapterIndex === "number" && parsed.chapters[chapterIndex]) {
     const ch = parsed.chapters[chapterIndex];
-    excerpt = (ch.refinedText ?? ch.chunks.map((c) => c.text).join("\n\n")).slice(0, 4000);
+    excerpt = (ch.refinedText ?? ch.chunks.map((c) => c.text).join("\n\n")).slice(0, 8000);
     contextLabel = `Currently open: Chapter ${(ch.ordinal ?? idx) + 1} — "${ch.title}"`;
   } else {
-    excerpt = buildExcerpt(parsed, 4, 800, 4000);
+    excerpt = buildExcerpt(parsed, 6, 1000, 8000);
     contextLabel = `Document: ${doc.title}`;
   }
 
@@ -86,16 +87,25 @@ Excerpt:
 ${excerpt}`;
 
   const history = Array.isArray(messages) ? (messages as ChatMessage[]) : [];
-  // Token optimization: last 6 turns only.
-  const recent = history.slice(-6);
+  // Keep the last 10 turns for stronger continuity (free models have huge context).
+  const recent = history.slice(-10);
 
   const userContent =
     recent.length > 0
       ? recent.map((m) => `${m.role === "user" ? "Reader" : "Luma"}: ${m.content}`).join("\n\n") + "\n\nLuma:"
       : "(The reader just opened the chat. Greet them in one sentence and offer one specific, vivid idea about what they're reading.)";
 
-  const reply = await aiComplete(system, userContent, { bot: "luma", kind: "chat", documentId, userId });
+  let reply: string;
+  try {
+    reply = await aiComplete(system, userContent, { bot: "luma", kind: "chat", documentId, userId });
+  } catch (err) {
+    const e = describeAiError(err);
+    return NextResponse.json(
+      { error: e.message, bot: "luma" },
+      { status: e.status, headers: { ...setCookie, ...(e.retryAfterSec ? { "Retry-After": String(e.retryAfterSec) } : {}) } },
+    );
+  }
 
   await logActivity({ type: "ai_luma_chat", documentId, detail: doc.title });
-  return NextResponse.json({ reply, bot: "luma" });
+  return NextResponse.json({ reply, bot: "luma" }, { headers: setCookie });
 }

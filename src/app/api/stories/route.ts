@@ -7,37 +7,10 @@ import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { safeErrorMessage } from "@/lib/safe-error";
 import { createStorySchema, validate } from "@/lib/api-schemas";
 import { ensureSession } from "@/lib/auth";
+import { rowFromDoc } from "@/lib/doc-serialize";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
-
-function rowFromDoc(d: any) {
-  return {
-    id: d.id,
-    title: d.title,
-    author: d.author,
-    sourceType: d.sourceType,
-    mimeType: d.mimeType,
-    byteSize: d.byteSize,
-    status: d.status,
-    error: d.error,
-    warnings: d.warnings ? JSON.parse(d.warnings) : [],
-    summary: d.summary,
-    language: d.language,
-    coverGradient: d.coverGradient,
-    chapterCount: d.chapterCount,
-    wordCount: d.wordCount,
-    charCount: d.charCount,
-    createdAt: d.createdAt.toISOString(),
-    updatedAt: d.updatedAt.toISOString(),
-    lastReadAt: d.lastReadAt ? d.lastReadAt.toISOString() : null,
-    readingProgress: d.readingProgress,
-    lastChunkIndex: d.lastChunkIndex,
-    favorite: d.favorite,
-    tags: JSON.parse(d.tags || "[]"),
-    collection: d.collection,
-  };
-}
 
 /**
  * POST /api/stories — create a new document from raw text authored in the

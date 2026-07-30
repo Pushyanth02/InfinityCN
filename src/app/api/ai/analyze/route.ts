@@ -174,8 +174,10 @@ export async function POST(req: NextRequest) {
       userId,
     });
 
-    // For summarize (novel scope), cache on the document.
-    if (task === "summarize" && !chapterIndex) {
+    // For summarize at novel scope (no specific chapter), cache on the
+    // document. Use an explicit undefined check so chapter 0 (a falsy index)
+    // is treated as a chapter summary, not the whole-document summary.
+    if (task === "summarize" && chapterIndex === undefined) {
       await db.document.update({ where: { id: documentId }, data: { summary: result } });
     }
 
