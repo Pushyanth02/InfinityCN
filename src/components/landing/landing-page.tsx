@@ -3,16 +3,16 @@
 import * as React from "react";
 import {
   ArrowRight,
-  Command,
   Film,
   Focus,
   MessageSquareQuote,
   Sparkles,
-  Type,
   Upload,
-  WifiOff,
   BookOpen,
   Keyboard,
+  BookHeart,
+  Baby,
+  GraduationCap,
 } from "lucide-react";
 import { useNav } from "@/lib/nav-store";
 import { FanLemniscateMark } from "@/components/ui/fan-logo";
@@ -85,19 +85,24 @@ const FEATURES = [
     desc: "PDF, EPUB, DOCX, Markdown, TXT, HTML. Parsed into chapters on the server, stored in a persistent library.",
   },
   {
-    icon: Focus,
-    title: "Focus mode",
-    desc: "Dim surrounding paragraphs so the active one shines. Built for long, undistracted sessions.",
+    icon: BookHeart,
+    title: "For novel readers",
+    desc: "Continue the story, reimagine the ending, and expand the world. The AI writes in the author's own voice.",
   },
   {
-    icon: Type,
-    title: "Adaptive typography",
-    desc: "Serif, sans, or mono. Adjust size, line height, letter spacing, and reading width to your taste.",
+    icon: Baby,
+    title: "For young imaginations",
+    desc: "Cozy retellings for kids, friendly character intros, playful what-ifs, and vivid scenes to draw.",
+  },
+  {
+    icon: GraduationCap,
+    title: "For students",
+    desc: "Study guides, vocabulary lists, comprehension quizzes, and plain-language explanations of any passage.",
   },
   {
     icon: Sparkles,
-    title: "AI summary",
-    desc: "Generate a tight, evocative summary of any document. Server-side, on demand, grounded in your text.",
+    title: "AI summary & analysis",
+    desc: "Chapter or whole-book summaries, plus character, theme, and criticism analysis — grounded in your text.",
   },
   {
     icon: MessageSquareQuote,
@@ -110,14 +115,9 @@ const FEATURES = [
     desc: "Turn prose into a sequence of cinematic scene cards — each with a title, mood, and cast of characters.",
   },
   {
-    icon: WifiOff,
-    title: "Local-first library",
-    desc: "Your library persists in a database on this device. AI features run only when you request them.",
-  },
-  {
-    icon: Command,
-    title: "Keyboard-driven",
-    desc: "⌘K command palette, reader shortcuts, focus-visible everywhere. Press ? to see all shortcuts.",
+    icon: Focus,
+    title: "Focus mode & typography",
+    desc: "Dim surrounding paragraphs, then tune font, size, line height, and reading width to your taste.",
   },
 ] as const;
 
@@ -181,25 +181,33 @@ const TESTIMONIALS = [
 const FAQS = [
   {
     q: "Is my data sent to a server?",
-    a: "Your library is stored in a local database. Only when you explicitly request an AI feature (summary, Q&A, cinematize) is the relevant text sent to the AI model for that single request.",
+    a: "Your library is stored in a local database. Only when you explicitly request an AI feature is the relevant text sent to the model for that single request — and the results are cached so you rarely need to ask twice.",
   },
   {
     q: "What file types are supported?",
     a: "PDF, EPUB, DOCX, Markdown, TXT, and HTML. DOCX and EPUB are extracted from their zip containers; PDF uses a best-effort text extraction. Markdown and plain text are fully supported.",
   },
   {
+    q: "Who is the AI companion for?",
+    a: "Three readers, all in one place. Story Lover mode helps novel readers continue the story, reimagine endings, and expand the world. Story Time mode retells texts warmly for children, with friendly character intros and picture prompts. Study Buddy mode builds study guides, vocabulary lists, and quizzes for students.",
+  },
+  {
+    q: "Can it really write the next chapter?",
+    a: "Yes. In Story Lover mode, Continue the Story has the AI read a chapter closely — absorbing its voice, rhythm, and tone — then writes the next passage in the author's style. Alternate Ending reimagines how the story could finish, with an optional twist you supply.",
+  },
+  {
+    q: "Is it good for kids?",
+    a: "Story Time mode is built for young imaginations. It retells chapters as cozy bedtime tales, introduces characters in friendly terms, invents playful what-if scenarios, and describes vivid scenes a child could illustrate.",
+  },
+  {
+    q: "Does it help with studying?",
+    a: "Study Buddy mode generates a structured study guide, pulls out vocabulary with definitions, creates multiple-choice quizzes you can take and score, and explains any passage in plain language.",
+  },
+  {
     q: "Do I need an account?",
     a: "No. Lemniscate works as a local guest. Your library persists in the project database without any sign-in.",
   },
   { q: "Is it free?", a: "Yes. Lemniscate is free to use." },
-  {
-    q: "Can I use it offline?",
-    a: "The library and reader work without a network connection. AI features (summary, Q&A, cinematize) require a connection to the model.",
-  },
-  {
-    q: "How does cinematize work?",
-    a: "An AI model reads a representative sample of your document and produces 5–8 scene cards with titles, mood, and characters. The result is cached per document.",
-  },
 ] as const;
 
 const FOOTER_COLUMNS = [
@@ -450,9 +458,9 @@ function Hero({ go }: { go: GoFn }) {
             style={{ color: "var(--ld-ink-dim)" }}
           >
             Upload a PDF, EPUB, DOCX, or Markdown file. Lemniscate parses it
-            into chapters, lets you read with focus mode and adaptive
-            typography, and uses AI to summarize, answer questions, and
-            cinematize the narrative.
+            into chapters — then an AI companion adapts to you: expand the
+            story for novel lovers, retell it warmly for children, or turn it
+            into study guides and quizzes for students.
           </p>
         </Reveal>
 
@@ -501,9 +509,9 @@ function Hero({ go }: { go: GoFn }) {
 function StatsBand() {
   const stats = [
     { value: 6, suffix: "", label: "File formats" },
-    { value: 3, suffix: "", label: "AI features" },
+    { value: 3, suffix: "", label: "AI modes" },
+    { value: 15, suffix: "+", label: "AI tools" },
     { value: 100, suffix: "%", label: "Free to use" },
-    { value: 0, suffix: "", label: "Accounts required" },
   ];
   return (
     <section className="py-10">
@@ -714,9 +722,9 @@ function Features() {
     <section id="features" className="py-20 sm:py-28">
       <div className="mx-auto max-w-6xl px-6">
         <SectionHeading
-          eyebrow="Everything you need"
-          title="A reading room that thinks with you"
-          sub="Built for long sessions, persistent by default, and quietly intelligent where it counts."
+          eyebrow="One companion, three minds"
+          title="A reading room that grows with you"
+          sub="Whether you're lost in a novel, sharing a bedtime story, or studying for an exam, the AI companion adapts to the reader you are today."
         />
 
         <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -992,7 +1000,7 @@ function FinalCTA({ go }: { go: GoFn }) {
           <div className="relative">
             <Reveal>
               <h2 className="ld-display text-4xl text-balance sm:text-6xl">
-                Your library, reimagined.
+                A companion for every kind of reader.
               </h2>
             </Reveal>
             <Reveal delay={80}>
@@ -1000,7 +1008,8 @@ function FinalCTA({ go }: { go: GoFn }) {
                 className="mx-auto mt-4 max-w-xl text-base text-balance"
                 style={{ color: "var(--ld-ink-dim)" }}
               >
-                Open the reading room. Bring a document — leave with a story.
+                Bring a novel to expand, a story to share with a child, or a
+                text to study. Lemniscate meets you where you are.
               </p>
             </Reveal>
             <Reveal delay={160}>

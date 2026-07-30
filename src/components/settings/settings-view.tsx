@@ -9,7 +9,6 @@ import {
   HardDrive,
   Info,
   Loader2,
-  MessageSquareQuote,
   Palette,
   Shield,
   Sparkles,
@@ -17,11 +16,13 @@ import {
   Moon,
   BookOpen,
   Type,
-  Film,
   Trash2,
   BookMarked,
   RotateCcw,
   ExternalLink,
+  BookHeart,
+  Baby,
+  GraduationCap,
 } from "lucide-react";
 
 import { AppHeader } from "@/components/nav/app-header";
@@ -133,19 +134,19 @@ const AI_FEATURES: {
   body: string;
 }[] = [
   {
-    icon: Sparkles,
-    title: "Summary",
-    body: "A concise, structured recap of the chapter or document you are reading.",
+    icon: BookHeart,
+    title: "Story Lover",
+    body: "For novel readers — summarize and analyze, then continue the story, reimagine the ending, and expand the world.",
   },
   {
-    icon: MessageSquareQuote,
-    title: "Q&A",
-    body: "Ask anything about the text and get a cited, in-context answer.",
+    icon: Baby,
+    title: "Story Time",
+    body: "For children — cozy retellings, friendly character intros, playful what-ifs, and vivid scenes to draw.",
   },
   {
-    icon: Film,
-    title: "Cinematize",
-    body: "Turn prose into scene cards — moods, beats, and characters surfaced automatically.",
+    icon: GraduationCap,
+    title: "Study Buddy",
+    body: "For students — study guides, vocabulary lists, comprehension quizzes, and plain-language explanations.",
   },
 ];
 
@@ -666,10 +667,12 @@ function AiSection() {
               </h3>
             </div>
             <p className="max-w-prose text-sm text-muted-foreground">
-              Lemniscate&apos;s AI features — summary, Q&amp;A, and cinematize
-              — are powered by the built-in Z.ai model running server-side. No
-              API key is required in this environment; everything is wired up
-              and ready to use out of the box.
+              Lemniscate&apos;s AI companion runs on the built-in Z.ai model,
+              server-side, with no API key required. It adapts to three kinds
+              of reader: <strong>Story Lover</strong> for novel readers,{" "}
+              <strong>Story Time</strong> for children, and{" "}
+              <strong>Study Buddy</strong> for students. Open any document in
+              the reader and switch modes at the top of the AI panel.
             </p>
           </div>
           <Button
@@ -902,11 +905,13 @@ function AboutSection() {
       <Separator className="my-6 bg-border/60" />
 
       <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
-        Lemniscate is a local-first, AI-guided reading application. Upload a
-        PDF, EPUB, DOCX, Markdown, text, or HTML file; Lemniscate parses it into
-        chapters and chunks, lets you read with focus mode and adaptive
-        typography, and uses the built-in Z.ai engine to summarize passages,
-        answer questions, and cinematize prose into scene cards.
+        Lemniscate is a local-first, AI-guided reading companion. Upload a PDF,
+        EPUB, DOCX, Markdown, text, or HTML file; Lemniscate parses it into
+        chapters, lets you read with focus mode and adaptive typography, and
+        offers an AI companion with three modes — Story Lover for novel readers,
+        Story Time for children, and Study Buddy for students. Continue the
+        story, retell it warmly for a child, or turn it into study guides and
+        quizzes.
       </p>
 
       <div className="mt-6 flex flex-wrap gap-2">

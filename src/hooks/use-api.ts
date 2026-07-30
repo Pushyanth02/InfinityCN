@@ -375,3 +375,154 @@ export async function uploadFile(
   const data = await res.json();
   return { document: data.document ?? null, error: data.error ?? null };
 }
+
+// ── Creative & educational AI features ──────────────────────────────────────
+
+/** Continue the Story — AI writes the next passage (chapter-scoped). */
+export async function continueStory(
+  documentId: string,
+  chapterIndex?: number,
+): Promise<{ continuation: string; chapterTitle: string }> {
+  return json(
+    await fetch("/api/ai/continue-story", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ documentId, chapterIndex }),
+    }),
+  );
+}
+
+/** Alternate Ending — AI reimagines how the story could end. */
+export async function alternateEnding(
+  documentId: string,
+  twist?: string,
+): Promise<{ ending: string }> {
+  return json(
+    await fetch("/api/ai/alternate-ending", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ documentId, twist }),
+    }),
+  );
+}
+
+/** World & Lore — expands on the story's setting and worldbuilding. */
+export async function worldLore(documentId: string): Promise<{ lore: string }> {
+  return json(
+    await fetch("/api/ai/world-lore", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ documentId }),
+    }),
+  );
+}
+
+/** Retell for Kids — a warm, child-friendly retelling (chapter or whole doc). */
+export async function retellForKids(
+  documentId: string,
+  chapterIndex?: number,
+): Promise<{ story: string; scope: string }> {
+  return json(
+    await fetch("/api/ai/retell-kids", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ documentId, chapterIndex }),
+    }),
+  );
+}
+
+/** Meet the Characters — friendly character introductions. */
+export async function meetCharacters(documentId: string): Promise<{ intro: string }> {
+  return json(
+    await fetch("/api/ai/meet-characters", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ documentId }),
+    }),
+  );
+}
+
+/** What If? — playful hypothetical scenarios. */
+export async function whatIf(documentId: string): Promise<{ scenarios: string }> {
+  return json(
+    await fetch("/api/ai/what-if", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ documentId }),
+    }),
+  );
+}
+
+/** Study Guide — key points, themes, and takeaways (chapter or whole doc). */
+export async function studyGuide(
+  documentId: string,
+  chapterIndex?: number,
+): Promise<{ guide: string; scope: string }> {
+  return json(
+    await fetch("/api/ai/study-guide", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ documentId, chapterIndex }),
+    }),
+  );
+}
+
+/** Vocabulary — defines difficult or notable words (chapter or whole doc). */
+export async function vocabulary(
+  documentId: string,
+  chapterIndex?: number,
+): Promise<{ vocabulary: string; scope: string }> {
+  return json(
+    await fetch("/api/ai/vocabulary", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ documentId, chapterIndex }),
+    }),
+  );
+}
+
+export interface QuizQuestion {
+  question: string;
+  options: string[];
+  answerIndex: number;
+  explanation: string;
+}
+
+/** Quiz Me — generates multiple-choice comprehension questions. */
+export async function quizMe(
+  documentId: string,
+  chapterIndex?: number,
+): Promise<{ questions: QuizQuestion[]; scope: string }> {
+  return json(
+    await fetch("/api/ai/quiz", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ documentId, chapterIndex }),
+    }),
+  );
+}
+
+/** Explain Simply — restates the text in plain, easy language (chapter or whole doc). */
+export async function explainSimply(
+  documentId: string,
+  chapterIndex?: number,
+): Promise<{ explanation: string; scope: string }> {
+  return json(
+    await fetch("/api/ai/explain-simply", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ documentId, chapterIndex }),
+    }),
+  );
+}
+
+/** Imagine the Picture — generates vivid illustration prompts for kids. */
+export async function imaginePicture(documentId: string): Promise<{ prompts: string }> {
+  return json(
+    await fetch("/api/ai/imagine-picture", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ documentId }),
+    }),
+  );
+}

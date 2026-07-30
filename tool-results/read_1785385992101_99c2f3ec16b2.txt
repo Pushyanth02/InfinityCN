@@ -1,0 +1,2002 @@
+     1→"use client";
+     2→
+     3→import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+     4→import {
+     5→  ArrowLeft,
+     6→  ArrowRight,
+     7→  BookOpen,
+     8→  Bookmark,
+     9→  Brain,
+    10→  ChevronLeft,
+    11→  ChevronRight,
+    12→  Feather,
+    13→  Film,
+    14→  List,
+    15→  MessageSquareQuote,
+    16→  MessagesSquare,
+    17→  Moon,
+    18→  RefreshCw,
+    19→  ScrollText,
+    20→  Settings2,
+    21→  Sparkles,
+    22→  Sun,
+    23→  Tags,
+    24→  Type as TypeIcon,
+    25→  Users,
+    26→  Wand2,
+    27→  Send,
+    28→} from "lucide-react";
+    29→
+    30→import { useNav } from "@/lib/nav-store";
+    31→import {
+    32→  analyzeCharacters,
+    33→  analyzeCriticism,
+    34→  analyzeDialogue,
+    35→  analyzeSemantics,
+    36→  analyzeStory,
+    37→  analyzeThemes,
+    38→  askQuestion,
+    39→  fetchScenes,
+    40→  generateChapterSummary,
+    41→  generateSummary,
+    42→  patchDocument,
+    43→  refineChapter,
+    44→  rewriteContent,
+    45→  useDocument,
+    46→} from "@/hooks/use-api";
+    47→import { useReaderSettings } from "@/hooks/use-reader-settings";
+    48→import {
+    49→  formatBytes,
+    50→  SOURCE_LABELS,
+    51→  timeAgo,
+    52→  type AiScene,
+    53→  type Chapter,
+    54→  type ReaderSettings,
+    55→} from "@/lib/types";
+    56→import { Button } from "@/components/ui/button";
+    57→import { Input } from "@/components/ui/input";
+    58→import { Progress } from "@/components/ui/progress";
+    59→import { Slider } from "@/components/ui/slider";
+    60→import {
+    61→  Select,
+    62→  SelectContent,
+    63→  SelectItem,
+    64→  SelectTrigger,
+    65→  SelectValue,
+    66→} from "@/components/ui/select";
+    67→import {
+    68→  Sheet,
+    69→  SheetContent,
+    70→  SheetHeader,
+    71→  SheetTitle,
+    72→} from "@/components/ui/sheet";
+    73→import { Switch } from "@/components/ui/switch";
+    74→import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+    75→import { LemniscateSpinner, LoadingScreen } from "@/components/ui/brand-loader";
+    76→import { cn } from "@/lib/utils";
+    77→import { toast } from "sonner";
+    78→
+    79→/* ---------- constants ---------- */
+    80→
+    81→interface MoodColor {
+    82→  label: string;
+    83→  color: string; // oklch string (or CSS var) used for text + chip
+    84→}
+    85→
+    86→/**
+    87→ * Mood → oklch color mapping for the cinematified scene chips.
+    88→ * `narrative` is the neutral fallback used by original (structured) scenes.
+    89→ */
+    90→const MOOD_COLORS: Record<string, MoodColor> = {
+    91→  tense: { label: "Tense", color: "oklch(0.65 0.22 25)" },
+    92→  tender: { label: "Tender", color: "oklch(0.70 0.18 350)" },
+    93→  eerie: { label: "Eerie", color: "oklch(0.60 0.20 285)" },
+    94→  exuberant: { label: "Exuberant", color: "oklch(0.75 0.18 70)" },
+    95→  melancholic: { label: "Melancholic", color: "oklch(0.55 0.15 240)" },
+    96→  radiant: { label: "Radiant", color: "oklch(0.75 0.15 85)" },
+    97→  brooding: { label: "Brooding", color: "oklch(0.45 0.03 260)" },
+    98→  narrative: { label: "Narrative", color: "var(--muted-foreground)" },
+    99→};
+   100→
+   101→function moodColor(mood?: string | null): MoodColor {
+   102→  const key = (mood ?? "").toLowerCase().trim();
+   103→  return MOOD_COLORS[key] ?? MOOD_COLORS.narrative;
+   104→}
+   105→
+   106→/** Build a translucent background tint from a mood color. */
+   107→function moodChipStyle(color: string): React.CSSProperties {
+   108→  return {
+   109→    color,
+   110→    backgroundColor: `color-mix(in oklab, ${color} 14%, transparent)`,
+   111→    borderColor: `color-mix(in oklab, ${color} 38%, transparent)`,
+   112→  };
+   113→}
+   114→
+   115→const ACCENT_SWATCHES: { label: string; value: string }[] = [
+   116→  { label: "Gold", value: "#c9a84c" },
+   117→  { label: "Indigo", value: "#6366f1" },
+   118→  { label: "Rose", value: "#e11d48" },
+   119→  { label: "Emerald", value: "#10b981" },
+   120→  { label: "Amber", value: "#f59e0b" },
+   121→  { label: "Slate", value: "#64748b" },
+   122→];
+   123→
+   124→const FONT_OPTIONS: { label: string; value: ReaderSettings["fontFamily"] }[] = [
+   125→  { label: "Open Sans", value: "open-sans" },
+   126→  { label: "Literata", value: "literata" },
+   127→  { label: "Georgia", value: "georgia" },
+   128→  { label: "Verdana", value: "verdana" },
+   129→  { label: "Bookerly", value: "bookerly" },
+   130→  { label: "Garamond", value: "garamond" },
+   131→];
+   132→
+   133→const THEME_OPTIONS: {
+   134→  label: string;
+   135→  value: ReaderSettings["theme"];
+   136→  Icon: typeof Sun;
+   137→}[] = [
+   138→  { label: "Light", value: "light", Icon: Sun },
+   139→  { label: "Dark", value: "dark", Icon: Moon },
+   140→  { label: "Sepia", value: "sepia", Icon: BookOpen },
+   141→];
+   142→
+   143→const ANIM_SPEED_OPTIONS: {
+   144→  label: string;
+   145→  value: ReaderSettings["animSpeed"];
+   146→}[] = [
+   147→  { label: "Off", value: "off" },
+   148→  { label: "Normal", value: "normal" },
+   149→  { label: "Fast", value: "fast" },
+   150→  { label: "Slow", value: "slow" },
+   151→];
+   152→
+   153→const CONTRAST_OPTIONS: {
+   154→  label: string;
+   155→  value: ReaderSettings["contrast"];
+   156→}[] = [
+   157→  { label: "Normal", value: "normal" },
+   158→  { label: "High", value: "high" },
+   159→];
+   160→
+   161→interface QaItem {
+   162→  id: number;
+   163→  question: string;
+   164→  answer: string;
+   165→  citations: string[];
+   166→}
+   167→
+   168→interface CachedChapterSummary {
+   169→  summary: string;
+   170→  chapterTitle: string;
+   171→}
+   172→
+   173→type SummaryScope = "chapter" | "novel";
+   174→
+   175→type AnalysisTabKey =
+   176→  | "dialogue"
+   177→  | "characters"
+   178→  | "story"
+   179→  | "semantic"
+   180→  | "criticism"
+   181→  | "themes";
+   182→
+   183→/* ---------- small UI helpers ---------- */
+   184→
+   185→function SectionLabel({ children }: { children: React.ReactNode }) {
+   186→  return (
+   187→    <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+   188→      {children}
+   189→    </p>
+   190→  );
+   191→}
+   192→
+   193→function OptionRow<T extends string>({
+   194→  options,
+   195→  value,
+   196→  onChange,
+   197→  ariaLabel,
+   198→}: {
+   199→  options: { label: string; value: T }[];
+   200→  value: T;
+   201→  onChange: (v: T) => void;
+   202→  ariaLabel: string;
+   203→}) {
+   204→  return (
+   205→    <div
+   206→      role="radiogroup"
+   207→      aria-label={ariaLabel}
+   208→      className="grid grid-flow-col gap-1 rounded-md border border-border bg-muted/40 p-1"
+   209→    >
+   210→      {options.map((opt) => {
+   211→        const active = opt.value === value;
+   212→        return (
+   213→          <button
+   214→            key={opt.value}
+   215→            type="button"
+   216→            role="radio"
+   217→            aria-checked={active}
+   218→            onClick={() => onChange(opt.value)}
+   219→            className={cn(
+   220→              "rounded-sm px-2 py-1 text-xs font-medium transition-colors",
+   221→              active
+   222→                ? "bg-background text-foreground shadow-sm"
+   223→                : "text-muted-foreground hover:text-foreground",
+   224→            )}
+   225→          >
+   226→            {opt.label}
+   227→          </button>
+   228→        );
+   229→      })}
+   230→    </div>
+   231→  );
+   232→}
+   233→
+   234→function SliderRow({
+   235→  label,
+   236→  value,
+   237→  display,
+   238→  min,
+   239→  max,
+   240→  step,
+   241→  onChange,
+   242→}: {
+   243→  label: string;
+   244→  value: number;
+   245→  display: string;
+   246→  min: number;
+   247→  max: number;
+   248→  step: number;
+   249→  onChange: (v: number) => void;
+   250→}) {
+   251→  return (
+   252→    <div className="space-y-1.5">
+   253→      <div className="flex items-center justify-between">
+   254→        <SectionLabel>{label}</SectionLabel>
+   255→        <span className="text-xs tabular-nums text-foreground/80">{display}</span>
+   256→      </div>
+   257→      <Slider
+   258→        value={[value]}
+   259→        min={min}
+   260→        max={max}
+   261→        step={step}
+   262→        onValueChange={(v) => onChange(v[0])}
+   263→        aria-label={label}
+   264→      />
+   265→    </div>
+   266→  );
+   267→}
+   268→
+   269→/** Two-button segmented toggle used at the top of the Summary and Scenes tabs. */
+   270→function SegmentedToggle<T extends string>({
+   271→  options,
+   272→  value,
+   273→  onChange,
+   274→  ariaLabel,
+   275→}: {
+   276→  options: { label: string; value: T }[];
+   277→  value: T;
+   278→  onChange: (v: T) => void;
+   279→  ariaLabel: string;
+   280→}) {
+   281→  return (
+   282→    <div
+   283→      role="radiogroup"
+   284→      aria-label={ariaLabel}
+   285→      className="grid w-full grid-cols-2 gap-1 rounded-md border border-border bg-muted/40 p-1"
+   286→    >
+   287→      {options.map((opt) => {
+   288→        const active = opt.value === value;
+   289→        return (
+   290→          <button
+   291→            key={opt.value}
+   292→            type="button"
+   293→            role="radio"
+   294→            aria-checked={active}
+   295→            onClick={() => onChange(opt.value)}
+   296→            className={cn(
+   297→              "rounded-sm px-3 py-1.5 text-xs font-medium transition-colors",
+   298→              active
+   299→                ? "bg-background text-foreground shadow-sm"
+   300→                : "text-muted-foreground hover:text-foreground",
+   301→            )}
+   302→          >
+   303→            {opt.label}
+   304→          </button>
+   305→        );
+   306→      })}
+   307→    </div>
+   308→  );
+   309→}
+   310→
+   311→/**
+   312→ * Shared body for the 6 simple analysis tabs (Dialogue, Characters, Story,
+   313→ * Semantic, Criticism, Themes). Shows a Generate/Regenerate button, a
+   314→ * LemniscateSpinner loading state, and the cached analysis text in a card.
+   315→ * Optional `children` slot is used by Dialogue to inject a chapter selector.
+   316→ */
+   317→function AnalysisTabPanel({
+   318→  loading,
+   319→  cached,
+   320→  description,
+   321→  loadingLabel,
+   322→  onGenerate,
+   323→  children,
+   324→}: {
+   325→  loading: boolean;
+   326→  cached: string | null;
+   327→  description: string;
+   328→  loadingLabel: string;
+   329→  onGenerate: () => void;
+   330→  children?: React.ReactNode;
+   331→}) {
+   332→  return (
+   333→    <div className="space-y-3">
+   334→      {children}
+   335→      <div className="flex items-center justify-between gap-2">
+   336→        <p className="text-xs text-muted-foreground">{description}</p>
+   337→        <Button
+   338→          size="sm"
+   339→          className="shrink-0 gap-1"
+   340→          disabled={loading}
+   341→          onClick={onGenerate}
+   342→        >
+   343→          {loading ? (
+   344→            <LemniscateSpinner size={28} />
+   345→          ) : cached ? (
+   346→            <RefreshCw className="h-3.5 w-3.5" />
+   347→          ) : (
+   348→            <Sparkles className="h-3.5 w-3.5" />
+   349→          )}
+   350→          {cached ? "Regenerate" : "Generate"}
+   351→        </Button>
+   352→      </div>
+   353→      {loading && !cached ? (
+   354→        <div className="flex flex-col items-center gap-3 rounded-lg border border-border bg-muted/30 px-4 py-10 text-center">
+   355→          <LemniscateSpinner size={56} />
+   356→          <p className="text-xs text-muted-foreground">{loadingLabel}</p>
+   357→        </div>
+   358→      ) : cached ? (
+   359→        <div className="rounded-lg border border-border bg-card p-4">
+   360→          <p className="whitespace-pre-wrap leading-relaxed text-sm text-foreground/90">
+   361→            {cached}
+   362→          </p>
+   363→        </div>
+   364→      ) : (
+   365→        <div className="rounded-lg border border-dashed border-border p-6 text-center">
+   366→          <p className="text-sm text-muted-foreground">
+   367→            No analysis yet. Click <strong>Generate</strong> to begin.
+   368→          </p>
+   369→        </div>
+   370→      )}
+   371→    </div>
+   372→  );
+   373→}
+   374→
+   375→/**
+   376→ * Effective chunk count for a chapter. If the chapter has been OCR-refined,
+   377→ * we split the refined text into ~1200-char chunks at paragraph boundaries.
+   378→ * Otherwise we use the parser-produced chunks.
+   379→ */
+   380→function chapterChunkCount(ch: Chapter | undefined): number {
+   381→  if (!ch) return 0;
+   382→  if (ch.refinedText) {
+   383→    // Split refined text into chunks for focus-mode navigation
+   384→    const paras = ch.refinedText.split(/\n{2,}/).filter(Boolean);
+   385→    return Math.max(1, Math.ceil(paras.length / 3));
+   386→  }
+   387→  return ch.chunks.length;
+   388→}
+   389→
+   390→/** Split refined text into paragraph groups for rendering. */
+   391→function refinedTextGroups(text: string): string[] {
+   392→  const paras = text.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+   393→  const groups: string[] = [];
+   394→  for (let i = 0; i < paras.length; i += 3) {
+   395→    groups.push(paras.slice(i, i + 3).join("\n\n"));
+   396→  }
+   397→  return groups;
+   398→}
+   399→
+   400→/* ---------- main component ---------- */
+   401→
+   402→export default function ReaderView() {
+   403→  const documentId = useNav((s) => s.activeDocumentId);
+   404→  const go = useNav((s) => s.go);
+   405→
+   406→  const { doc, content: docContent, loading, error, setDoc, setContent, refresh } = useDocument(documentId);
+   407→  const { settings, update } = useReaderSettings();
+   408→
+   409→  const [currentChapterIndex, setCurrentChapterIndex] = useState(0);
+   410→  const [activeChunkIndex, setActiveChunkIndex] = useState(0);
+   411→
+   412→  const [chapterSheetOpen, setChapterSheetOpen] = useState(false);
+   413→  const [settingsSheetOpen, setSettingsSheetOpen] = useState(false);
+   414→  const [aiSheetOpen, setAiSheetOpen] = useState(false);
+   415→  const [aiTab, setAiTab] = useState<
+   416→    | "summary"
+   417→    | "ask"
+   418→    | "scenes"
+   419→    | "dialogue"
+   420→    | "characters"
+   421→    | "story"
+   422→    | "semantic"
+   423→    | "criticism"
+   424→    | "themes"
+   425→    | "rewrite"
+   426→  >("summary");
+   427→
+   428→  const [bookmarks, setBookmarks] = useState<Set<string>>(new Set());
+   429→  const [sessionMarkedRead, setSessionMarkedRead] = useState(false);
+   430→
+   431→  // --- Summary state (chapter + novel) ---
+   432→  const [summaryScope, setSummaryScope] = useState<SummaryScope>("chapter");
+   433→  const [summaryChapterIndex, setSummaryChapterIndex] = useState(0);
+   434→  const [chapterSummaries, setChapterSummaries] = useState<
+   435→    Record<number, CachedChapterSummary>
+   436→  >({});
+   437→  const [chapterSummaryLoading, setChapterSummaryLoading] = useState<
+   438→    number | null
+   439→  >(null);
+   440→  const [novelSummary, setNovelSummary] = useState<string | null>(null);
+   441→  const [novelSummaryLoading, setNovelSummaryLoading] = useState(false);
+   442→
+   443→  // --- Q&A state ---
+   444→  const [qaList, setQaList] = useState<QaItem[]>([]);
+   445→  const [qaLoading, setQaLoading] = useState(false);
+   446→  const [qaInput, setQaInput] = useState("");
+   447→  const qaIdRef = useRef(0);
+   448→
+   449→  // --- Scenes state (cinematic scenes, cached server-side) ---
+   450→  const [scenes, setScenes] = useState<AiScene[] | null>(null);
+   451→  const [scenesFetched, setScenesFetched] = useState(false);
+   452→  const [scenesLoading, setScenesLoading] = useState(false);
+   453→
+   454→  // --- Advanced AI analysis state (dialogue, characters, story, semantic, criticism, themes) ---
+   455→  const [analysisCache, setAnalysisCache] = useState<
+   456→    Record<AnalysisTabKey, string | null>
+   457→  >({
+   458→    dialogue: null,
+   459→    characters: null,
+   460→    story: null,
+   461→    semantic: null,
+   462→    criticism: null,
+   463→    themes: null,
+   464→  });
+   465→  const [analysisLoading, setAnalysisLoading] = useState<AnalysisTabKey | null>(
+   466→    null,
+   467→  );
+   468→
+   469→  // --- Rewrite state ---
+   470→  const [rewriteResult, setRewriteResult] = useState<{
+   471→    rewritten: string;
+   472→    original: string;
+   473→  } | null>(null);
+   474→  const [rewriteLoading, setRewriteLoading] = useState(false);
+   475→  const [rewriteInstructions, setRewriteInstructions] = useState("");
+   476→
+   477→  // --- Per-chapter OCR refinement state ---
+   478→  const [refining, setRefining] = useState(false);
+   479→  const [refineTriggered, setRefineTriggered] = useState<Set<number>>(new Set());
+   480→  const refineAbortRef = useRef<number | null>(null);
+   481→
+   482→  const content = docContent;
+   483→  const chapters: Chapter[] = content?.chapters ?? [];
+   484→
+   485→  const totalChunks = useMemo(
+   486→    () => chapters.reduce((acc, ch) => acc + chapterChunkCount(ch), 0),
+   487→    [chapters],
+   488→  );
+   489→
+   490→  const globalChunkIndex = useMemo(() => {
+   491→    let g = 0;
+   492→    for (let i = 0; i < currentChapterIndex && i < chapters.length; i++) {
+   493→      g += chapterChunkCount(chapters[i]);
+   494→    }
+   495→    g += activeChunkIndex;
+   496→    return g;
+   497→  }, [chapters, currentChapterIndex, activeChunkIndex]);
+   498→
+   499→  const readingProgress =
+   500→    totalChunks > 0 ? Math.min(1, (globalChunkIndex + 1) / totalChunks) : 0;
+   501→  const progressPct = Math.round(readingProgress * 100);
+   502→
+   503→  const currentChapter = chapters[currentChapterIndex];
+   504→  const currentChunk = currentChapter?.chunks[activeChunkIndex];
+   505→
+   506→  const isLastChunk =
+   507→    chapters.length > 0 &&
+   508→    currentChapterIndex === chapters.length - 1 &&
+   509→    activeChunkIndex === chapterChunkCount(currentChapter) - 1;
+   510→  const isFirstChunk = currentChapterIndex === 0 && activeChunkIndex === 0;
+   511→
+   512→  const bookmarkKey = `${currentChapterIndex}:${activeChunkIndex}`;
+   513→  const isBookmarked = bookmarks.has(bookmarkKey);
+   514→
+   515→  /* ---------- initialize position from doc.lastChunkIndex ---------- */
+   516→  useEffect(() => {
+   517→    if (!doc || chapters.length === 0) return;
+   518→    const lastGlobal = Math.max(
+   519→      0,
+   520→      Math.min(doc.lastChunkIndex ?? 0, totalChunks - 1),
+   521→    );
+   522→    let chapterIdx = 0;
+   523→    let chunkIdx = 0;
+   524→    let acc = 0;
+   525→    let placed = false;
+   526→    for (let i = 0; i < chapters.length; i++) {
+   527→      const len = chapterChunkCount(chapters[i]);
+   528→      if (acc + len > lastGlobal) {
+   529→        chapterIdx = i;
+   530→        chunkIdx = lastGlobal - acc;
+   531→        placed = true;
+   532→        break;
+   533→      }
+   534→      acc += len;
+   535→    }
+   536→    if (!placed) {
+   537→      chapterIdx = chapters.length - 1;
+   538→      chunkIdx = chapterChunkCount(chapters[chapters.length - 1]) - 1;
+   539→    }
+   540→    setCurrentChapterIndex(chapterIdx);
+   541→    setActiveChunkIndex(Math.max(0, chunkIdx));
+   542→    // Only on doc open — subsequent changes come from navigation.
+   543→  }, [doc?.id]);
+   544→
+   545→  /* ---------- pre-seed novel summary from doc.summary ---------- */
+   546→  useEffect(() => {
+   547→    if (
+   548→      aiSheetOpen &&
+   549→      aiTab === "summary" &&
+   550→      doc?.summary &&
+   551→      novelSummary === null
+   552→    ) {
+   553→      setNovelSummary(doc.summary);
+   554→    }
+   555→  }, [aiSheetOpen, aiTab, doc?.summary, novelSummary]);
+   556→
+   557→  /* ---------- auto-load cached scenes when scenes tab opens ---------- */
+   558→  // fetchScenes(documentId, false) returns cached scenes if they exist, or an
+   559→  // empty array if not. We auto-load on first open of the Scenes tab so any
+   560→  // previously-generated cinematic scenes show up immediately.
+   561→  useEffect(() => {
+   562→    if (!aiSheetOpen || aiTab !== "scenes" || !documentId) return;
+   563→    if (scenesFetched || scenes) return;
+   564→    let cancelled = false;
+   565→    setScenesLoading(true);
+   566→    fetchScenes(documentId, false)
+   567→      .then((r) => {
+   568→        if (cancelled) return;
+   569→        setScenes(r.scenes);
+   570→        setScenesFetched(true);
+   571→      })
+   572→      .catch(() => {
+   573→        if (cancelled) return;
+   574→        setScenes([]);
+   575→        setScenesFetched(true);
+   576→      })
+   577→      .finally(() => {
+   578→        if (!cancelled) setScenesLoading(false);
+   579→      });
+   580→    return () => {
+   581→      cancelled = true;
+   582→    };
+   583→  }, [aiSheetOpen, aiTab, scenesFetched, scenes, documentId]);
+   584→
+   585→  // Clear refining state when chapter changes (the previous chapter's
+   586→  // refinement job is abandoned — its result will be ignored via the abort ref)
+   587→  useEffect(() => {
+   588→    setRefining(false);
+   589→    refineAbortRef.current = null;
+   590→  }, [currentChapterIndex]);
+   591→
+   592→  /* ---------- per-chapter OCR refinement (background, non-blocking) ----------
+   593→   * When a chapter is opened, it renders instantly with raw text. Then this
+   594→   * effect triggers OCR refinement in the background. When refinement
+   595→   * completes, the chapter's `refinedText` is updated and the reader
+   596→   * re-renders with the cleaned text. The refinement is persisted server-side
+   597→   * so the chapter is never reprocessed. */
+   598→  const currentChapterRefined = currentChapter?.refinedText;
+   599→  useEffect(() => {
+   600→    if (!documentId || !content || !currentChapter) return;
+   601→    const chIdx = currentChapterIndex;
+   602→
+   603→    // Already refined? Skip.
+   604→    if (currentChapterRefined) return;
+   605→    // Already triggered for this chapter? Skip.
+   606→    if (refineTriggered.has(chIdx)) return;
+   607→
+   608→    // Mark as triggered
+   609→    setRefineTriggered((prev) => new Set(prev).add(chIdx));
+   610→    setRefining(true);
+   611→    refineAbortRef.current = chIdx;
+   612→
+   613→    let cancelled = false;
+   614→    refineChapter(documentId, chIdx, false)
+   615→      .then((result) => {
+   616→        if (cancelled || refineAbortRef.current !== chIdx) return;
+   617→        if (result.refined && result.refinedText) {
+   618→          // Update the chapter's refinedText in local state
+   619→          setContent((prev) => {
+   620→            if (!prev) return prev;
+   621→            const newChapters = prev.chapters.map((ch, i) =>
+   622→              i === chIdx ? { ...ch, refinedText: result.refinedText } : ch,
+   623→            );
+   624→            return { ...prev, chapters: newChapters };
+   625→          });
+   626→        }
+   627→      })
+   628→      .catch(() => {
+   629→        // Best-effort — silently ignore (rate limits, network errors, etc.)
+   630→      })
+   631→      .finally(() => {
+   632→        if (cancelled || refineAbortRef.current !== chIdx) return;
+   633→        setRefining(false);
+   634→      });
+   635→
+   636→    // Safety timeout — don't show the indicator for more than 60 seconds
+   637→    const safetyTimer = setTimeout(() => {
+   638→      if (!cancelled && refineAbortRef.current === chIdx) {
+   639→        setRefining(false);
+   640→      }
+   641→    }, 60_000);
+   642→
+   643→    return () => {
+   644→      cancelled = true;
+   645→      clearTimeout(safetyTimer);
+   646→    };
+   647→  }, [documentId, currentChapterIndex, currentChapterRefined, content, refineTriggered]);
+   648→
+   649→  /* ---------- scroll active chunk into view ---------- */
+   650→  const scrollRafRef = useRef<number | null>(null);
+   651→  useEffect(() => {
+   652→    if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current);
+   653→    scrollRafRef.current = requestAnimationFrame(() => {
+   654→      if (!currentChapter) return;
+   655→      const el = document.querySelector(
+   656→        `.reader-article [data-ordinal="${activeChunkIndex}"]`,
+   657→      );
+   658→      if (el) {
+   659→        el.scrollIntoView({ behavior: "smooth", block: "center" });
+   660→      }
+   661→    });
+   662→    return () => {
+   663→      if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current);
+   664→    };
+   665→  }, [currentChapterIndex, activeChunkIndex, currentChapter]);
+   666→
+   667→  /* ---------- debounced progress patch ---------- */
+   668→  // Use refs to avoid a feedback loop: patching updates `doc`, which would
+   669→  // otherwise re-fire this effect and patch again.
+   670→  const patchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+   671→  const sessionMarkedReadRef = useRef(false);
+   672→  useEffect(() => {
+   673→    sessionMarkedReadRef.current = sessionMarkedRead;
+   674→  }, [sessionMarkedRead]);
+   675→  useEffect(() => {
+   676→    if (!documentId || totalChunks === 0) return;
+   677→    if (patchTimer.current) clearTimeout(patchTimer.current);
+   678→    patchTimer.current = setTimeout(async () => {
+   679→      const patch: Partial<{
+   680→        readingProgress: number;
+   681→        lastChunkIndex: number;
+   682→        lastReadAt: string;
+   683→      }> = {
+   684→        readingProgress,
+   685→        lastChunkIndex: globalChunkIndex,
+   686→      };
+   687→      if (!sessionMarkedReadRef.current) {
+   688→        patch.lastReadAt = new Date().toISOString();
+   689→        setSessionMarkedRead(true);
+   690→      }
+   691→      try {
+   692→        const updated = await patchDocument(documentId, patch);
+   693→        setDoc((prev) => (prev ? { ...prev, ...updated } : prev));
+   694→      } catch {
+   695→        // ignore network hiccups
+   696→      }
+   697→    }, 600);
+   698→    return () => {
+   699→      if (patchTimer.current) clearTimeout(patchTimer.current);
+   700→    };
+   701→  }, [
+   702→    globalChunkIndex,
+   703→    readingProgress,
+   704→    documentId,
+   705→    totalChunks,
+   706→    setDoc,
+   707→  ]);
+   708→
+   709→  /* ---------- navigation ---------- */
+   710→  const nextChunk = useCallback(() => {
+   711→    if (!currentChapter || chapters.length === 0) return;
+   712→    if (activeChunkIndex < chapterChunkCount(currentChapter) - 1) {
+   713→      setActiveChunkIndex((i) => i + 1);
+   714→    } else if (currentChapterIndex < chapters.length - 1) {
+   715→      setCurrentChapterIndex((i) => i + 1);
+   716→      setActiveChunkIndex(0);
+   717→    }
+   718→    // At the very last chunk: no-op (Finish is an explicit button in the footer).
+   719→  }, [
+   720→    currentChapter,
+   721→    activeChunkIndex,
+   722→    currentChapterIndex,
+   723→    chapters.length,
+   724→  ]);
+   725→
+   726→  const prevChunk = useCallback(() => {
+   727→    if (isFirstChunk) return;
+   728→    if (activeChunkIndex > 0) {
+   729→      setActiveChunkIndex((i) => i - 1);
+   730→    } else if (currentChapterIndex > 0) {
+   731→      const prev = chapters[currentChapterIndex - 1];
+   732→      setCurrentChapterIndex((i) => i - 1);
+   733→      setActiveChunkIndex(Math.max(0, chapterChunkCount(prev) - 1));
+   734→    }
+   735→  }, [activeChunkIndex, currentChapterIndex, chapters, isFirstChunk]);
+   736→
+   737→  const jumpToChapter = useCallback((idx: number) => {
+   738→    setCurrentChapterIndex(idx);
+   739→    setActiveChunkIndex(0);
+   740→    setChapterSheetOpen(false);
+   741→  }, []);
+   742→
+   743→  const nextChapter = useCallback(() => {
+   744→    if (currentChapterIndex < chapters.length - 1) {
+   745→      setCurrentChapterIndex((i) => i + 1);
+   746→      setActiveChunkIndex(0);
+   747→    }
+   748→  }, [currentChapterIndex, chapters.length]);
+   749→
+   750→  const prevChapter = useCallback(() => {
+   751→    if (currentChapterIndex > 0) {
+   752→      setCurrentChapterIndex((i) => i - 1);
+   753→      setActiveChunkIndex(0);
+   754→    }
+   755→  }, [currentChapterIndex]);
+   756→
+   757→  const finish = useCallback(async () => {
+   758→    if (!documentId) return;
+   759→    try {
+   760→      const updated = await patchDocument(documentId, {
+   761→        readingProgress: 1,
+   762→        lastChunkIndex: globalChunkIndex,
+   763→        lastReadAt: new Date().toISOString(),
+   764→      });
+   765→      setDoc(updated);
+   766→      toast.success("🎉 Finished!");
+   767→    } catch {
+   768→      // ignore
+   769→    }
+   770→  }, [documentId, globalChunkIndex, setDoc]);
+   771→
+   772→  /* ---------- keyboard navigation ---------- */
+   773→  useEffect(() => {
+   774→    const onKey = (e: KeyboardEvent) => {
+   775→      const target = e.target as HTMLElement | null;
+   776→      const isTyping =
+   777→        !!target &&
+   778→        (target.tagName === "INPUT" ||
+   779→          target.tagName === "TEXTAREA" ||
+   780→          target.isContentEditable);
+   781→
+   782→      if (e.key === "ArrowRight" || (e.key === " " && !isTyping)) {
+   783→        e.preventDefault();
+   784→        nextChunk();
+   785→      } else if (e.key === "ArrowLeft") {
+   786→        e.preventDefault();
+   787→        prevChunk();
+   788→      } else if ((e.key === "f" || e.key === "F") && !isTyping) {
+   789→        e.preventDefault();
+   790→        update({ focusMode: !settings.focusMode });
+   791→      } else if (e.key === "Escape") {
+   792→        setChapterSheetOpen(false);
+   793→        setSettingsSheetOpen(false);
+   794→        setAiSheetOpen(false);
+   795→      }
+   796→    };
+   797→    window.addEventListener("keydown", onKey);
+   798→    return () => window.removeEventListener("keydown", onKey);
+   799→  }, [nextChunk, prevChunk, settings.focusMode, update]);
+   800→
+   801→  /* ---------- open AI panel: default summary chapter to current ---------- */
+   802→  const openAiPanel = useCallback(() => {
+   803→    setSummaryChapterIndex(currentChapterIndex);
+   804→    setAiSheetOpen(true);
+   805→  }, [currentChapterIndex]);
+   806→
+   807→  /* ---------- AI handlers ---------- */
+   808→  const handleGenerateChapterSummary = useCallback(
+   809→    async (chapterIndex: number, regenerate: boolean) => {
+   810→      if (!documentId) return;
+   811→      setChapterSummaryLoading(chapterIndex);
+   812→      try {
+   813→        const { summary, chapterTitle } = await generateChapterSummary(
+   814→          documentId,
+   815→          chapterIndex,
+   816→          regenerate,
+   817→        );
+   818→        setChapterSummaries((prev) => ({
+   819→          ...prev,
+   820→          [chapterIndex]: { summary, chapterTitle },
+   821→        }));
+   822→        toast.success(
+   823→          regenerate ? "Chapter summary regenerated" : "Chapter summary generated",
+   824→        );
+   825→      } catch (e) {
+   826→        toast.error(
+   827→          e instanceof Error ? e.message : "Failed to generate chapter summary",
+   828→        );
+   829→      } finally {
+   830→        setChapterSummaryLoading(null);
+   831→      }
+   832→    },
+   833→    [documentId],
+   834→  );
+   835→
+   836→  const handleGenerateNovelSummary = useCallback(
+   837→    async (regenerate: boolean) => {
+   838→      if (!documentId) return;
+   839→      setNovelSummaryLoading(true);
+   840→      try {
+   841→        const { summary } = await generateSummary(documentId, regenerate);
+   842→        setNovelSummary(summary);
+   843→        setDoc((d) => (d ? { ...d, summary } : d));
+   844→        toast.success(
+   845→          regenerate ? "Novel summary regenerated" : "Novel summary generated",
+   846→        );
+   847→      } catch (e) {
+   848→        toast.error(
+   849→          e instanceof Error ? e.message : "Failed to generate novel summary",
+   850→        );
+   851→      } finally {
+   852→        setNovelSummaryLoading(false);
+   853→      }
+   854→    },
+   855→    [documentId, setDoc],
+   856→  );
+   857→
+   858→  const handleAsk = useCallback(async () => {
+   859→    if (!documentId || !qaInput.trim() || qaLoading) return;
+   860→    const question = qaInput.trim();
+   861→    setQaInput("");
+   862→    setQaLoading(true);
+   863→    const id = ++qaIdRef.current;
+   864→    try {
+   865→      const { answer, citations } = await askQuestion(documentId, question);
+   866→      setQaList((list) => [{ id, question, answer, citations }, ...list]);
+   867→    } catch (e) {
+   868→      toast.error(e instanceof Error ? e.message : "Failed to answer");
+   869→    } finally {
+   870→      setQaLoading(false);
+   871→    }
+   872→  }, [documentId, qaInput, qaLoading]);
+   873→
+   874→  const handleFetchScenes = useCallback(
+   875→    async (regenerate: boolean) => {
+   876→      if (!documentId) return;
+   877→      setScenesLoading(true);
+   878→      try {
+   879→        const { scenes: fetched } = await fetchScenes(documentId, regenerate);
+   880→        setScenes(fetched);
+   881→        setScenesFetched(true);
+   882→        toast.success(regenerate ? "Scenes regenerated" : "Scenes generated");
+   883→      } catch (e) {
+   884→        toast.error(
+   885→          e instanceof Error ? e.message : "Failed to generate scenes",
+   886→        );
+   887→      } finally {
+   888→        setScenesLoading(false);
+   889→      }
+   890→    },
+   891→    [documentId],
+   892→  );
+   893→
+   894→  // Generic analysis handler for the 5 simple analysis tabs (Characters,
+   895→  // Story, Semantic, Criticism, Themes). Caches the result so switching tabs
+   896→  // and coming back doesn't lose the analysis.
+   897→  const handleAnalysis = useCallback(
+   898→    async (tab: AnalysisTabKey, fn: () => Promise<{ analysis: string }>) => {
+   899→      if (!documentId) return;
+   900→      setAnalysisLoading(tab);
+   901→      try {
+   902→        const result = await fn();
+   903→        setAnalysisCache((prev) => ({ ...prev, [tab]: result.analysis }));
+   904→      } catch {
+   905→        /* ignore — best-effort, non-blocking */
+   906→      } finally {
+   907→        setAnalysisLoading(null);
+   908→      }
+   909→    },
+   910→    [documentId],
+   911→  );
+   912→
+   913→  // Dialogue has an optional chapter scope, so it gets its own handler.
+   914→  const handleDialogue = useCallback(async () => {
+   915→    if (!documentId) return;
+   916→    setAnalysisLoading("dialogue");
+   917→    try {
+   918→      const result = await analyzeDialogue(documentId, summaryChapterIndex);
+   919→      setAnalysisCache((prev) => ({ ...prev, dialogue: result.analysis }));
+   920→    } catch {
+   921→      /* ignore */
+   922→    } finally {
+   923→      setAnalysisLoading(null);
+   924→    }
+   925→  }, [documentId, summaryChapterIndex]);
+   926→
+   927→  const handleRewrite = useCallback(async () => {
+   928→    if (!documentId) return;
+   929→    setRewriteLoading(true);
+   930→    try {
+   931→      const result = await rewriteContent(
+   932→        documentId,
+   933→        summaryChapterIndex,
+   934→        rewriteInstructions,
+   935→      );
+   936→      setRewriteResult({
+   937→        rewritten: result.rewritten,
+   938→        original: result.original,
+   939→      });
+   940→    } catch {
+   941→      /* ignore */
+   942→    } finally {
+   943→      setRewriteLoading(false);
+   944→    }
+   945→  }, [documentId, summaryChapterIndex, rewriteInstructions]);
+   946→
+   947→  const toggleBookmark = useCallback(() => {
+   948→    if (!currentChapter) return;
+   949→    setBookmarks((prev) => {
+   950→      const next = new Set(prev);
+   951→      if (next.has(bookmarkKey)) {
+   952→        next.delete(bookmarkKey);
+   953→        toast("Bookmark removed");
+   954→      } else {
+   955→        next.add(bookmarkKey);
+   956→        toast.success("Bookmarked this chunk");
+   957→      }
+   958→      return next;
+   959→    });
+   960→  }, [bookmarkKey, currentChapter]);
+   961→
+   962→  /* ---------- early returns ---------- */
+   963→  if (!documentId) {
+   964→    return (
+   965→      <div className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-background px-6 text-center text-foreground">
+   966→        <BookOpen className="h-8 w-8 text-muted-foreground" aria-hidden />
+   967→        <p className="text-lg font-medium">No document selected</p>
+   968→        <Button onClick={() => go("library")}>Open library</Button>
+   969→      </div>
+   970→    );
+   971→  }
+   972→
+   973→  if (loading) {
+   974→    return <LoadingScreen label="Opening document" className="min-h-dvh" />;
+   975→  }
+   976→
+   977→  if (error) {
+   978→    return (
+   979→      <div className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-background px-6 text-center text-foreground">
+   980→        <div className="max-w-md rounded-lg border border-border bg-card p-6 text-left">
+   981→          <p className="text-lg font-medium">Couldn&apos;t open this document</p>
+   982→          <p className="mt-2 text-sm text-muted-foreground">{error}</p>
+   983→          <Button className="mt-4" onClick={() => go("library")}>
+   984→            Back to library
+   985→          </Button>
+   986→        </div>
+   987→      </div>
+   988→    );
+   989→  }
+   990→
+   991→  if (!doc) return null;
+   992→
+   993→  if (doc.status === "processing") {
+   994→    return (
+   995→      <div className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-background px-6 text-center text-foreground">
+   996→        <LemniscateSpinner size={72} />
+   997→        <p className="text-lg font-medium">Still processing</p>
+   998→        <p className="text-sm text-muted-foreground">
+   999→          Check back in a moment — we&apos;re parsing this file.
+  1000→        </p>
+  1001→        <Button variant="outline" onClick={() => go("library")}>
+  1002→          Back to library
+  1003→        </Button>
+  1004→      </div>
+  1005→    );
+  1006→  }
+  1007→
+  1008→  if (doc.status === "error" || chapters.length === 0) {
+  1009→    return (
+  1010→      <div className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-background px-6 text-center text-foreground">
+  1011→        <div className="max-w-md rounded-lg border border-border bg-card p-6 text-left">
+  1012→          <p className="text-lg font-medium">
+  1013→            {doc.status === "error"
+  1014→              ? "This document failed to parse"
+  1015→              : "No readable content yet"}
+  1016→          </p>
+  1017→          <p className="mt-2 text-sm text-muted-foreground">
+  1018→            {doc.error ?? "Try re-uploading the file."}
+  1019→          </p>
+  1020→          <Button className="mt-4" onClick={() => go("library")}>
+  1021→            Back to library
+  1022→          </Button>
+  1023→        </div>
+  1024→      </div>
+  1025→    );
+  1026→  }
+  1027→
+  1028→  /* ---------- main render ---------- */
+  1029→
+  1030→  const sourceLabel = SOURCE_LABELS[doc.sourceType] ?? "DOC";
+  1031→
+  1032→  // Resolve the currently-relevant summary view-model.
+  1033→  const activeChapterSummary =
+  1034→    chapterSummaries[summaryChapterIndex] ?? null;
+  1035→  const isChapterSummaryLoading =
+  1036→    chapterSummaryLoading === summaryChapterIndex;
+  1037→
+  1038→  return (
+  1039→    <div className="min-h-dvh bg-background text-foreground">
+  1040→      {/* ---- ReaderHeader ---- */}
+  1041→      <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
+  1042→        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-2.5 sm:px-6">
+  1043→          {/* Left: back */}
+  1044→          <div className="flex min-w-0 items-center gap-2">
+  1045→            <Button
+  1046→              variant="ghost"
+  1047→              size="sm"
+  1048→              className="gap-1 text-muted-foreground hover:text-foreground"
+  1049→              onClick={() => go("library")}
+  1050→            >
+  1051→              <ChevronLeft className="h-4 w-4" />
+  1052→              <span className="hidden sm:inline">Library</span>
+  1053→            </Button>
+  1054→          </div>
+  1055→
+  1056→          {/* Center: title + meta */}
+  1057→          <div className="flex min-w-0 flex-1 flex-col items-center gap-0.5 px-2 text-center">
+  1058→            <p className="line-clamp-1 max-w-md text-sm font-medium text-foreground">
+  1059→              {doc.title}
+  1060→            </p>
+  1061→            <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+  1062→              <span className="rounded-full border border-border px-1.5 py-px text-[10px] uppercase tracking-wider">
+  1063→                {sourceLabel}
+  1064→              </span>
+  1065→              {doc.author ? (
+  1066→                <span className="line-clamp-1">{doc.author}</span>
+  1067→              ) : null}
+  1068→              {doc.author && doc.lastReadAt ? (
+  1069→                <span aria-hidden className="text-border">
+  1070→                  ·
+  1071→                </span>
+  1072→              ) : null}
+  1073→              {doc.lastReadAt ? (
+  1074→                <span className="line-clamp-1">read {timeAgo(doc.lastReadAt)}</span>
+  1075→              ) : null}
+  1076→            </span>
+  1077→          </div>
+  1078→
+  1079→          {/* Right: actions — 4 icon buttons (5 total with back) */}
+  1080→          <div className="flex items-center gap-0.5">
+  1081→            <Button
+  1082→              variant="ghost"
+  1083→              size="icon"
+  1084→              className="h-9 w-9"
+  1085→              aria-label="Chapter index"
+  1086→              onClick={() => setChapterSheetOpen(true)}
+  1087→            >
+  1088→              <List className="h-4 w-4" />
+  1089→            </Button>
+  1090→            <Button
+  1091→              variant="ghost"
+  1092→              size="icon"
+  1093→              className="h-9 w-9"
+  1094→              aria-label="AI panel"
+  1095→              onClick={openAiPanel}
+  1096→            >
+  1097→              <Sparkles className="h-4 w-4" />
+  1098→            </Button>
+  1099→            <Button
+  1100→              variant="ghost"
+  1101→              size="icon"
+  1102→              className="h-9 w-9"
+  1103→              aria-label="Reader settings"
+  1104→              onClick={() => setSettingsSheetOpen(true)}
+  1105→            >
+  1106→              <Settings2 className="h-4 w-4" />
+  1107→            </Button>
+  1108→            <Button
+  1109→              variant="ghost"
+  1110→              size="icon"
+  1111→              className={cn("h-9 w-9", isBookmarked && "text-foreground")}
+  1112→              aria-label={
+  1113→                isBookmarked ? "Remove bookmark" : "Bookmark this chunk"
+  1114→              }
+  1115→              aria-pressed={isBookmarked}
+  1116→              onClick={toggleBookmark}
+  1117→            >
+  1118→              <Bookmark
+  1119→                className={cn("h-4 w-4", isBookmarked && "fill-current")}
+  1120→              />
+  1121→            </Button>
+  1122→          </div>
+  1123→        </div>
+  1124→      </header>
+  1125→
+  1126→      {/* ---- ReaderProgress ---- */}
+  1127→      <div
+  1128→        className="sticky top-[calc(2.5rem+1px)] z-20 h-0.5 w-full bg-border/40"
+  1129→        aria-hidden
+  1130→      >
+  1131→        <div
+  1132→          className="h-full bg-gradient-to-r from-amber-500/40 via-amber-400 to-amber-600/80 transition-[width] duration-300"
+  1133→          style={{ width: `${progressPct}%` }}
+  1134→        />
+  1135→      </div>
+  1136→
+  1137→      {/* ---- OCR refinement indicator (subtle, non-blocking) ---- */}
+  1138→      {refining && (
+  1139→        <div className="fixed bottom-4 right-4 z-30 flex items-center gap-2 rounded-full border border-border bg-card/90 px-3 py-1.5 text-xs text-muted-foreground shadow-md backdrop-blur">
+  1140→          <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-amber-500" />
+  1141→          Refining OCR…
+  1142→        </div>
+  1143→      )}
+  1144→
+  1145→      {/* ---- Main reading column ---- */}
+  1146→      <main className="mx-auto max-w-3xl px-6 py-10">
+  1147→        {/* ChapterNav */}
+  1148→        <section className="mb-8" aria-label="Chapter navigation">
+  1149→          <div className="flex items-center justify-between gap-3">
+  1150→            <Button
+  1151→              variant="ghost"
+  1152→              size="sm"
+  1153→              className="gap-1 text-muted-foreground hover:text-foreground"
+  1154→              disabled={currentChapterIndex === 0}
+  1155→              onClick={prevChapter}
+  1156→            >
+  1157→              <ChevronLeft className="h-4 w-4" />
+  1158→              <span className="hidden sm:inline">Prev chapter</span>
+  1159→            </Button>
+  1160→            <div className="flex min-w-0 flex-col items-center gap-0.5 text-center">
+  1161→              <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+  1162→                Chapter {(currentChapter?.ordinal ?? currentChapterIndex) + 1} of{" "}
+  1163→                {chapters.length}
+  1164→              </p>
+  1165→              <p className="line-clamp-1 max-w-[18rem] text-xs text-foreground/70 sm:max-w-sm">
+  1166→                {currentChapter?.title ?? "Untitled"}
+  1167→              </p>
+  1168→            </div>
+  1169→            <Button
+  1170→              variant="ghost"
+  1171→              size="sm"
+  1172→              className="gap-1 text-muted-foreground hover:text-foreground"
+  1173→              disabled={currentChapterIndex === chapters.length - 1}
+  1174→              onClick={nextChapter}
+  1175→            >
+  1176→              <span className="hidden sm:inline">Next chapter</span>
+  1177→              <ChevronRight className="h-4 w-4" />
+  1178→            </Button>
+  1179→          </div>
+  1180→          <h1
+  1181→            key={currentChapterIndex}
+  1182→            className="reader-chapter-heading mt-4 text-left font-display text-2xl leading-tight text-foreground sm:text-3xl"
+  1183→          >
+  1184→            {currentChapter?.title ?? "Untitled"}
+  1185→          </h1>
+  1186→          <div
+  1187→            className="mt-2 h-px w-full bg-gradient-to-r from-border via-border/40 to-transparent"
+  1188→            aria-hidden
+  1189→          />
+  1190→        </section>
+  1191→
+  1192→        {/* Article */}
+  1193→        {currentChapter &&
+  1194→        (currentChapter.refinedText || currentChapter.chunks.length > 0) ? (
+  1195→          <article
+  1196→            className="reader-article mx-auto space-y-6 text-foreground"
+  1197→            data-focus={settings.focusMode ? "true" : "false"}
+  1198→            data-reading-width
+  1199→          >
+  1200→            {currentChapter.refinedText
+  1201→              ? (() => {
+  1202→                  const groups = refinedTextGroups(currentChapter.refinedText);
+  1203→                  const groupCount = groups.length;
+  1204→                  return groups.map((text, i) => {
+  1205→                    const isActive = i === activeChunkIndex;
+  1206→                    const paragraphs = text
+  1207→                      .split(/\n{2,}/)
+  1208→                      .map((p) => p.trim())
+  1209→                      .filter(Boolean);
+  1210→                    return (
+  1211→                      <div
+  1212→                        key={`rf-${i}`}
+  1213→                        data-ordinal={i}
+  1214→                        data-active={isActive ? "true" : "false"}
+  1215→                        className={cn(
+  1216→                          "reader-chunk cursor-pointer rounded-lg py-1",
+  1217→                          !settings.focusMode && isActive && "bg-muted/20",
+  1218→                        )}
+  1219→                        onClick={() => setActiveChunkIndex(i)}
+  1220→                        role="article"
+  1221→                        aria-label={`Section ${i + 1} of ${groupCount}`}
+  1222→                      >
+  1223→                        {paragraphs.map((p, j) => (
+  1224→                          <p
+  1225→                            key={j}
+  1226→                            className={cn(
+  1227→                              "whitespace-pre-wrap leading-[var(--pref-line-height)]",
+  1228→                              j < paragraphs.length - 1 && "mb-5",
+  1229→                            )}
+  1230→                            style={{
+  1231→                              textIndent: j > 0 ? "1.5em" : undefined,
+  1232→                            }}
+  1233→                          >
+  1234→                            {p}
+  1235→                          </p>
+  1236→                        ))}
+  1237→                      </div>
+  1238→                    );
+  1239→                  });
+  1240→                })()
+  1241→              : currentChapter.chunks.map((chunk, i) => {
+  1242→                const paragraphs = chunk.text
+  1243→                  .split(/\n{2,}/)
+  1244→                  .map((p) => p.trim())
+  1245→                  .filter(Boolean);
+  1246→                const isActive = i === activeChunkIndex;
+  1247→                return (
+  1248→                  <div
+  1249→                    key={chunk.index ?? i}
+  1250→                    data-ordinal={i}
+  1251→                    data-active={isActive ? "true" : "false"}
+  1252→                    className={cn(
+  1253→                      "reader-chunk cursor-pointer rounded-lg py-1",
+  1254→                      !settings.focusMode && isActive && "bg-muted/20",
+  1255→                    )}
+  1256→                    onClick={() => setActiveChunkIndex(i)}
+  1257→                    role="article"
+  1258→                    aria-label={`Section ${i + 1} of ${currentChapter.chunks.length}`}
+  1259→                  >
+  1260→                    {paragraphs.length > 1 ? (
+  1261→                      paragraphs.map((p, j) => (
+  1262→                        <p
+  1263→                          key={j}
+  1264→                          className={cn(
+  1265→                            "whitespace-pre-wrap leading-[var(--pref-line-height)]",
+  1266→                            j < paragraphs.length - 1 && "mb-5",
+  1267→                          )}
+  1268→                          style={{
+  1269→                            textIndent: j > 0 ? "1.5em" : undefined,
+  1270→                          }}
+  1271→                        >
+  1272→                          {p}
+  1273→                        </p>
+  1274→                      ))
+  1275→                    ) : (
+  1276→                      <p className="whitespace-pre-wrap leading-[var(--pref-line-height)]">
+  1277→                        {paragraphs[0] ?? ""}
+  1278→                      </p>
+  1279→                    )}
+  1280→                  </div>
+  1281→                );
+  1282→              })}
+  1283→          </article>
+  1284→        ) : (
+  1285→          <p className="mx-auto max-w-prose text-center text-sm text-muted-foreground">
+  1286→            This chapter has no readable content.
+  1287→          </p>
+  1288→        )}
+  1289→
+  1290→        {/* FooterNav */}
+  1291→        <footer
+  1292→          className="mt-12 flex flex-col gap-4 border-t border-border pt-6"
+  1293→          aria-label="Chunk navigation"
+  1294→        >
+  1295→          <div className="flex items-center justify-between gap-3">
+  1296→            <Button
+  1297→              variant="outline"
+  1298→              size="sm"
+  1299→              className="gap-1"
+  1300→              disabled={isFirstChunk}
+  1301→              onClick={prevChunk}
+  1302→            >
+  1303→              <ArrowLeft className="h-4 w-4" />
+  1304→              <span className="hidden sm:inline">Prev</span>
+  1305→            </Button>
+  1306→
+  1307→            <p className="text-center text-xs text-muted-foreground">
+  1308→              {totalChunks > 0 ? (
+  1309→                <>
+  1310→                  Section{" "}
+  1311→                  <span className="tabular-nums">{globalChunkIndex + 1}</span> of{" "}
+  1312→                  <span className="tabular-nums">{totalChunks}</span>
+  1313→                  <span className="mx-2 text-border">·</span>
+  1314→                  <span className="tabular-nums">{progressPct}%</span> read
+  1315→                </>
+  1316→              ) : null}
+  1317→            </p>
+  1318→
+  1319→            {isLastChunk ? (
+  1320→              <Button size="sm" className="gap-1" onClick={finish}>
+  1321→                Finish
+  1322→              </Button>
+  1323→            ) : (
+  1324→              <Button
+  1325→                variant="outline"
+  1326→                size="sm"
+  1327→                className="gap-1"
+  1328→                onClick={nextChunk}
+  1329→              >
+  1330→                <span className="hidden sm:inline">Next</span>
+  1331→                <ArrowRight className="h-4 w-4" />
+  1332→              </Button>
+  1333→            )}
+  1334→          </div>
+  1335→          <Progress value={progressPct} className="h-1" />
+  1336→        </footer>
+  1337→      </main>
+  1338→
+  1339→      {/* ---- Side panels ---- */}
+  1340→
+  1341→      {/* Chapter index sheet */}
+  1342→      <Sheet open={chapterSheetOpen} onOpenChange={setChapterSheetOpen}>
+  1343→        <SheetContent
+  1344→          side="right"
+  1345→          className="w-full sm:max-w-sm"
+  1346→          aria-describedby={undefined}
+  1347→        >
+  1348→          <SheetHeader>
+  1349→            <SheetTitle className="flex items-center gap-2 font-display text-xl">
+  1350→              <List className="h-4 w-4" />
+  1351→              Chapters
+  1352→            </SheetTitle>
+  1353→            <p className="text-xs text-muted-foreground">
+  1354→              {chapters.length} chapter{chapters.length === 1 ? "" : "s"} ·{" "}
+  1355→              {totalChunks} chunks
+  1356→            </p>
+  1357→          </SheetHeader>
+  1358→          <div className="max-h-[calc(100dvh-7rem)] overflow-y-auto px-2 pb-6">
+  1359→            <ol className="space-y-1">
+  1360→              {chapters.map((ch, i) => {
+  1361→                const active = i === currentChapterIndex;
+  1362→                return (
+  1363→                  <li key={ch.id ?? i}>
+  1364→                    <button
+  1365→                      type="button"
+  1366→                      onClick={() => jumpToChapter(i)}
+  1367→                      className={cn(
+  1368→                        "group flex w-full items-start gap-3 rounded-md border px-3 py-2.5 text-left transition-colors",
+  1369→                        active
+  1370→                          ? "border-foreground/20 bg-muted/60"
+  1371→                          : "border-transparent hover:bg-muted/40",
+  1372→                      )}
+  1373→                    >
+  1374→                      <span
+  1375→                        className={cn(
+  1376→                          "mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-medium tabular-nums",
+  1377→                          active
+  1378→                            ? "bg-foreground text-background"
+  1379→                            : "bg-muted text-muted-foreground",
+  1380→                        )}
+  1381→                      >
+  1382→                        {(ch.ordinal ?? i) + 1}
+  1383→                      </span>
+  1384→                      <span className="min-w-0 flex-1">
+  1385→                        <span
+  1386→                          className={cn(
+  1387→                            "line-clamp-2 block text-sm font-medium",
+  1388→                            active ? "text-foreground" : "text-foreground/90",
+  1389→                          )}
+  1390→                        >
+  1391→                          {ch.title}
+  1392→                        </span>
+  1393→                        <span className="mt-0.5 block text-[11px] text-muted-foreground">
+  1394→                          {chapterChunkCount(ch)} chunk
+  1395→                          {chapterChunkCount(ch) === 1 ? "" : "s"}
+  1396→                        </span>
+  1397→                      </span>
+  1398→                    </button>
+  1399→                  </li>
+  1400→                );
+  1401→              })}
+  1402→            </ol>
+  1403→          </div>
+  1404→        </SheetContent>
+  1405→      </Sheet>
+  1406→
+  1407→      {/* Settings sheet */}
+  1408→      <Sheet open={settingsSheetOpen} onOpenChange={setSettingsSheetOpen}>
+  1409→        <SheetContent
+  1410→          side="right"
+  1411→          className="w-full overflow-y-auto sm:max-w-sm"
+  1412→          aria-describedby={undefined}
+  1413→        >
+  1414→          <SheetHeader>
+  1415→            <SheetTitle className="flex items-center gap-2 font-display text-xl">
+  1416→              <Settings2 className="h-4 w-4" />
+  1417→              Reader settings
+  1418→            </SheetTitle>
+  1419→            <p className="text-xs text-muted-foreground">
+  1420→              Adjust typography, theme, and reading width.
+  1421→            </p>
+  1422→          </SheetHeader>
+  1423→
+  1424→          <div className="space-y-6 px-4 pb-10">
+  1425→            {/* Typography */}
+  1426→            <section className="space-y-4">
+  1427→              <SectionLabel>Typography</SectionLabel>
+  1428→
+  1429→              <div className="space-y-1.5">
+  1430→                <SectionLabel>Font family</SectionLabel>
+  1431→                <OptionRow
+  1432→                  options={FONT_OPTIONS}
+  1433→                  value={settings.fontFamily}
+  1434→                  onChange={(v) => update({ fontFamily: v })}
+  1435→                  ariaLabel="Font family"
+  1436→                />
+  1437→              </div>
+  1438→
+  1439→              <SliderRow
+  1440→                label="Font size"
+  1441→                value={settings.fontSize}
+  1442→                display={`${settings.fontSize}px`}
+  1443→                min={14}
+  1444→                max={28}
+  1445→                step={1}
+  1446→                onChange={(v) => update({ fontSize: v })}
+  1447→              />
+  1448→
+  1449→              <SliderRow
+  1450→                label="Line height"
+  1451→                value={settings.lineHeight}
+  1452→                display={settings.lineHeight.toFixed(1)}
+  1453→                min={1.3}
+  1454→                max={2}
+  1455→                step={0.1}
+  1456→                onChange={(v) => update({ lineHeight: v })}
+  1457→              />
+  1458→
+  1459→              <SliderRow
+  1460→                label="Letter spacing"
+  1461→                value={settings.letterSpacing}
+  1462→                display={`${settings.letterSpacing.toFixed(2)}em`}
+  1463→                min={-0.02}
+  1464→                max={0.05}
+  1465→                step={0.01}
+  1466→                onChange={(v) => update({ letterSpacing: v })}
+  1467→              />
+  1468→
+  1469→              <SliderRow
+  1470→                label="Reading width"
+  1471→                value={settings.readingWidth}
+  1472→                display={`${settings.readingWidth}ch`}
+  1473→                min={50}
+  1474→                max={90}
+  1475→                step={1}
+  1476→                onChange={(v) => update({ readingWidth: v })}
+  1477→              />
+  1478→            </section>
+  1479→
+  1480→            {/* Theme */}
+  1481→            <section className="space-y-3">
+  1482→              <SectionLabel>Theme</SectionLabel>
+  1483→              <div className="grid grid-cols-3 gap-2">
+  1484→                {THEME_OPTIONS.map((opt) => {
+  1485→                  const active = settings.theme === opt.value;
+  1486→                  return (
+  1487→                    <button
+  1488→                      key={opt.value}
+  1489→                      type="button"
+  1490→                      onClick={() => update({ theme: opt.value })}
+  1491→                      aria-pressed={active}
+  1492→                      className={cn(
+  1493→                        "flex flex-col items-center gap-1 rounded-md border px-2 py-3 text-xs font-medium transition-colors",
+  1494→                        active
+  1495→                          ? "border-foreground/30 bg-muted/60 text-foreground"
+  1496→                          : "border-border text-muted-foreground hover:text-foreground",
+  1497→                      )}
+  1498→                    >
+  1499→                      <opt.Icon className="h-4 w-4" />
+  1500→                      {opt.label}
+  1501→                    </button>
+  1502→                  );
+  1503→                })}
+  1504→              </div>
+  1505→            </section>
+  1506→
+  1507→            {/* Accent */}
+  1508→            <section className="space-y-3">
+  1509→              <SectionLabel>Accent color</SectionLabel>
+  1510→              <div className="flex flex-wrap gap-2">
+  1511→                {ACCENT_SWATCHES.map((sw) => {
+  1512→                  const active =
+  1513→                    settings.accent.toLowerCase() === sw.value.toLowerCase();
+  1514→                  return (
+  1515→                    <button
+  1516→                      key={sw.value}
+  1517→                      type="button"
+  1518→                      onClick={() => update({ accent: sw.value })}
+  1519→                      aria-label={`Accent: ${sw.label}`}
+  1520→                      aria-pressed={active}
+  1521→                      className={cn(
+  1522→                        "relative h-8 w-8 rounded-full border-2 transition-transform hover:scale-110",
+  1523→                        active
+  1524→                          ? "border-foreground"
+  1525→                          : "border-transparent",
+  1526→                      )}
+  1527→                      style={{ backgroundColor: sw.value }}
+  1528→                    >
+  1529→                      {active ? (
+  1530→                        <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white mix-blend-difference">
+  1531→                          ✓
+  1532→                        </span>
+  1533→                      ) : null}
+  1534→                    </button>
+  1535→                  );
+  1536→                })}
+  1537→              </div>
+  1538→            </section>
+  1539→
+  1540→            {/* Reading behavior — focus mode lives here now */}
+  1541→            <section className="space-y-3">
+  1542→              <SectionLabel>Reading behavior</SectionLabel>
+  1543→              <label className="flex items-center justify-between gap-3 rounded-md border border-border bg-muted/30 px-3 py-2.5">
+  1544→                <span className="flex items-center gap-2 text-sm">
+  1545→                  <TypeIcon className="h-4 w-4 text-muted-foreground" />
+  1546→                  Focus mode
+  1547→                </span>
+  1548→                <Switch
+  1549→                  checked={settings.focusMode}
+  1550→                  onCheckedChange={(v) => update({ focusMode: v })}
+  1551→                  aria-label="Toggle focus mode"
+  1552→                />
+  1553→              </label>
+  1554→              <p className="text-[11px] text-muted-foreground">
+  1555→                Dims surrounding paragraphs so you can read one chunk at a time.
+  1556→                Press <kbd className="rounded border border-border px-1">F</kbd>{" "}
+  1557→                to toggle.
+  1558→              </p>
+  1559→            </section>
+  1560→
+  1561→            {/* Motion & contrast */}
+  1562→            <section className="space-y-4">
+  1563→              <SectionLabel>Motion &amp; contrast</SectionLabel>
+  1564→              <div className="space-y-1.5">
+  1565→                <SectionLabel>Animation speed</SectionLabel>
+  1566→                <OptionRow
+  1567→                  options={ANIM_SPEED_OPTIONS}
+  1568→                  value={settings.animSpeed}
+  1569→                  onChange={(v) => update({ animSpeed: v })}
+  1570→                  ariaLabel="Animation speed"
+  1571→                />
+  1572→              </div>
+  1573→              <div className="space-y-1.5">
+  1574→                <SectionLabel>Contrast</SectionLabel>
+  1575→                <OptionRow
+  1576→                  options={CONTRAST_OPTIONS}
+  1577→                  value={settings.contrast}
+  1578→                  onChange={(v) => update({ contrast: v })}
+  1579→                  ariaLabel="Contrast"
+  1580→                />
+  1581→              </div>
+  1582→            </section>
+  1583→
+  1584→            {/* Keyboard hints */}
+  1585→            <section className="space-y-3">
+  1586→              <SectionLabel>Keyboard</SectionLabel>
+  1587→              <label className="flex items-center justify-between gap-3 rounded-md border border-border bg-muted/30 px-3 py-2.5">
+  1588→                <span className="text-sm">Show keyboard hints</span>
+  1589→                <Switch
+  1590→                  checked={settings.kbdHints}
+  1591→                  onCheckedChange={(v) => update({ kbdHints: v })}
+  1592→                  aria-label="Toggle keyboard hints"
+  1593→                />
+  1594→              </label>
+  1595→              <ul className="space-y-1 text-[11px] text-muted-foreground">
+  1596→                <li>
+  1597→                  <kbd className="rounded border border-border px-1">→</kbd>{" "}
+  1598→                  / <kbd className="rounded border border-border px-1">Space</kbd>{" "}
+  1599→                  — next chunk
+  1600→                </li>
+  1601→                <li>
+  1602→                  <kbd className="rounded border border-border px-1">←</kbd> —
+  1603→                  previous chunk
+  1604→                </li>
+  1605→                <li>
+  1606→                  <kbd className="rounded border border-border px-1">F</kbd> —
+  1607→                  toggle focus mode
+  1608→                </li>
+  1609→                <li>
+  1610→                  <kbd className="rounded border border-border px-1">Esc</kbd> —
+  1611→                  close panels
+  1612→                </li>
+  1613→              </ul>
+  1614→            </section>
+  1615→          </div>
+  1616→        </SheetContent>
+  1617→      </Sheet>
+  1618→
+  1619→      {/* AI sheet — Summary / Ask / Scenes */}
+  1620→      <Sheet open={aiSheetOpen} onOpenChange={setAiSheetOpen}>
+  1621→        <SheetContent
+  1622→          side="right"
+  1623→          className="w-full overflow-y-auto sm:max-w-md"
+  1624→          aria-describedby={undefined}
+  1625→        >
+  1626→          <SheetHeader>
+  1627→            <SheetTitle className="flex items-center gap-2 font-display text-xl">
+  1628→              <Sparkles className="h-4 w-4" />
+  1629→              AI companion
+  1630→            </SheetTitle>
+  1631→            <p className="line-clamp-1 text-xs text-muted-foreground">
+  1632→              {doc.title} · {formatBytes(doc.byteSize)}
+  1633→            </p>
+  1634→          </SheetHeader>
+  1635→
+  1636→          <Tabs
+  1637→            value={aiTab}
+  1638→            onValueChange={(v) => setAiTab(v as typeof aiTab)}
+  1639→            className="flex flex-1 flex-col px-4 pb-6"
+  1640→          >
+  1641→            <TabsList className="flex h-auto w-full gap-1 overflow-x-auto p-1">
+  1642→              <TabsTrigger
+  1643→                value="summary"
+  1644→                className="shrink-0 gap-1 px-2 py-1 text-xs"
+  1645→              >
+  1646→                <Sparkles className="h-3.5 w-3.5" />
+  1647→                Summary
+  1648→              </TabsTrigger>
+  1649→              <TabsTrigger
+  1650→                value="ask"
+  1651→                className="shrink-0 gap-1 px-2 py-1 text-xs"
+  1652→              >
+  1653→                <MessageSquareQuote className="h-3.5 w-3.5" />
+  1654→                Ask
+  1655→              </TabsTrigger>
+  1656→              <TabsTrigger
+  1657→                value="scenes"
+  1658→                className="shrink-0 gap-1 px-2 py-1 text-xs"
+  1659→              >
+  1660→                <Film className="h-3.5 w-3.5" />
+  1661→                Scenes
+  1662→              </TabsTrigger>
+  1663→              <TabsTrigger
+  1664→                value="dialogue"
+  1665→                className="shrink-0 gap-1 px-2 py-1 text-xs"
+  1666→              >
+  1667→                <MessagesSquare className="h-3.5 w-3.5" />
+  1668→                Dialogue
+  1669→              </TabsTrigger>
+  1670→              <TabsTrigger
+  1671→                value="characters"
+  1672→                className="shrink-0 gap-1 px-2 py-1 text-xs"
+  1673→              >
+  1674→                <Users className="h-3.5 w-3.5" />
+  1675→                Characters
+  1676→              </TabsTrigger>
+  1677→              <TabsTrigger
+  1678→                value="story"
+  1679→                className="shrink-0 gap-1 px-2 py-1 text-xs"
+  1680→              >
+  1681→                <ScrollText className="h-3.5 w-3.5" />
+  1682→                Story
+  1683→              </TabsTrigger>
+  1684→              <TabsTrigger
+  1685→                value="semantic"
+  1686→                className="shrink-0 gap-1 px-2 py-1 text-xs"
+  1687→              >
+  1688→                <Brain className="h-3.5 w-3.5" />
+  1689→                Semantic
+  1690→              </TabsTrigger>
+  1691→              <TabsTrigger
+  1692→                value="criticism"
+  1693→                className="shrink-0 gap-1 px-2 py-1 text-xs"
+  1694→              >
+  1695→                <Feather className="h-3.5 w-3.5" />
+  1696→                Criticism
+  1697→              </TabsTrigger>
+  1698→              <TabsTrigger
+  1699→                value="themes"
+  1700→                className="shrink-0 gap-1 px-2 py-1 text-xs"
+  1701→              >
+  1702→                <Tags className="h-3.5 w-3.5" />
+  1703→                Themes
+  1704→              </TabsTrigger>
+  1705→              <TabsTrigger
+  1706→                value="rewrite"
+  1707→                className="shrink-0 gap-1 px-2 py-1 text-xs"
+  1708→              >
+  1709→                <Wand2 className="h-3.5 w-3.5" />
+  1710→                Rewrite
+  1711→              </TabsTrigger>
+  1712→            </TabsList>
+  1713→
+  1714→            {/* ───────── Summary tab ───────── */}
+  1715→            <TabsContent value="summary" className="mt-4 space-y-4">
+  1716→              <SegmentedToggle<SummaryScope>
+  1717→                ariaLabel="Summary scope"
+  1718→                options={[
+  1719→                  { label: "Chapter", value: "chapter" },
+  1720→                  { label: "Novel", value: "novel" },
+  1721→                ]}
+  1722→                value={summaryScope}
+  1723→                onChange={setSummaryScope}
+  1724→              />
+  1725→
+  1726→              {summaryScope === "chapter" ? (
+  1727→                <div className="space-y-3">
+  1728→                  <div className="space-y-1.5">
+  1729→                    <SectionLabel>Chapter</SectionLabel>
+  1730→                    <Select
+  1731→                      value={String(summaryChapterIndex)}
+  1732→                      onValueChange={(v) => setSummaryChapterIndex(Number(v))}
+  1733→                    >
+  1734→                      <SelectTrigger className="w-full" aria-label="Select chapter">
+  1735→                        <SelectValue placeholder="Select a chapter" />
+  1736→                      </SelectTrigger>
+  1737→                      <SelectContent>
+  1738→                        {chapters.map((ch, i) => (
+  1739→                          <SelectItem key={ch.id ?? i} value={String(i)}>
+  1740→                            Chapter {(ch.ordinal ?? i) + 1}: {ch.title}
+  1741→                          </SelectItem>
+  1742→                        ))}
+  1743→                      </SelectContent>
+  1744→                    </Select>
+  1745→                  </div>
+  1746→
+  1747→                  <div className="flex items-center justify-between gap-2">
+  1748→                    <p className="text-xs text-muted-foreground">
+  1749→                      {activeChapterSummary
+  1750→                        ? "Summary cached — regenerate to refresh."
+  1751→                        : "Generate a tight summary of this chapter."}
+  1752→                    </p>
+  1753→                    <Button
+  1754→                      size="sm"
+  1755→                      className="shrink-0 gap-1"
+  1756→                      disabled={isChapterSummaryLoading}
+  1757→                      onClick={() =>
+  1758→                        handleGenerateChapterSummary(
+  1759→                          summaryChapterIndex,
+  1760→                          Boolean(activeChapterSummary),
+  1761→                        )
+  1762→                      }
+  1763→                    >
+  1764→                      {isChapterSummaryLoading ? (
+  1765→                        <LemniscateSpinner size={28} />
+  1766→                      ) : activeChapterSummary ? (
+  1767→                        <RefreshCw className="h-3.5 w-3.5" />
+  1768→                      ) : (
+  1769→                        <Sparkles className="h-3.5 w-3.5" />
+  1770→                      )}
+  1771→                      {activeChapterSummary ? "Regenerate" : "Generate"}
+  1772→                    </Button>
+  1773→                  </div>
+  1774→
+  1775→                  {isChapterSummaryLoading && !activeChapterSummary ? (
+  1776→                    <div className="flex flex-col items-center gap-3 rounded-lg border border-border bg-muted/30 px-4 py-10 text-center">
+  1777→                      <LemniscateSpinner size={56} />
+  1778→                      <p className="text-xs text-muted-foreground">
+  1779→                        Reading this chapter…
+  1780→                      </p>
+  1781→                    </div>
+  1782→                  ) : activeChapterSummary ? (
+  1783→                    <blockquote className="rounded-lg border-l-2 border-foreground/30 bg-muted/30 p-4">
+  1784→                      <p className="mb-2 font-display text-sm font-medium text-foreground">
+  1785→                        {activeChapterSummary.chapterTitle}
+  1786→                      </p>
+  1787→                      <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground/90">
+  1788→                        {activeChapterSummary.summary}
+  1789→                      </p>
+  1790→                    </blockquote>
+  1791→                  ) : (
+  1792→                    <div className="rounded-lg border border-dashed border-border p-6 text-center">
+  1793→                      <p className="text-sm text-muted-foreground">
+  1794→                        No chapter summary yet. Click{" "}
+  1795→                        <strong>Generate</strong> to create one.
+  1796→                      </p>
+  1797→                    </div>
+  1798→                  )}
+  1799→                </div>
+  1800→              ) : (
+  1801→                <div className="space-y-3">
+  1802→                  <div className="flex items-center justify-between gap-2">
+  1803→                    <p className="text-xs text-muted-foreground">
+  1804→                      {novelSummary
+  1805→                        ? "Novel summary cached — regenerate to refresh."
+  1806→                        : "Generate a summary of the entire document."}
+  1807→                    </p>
+  1808→                    <Button
+  1809→                      size="sm"
+  1810→                      className="shrink-0 gap-1"
+  1811→                      disabled={novelSummaryLoading}
+  1812→                      onClick={() =>
+  1813→                        handleGenerateNovelSummary(Boolean(novelSummary))
+  1814→                      }
+  1815→                    >
+  1816→                      {novelSummaryLoading ? (
+  1817→                        <LemniscateSpinner size={28} />
+  1818→                      ) : novelSummary ? (
+  1819→                        <RefreshCw className="h-3.5 w-3.5" />
+  1820→                      ) : (
+  1821→                        <Sparkles className="h-3.5 w-3.5" />
+  1822→                      )}
+  1823→                      {novelSummary ? "Regenerate" : "Generate"}
+  1824→                    </Button>
+  1825→                  </div>
+  1826→
+  1827→                  {novelSummaryLoading && !novelSummary ? (
+  1828→                    <div className="flex flex-col items-center gap-3 rounded-lg border border-border bg-muted/30 px-4 py-10 text-center">
+  1829→                      <LemniscateSpinner size={56} />
+  1830→                      <p className="text-xs text-muted-foreground">
+  1831→                        Reading through the document…
+  1832→                      </p>
+  1833→                    </div>
+  1834→                  ) : novelSummary ? (
+  1835→                    <blockquote className="rounded-lg border-l-2 border-foreground/30 bg-muted/30 p-4">
+  1836→                      <p className="mb-2 font-display text-sm font-medium text-foreground">
+  1837→                        {doc.title}
+  1838→                      </p>
+  1839→                      <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground/90">
+  1840→                        {novelSummary}
+  1841→                      </p>
+  1842→                    </blockquote>
+  1843→                  ) : (
+  1844→                    <div className="rounded-lg border border-dashed border-border p-6 text-center">
+  1845→                      <p className="text-sm text-muted-foreground">
+  1846→                        No novel summary yet. Click{" "}
+  1847→                        <strong>Generate</strong> to create one.
+  1848→                      </p>
+  1849→                    </div>
+  1850→                  )}
+  1851→                </div>
+  1852→              )}
+  1853→            </TabsContent>
+  1854→
+  1855→            {/* ───────── Ask tab ───────── */}
+  1856→            <TabsContent value="ask" className="mt-4 space-y-4">
+  1857→              <div className="flex items-center gap-2">
+  1858→                <Input
+  1859→                  value={qaInput}
+  1860→                  onChange={(e) => setQaInput(e.target.value)}
+  1861→                  placeholder="Ask anything about this document…"
+  1862→                  onKeyDown={(e) => {
+  1863→                    if (e.key === "Enter" && !e.shiftKey) {
+  1864→                      e.preventDefault();
+  1865→                      handleAsk();
+  1866→                    }
+  1867→                  }}
+  1868→                  disabled={qaLoading}
+  1869→                  className="flex-1"
+  1870→                />
+  1871→                <Button
+  1872→                  size="icon"
+  1873→                  onClick={handleAsk}
+  1874→                  disabled={qaLoading || !qaInput.trim()}
+  1875→                  aria-label="Send question"
+  1876→                >
+  1877→                  {qaLoading ? (
+  1878→                    <LemniscateSpinner size={28} />
+  1879→                  ) : (
+  1880→                    <Send className="h-4 w-4" />
+  1881→                  )}
+  1882→                </Button>
+  1883→              </div>
+  1884→
+  1885→              {qaLoading && qaList.length === 0 ? (
+  1886→                <div className="flex flex-col items-center gap-3 rounded-lg border border-border bg-muted/30 px-4 py-10 text-center">
+  1887→                  <LemniscateSpinner size={56} />
+  1888→                  <p className="text-xs text-muted-foreground">
+  1889→                    Searching the text for an answer…
+  1890→                  </p>
+  1891→                </div>
+  1892→              ) : qaList.length === 0 ? (
+  1893→                <div className="rounded-lg border border-dashed border-border p-6 text-center">
+  1894→                  <p className="text-sm text-muted-foreground">
+  1895→                    Ask a question and Lemniscate will answer using the
+  1896→                    document&apos;s text.
+  1897→                  </p>
+  1898→                </div>
+  1899→              ) : (
+  1900→                <div className="space-y-5">
+  1901→                  {qaList.map((item) => (
+  1902→                    <div key={item.id} className="space-y-2">
+  1903→                      <div className="rounded-md bg-muted/40 px-3 py-2">
+  1904→                        <p className="text-xs font-medium text-muted-foreground">
+  1905→                          Q
+  1906→                        </p>
+  1907→                        <p className="text-sm text-foreground">
+  1908→                          {item.question}
+  1909→                        </p>
+  1910→                      </div>
+  1911→                      <blockquote className="border-l-2 border-foreground/30 pl-3 text-sm italic leading-relaxed text-foreground">
+  1912→                        {item.answer}
+  1913→                      </blockquote>
+  1914→                      {item.citations.length > 0 ? (
+  1915→                        <div className="flex flex-wrap items-center gap-1.5">
+  1916→                          <span className="text-[11px] text-muted-foreground">
+  1917→                            Cited:
+  1918→                          </span>
+  1919→                          {item.citations.map((c, j) => (
+  1920→                            <span
+  1921→                              key={j}
+  1922→                              className="inline-flex items-center rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[11px] text-muted-foreground"
+  1923→                            >
+  1924→                              {c}
+  1925→                            </span>
+  1926→                          ))}
+  1927→                        </div>
+  1928→                      ) : null}
+  1929→                    </div>
+  1930→                  ))}
+  1931→                </div>
+  1932→              )}
+  1933→            </TabsContent>
+  1934→
+  1935→            {/* ───────── Scenes tab ───────── */}
+  1936→            <TabsContent value="scenes" className="mt-4 space-y-3">
+  1937→              <div className="flex items-center justify-between gap-2">
+  1938→                <p className="text-xs text-muted-foreground">
+  1939→                  {scenes && scenes.length > 0
+  1940→                    ? "AI-enhanced cinematic scenes."
+  1941→                    : "Generate cinematic, dramatized scenes from this document."}
+  1942→                </p>
+  1943→                <Button
+  1944→                  size="sm"
+  1945→                  className="shrink-0 gap-1"
+  1946→                  disabled={scenesLoading}
+  1947→                  onClick={() =>
+  1948→                    handleFetchScenes(Boolean(scenes && scenes.length > 0))
+  1949→                  }
+  1950→                >
+  1951→                  {scenesLoading ? (
+  1952→                    <LemniscateSpinner size={28} />
+  1953→                  ) : scenes && scenes.length > 0 ? (
+  1954→                    <RefreshCw className="h-3.5 w-3.5" />
+  1955→                  ) : (
+  1956→                    <Film className="h-3.5 w-3.5" />
+  1957→                  )}
+  1958→                  {scenes && scenes.length > 0 ? "Regenerate" : "Generate scenes"}
+  1959→                </Button>
+  1960→              </div>
+  1961→
+  1962→              {!scenesFetched ? (
+  1963→                <div className="flex flex-col items-center gap-3 rounded-lg border border-border bg-muted/30 px-4 py-10 text-center">
+  1964→                  <LemniscateSpinner size={48} />
+  1965→                  <p className="text-xs text-muted-foreground">
+  1966→                    Loading cached scenes…
+  1967→                  </p>
+  1968→                </div>
+  1969→              ) : scenesLoading && (!scenes || scenes.length === 0) ? (
+  1970→                <div className="flex flex-col items-center gap-3 rounded-lg border border-border bg-muted/30 px-4 py-10 text-center">
+  1971→                  <LemniscateSpinner size={56} />
+  1972→                  <p className="text-xs text-muted-foreground">
+  1973→                    Adapting the prose into scenes…
+  1974→                  </p>
+  1975→                </div>
+  1976→              ) : scenes && scenes.length > 0 ? (
+  1977→                <ol className="space-y-3">
+  1978→                  {scenes.map((sc) => {
+  1979→                    const mood = moodColor(sc.mood);
+  1980→                    const characters = sc.characters ?? [];
+  1981→                    return (
+  1982→                      <li
+  1983→                        key={sc.id ?? sc.ordinal}
+  1984→                        className="rounded-lg border border-border bg-card p-4"
+  1985→                      >
+  1986→                        <div className="flex items-start gap-3">
+  1987→                          <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-foreground text-xs font-bold tabular-nums text-background">
+  1988→                            {sc.ordinal + 1}
+  1989→                          </span>
+  1990→                          <div className="min-w-0 flex-1">
+  1991→                            <h4 className="font-display text-lg leading-tight text-foreground">
+  1992→                              {sc.title}
+  1993→                            </h4>
+  1994→                            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+  1995→                              {sc.mood ? (
+  1996→                                <span
+  1997→                                  className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium"
+  1998→                                  style={moodChipStyle(mood.color)}
+  1999→                                >
+  2000→                                  {mood.label}
+
+[showing lines 1-2000 of 2232; use offset=2001 with limit to continue reading]

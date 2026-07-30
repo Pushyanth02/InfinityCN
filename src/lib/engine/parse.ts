@@ -28,7 +28,10 @@ export function chunkText(text: string, chunkSize = 1200): Chunk[] {
   let idx = 0;
   let bufStart = 0;
   for (const p of paras) {
-    const piece = p.trim();
+    // Strip leading markdown heading markers (e.g. "## Subheading") so they
+    // don't render as literal "##" in the reader article. The heading text
+    // itself is preserved as a plain paragraph.
+    const piece = p.trim().replace(/^#{1,6}\s+/, "");
     if (!piece) continue;
     if (buf.length + piece.length + 2 > chunkSize && buf) {
       chunks.push({ index: idx++, text: buf.trim(), charOffset: bufStart });

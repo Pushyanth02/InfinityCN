@@ -55,6 +55,18 @@ const ACTIVITY_META: Record<string, { label: string; color: string }> = {
   read: { label: "Read", color: "var(--noir-ink)" },
   ai_summarize: { label: "Summarized", color: "#a78bfa" },
   ai_cinematize: { label: "Cinematized", color: "var(--noir-gold)" },
+  ai_continue: { label: "Continued the story", color: "#a78bfa" },
+  ai_ending: { label: "Reimagined an ending", color: "#f472b6" },
+  ai_world: { label: "Expanded the world", color: "#60a5fa" },
+  ai_kids: { label: "Retold for kids", color: "#fbbf24" },
+  ai_characters_intro: { label: "Met the characters", color: "#34d399" },
+  ai_whatif: { label: "Invented what-ifs", color: "#f472b6" },
+  ai_imagine: { label: "Imagined pictures", color: "#fbbf24" },
+  ai_study: { label: "Built a study guide", color: "#60a5fa" },
+  ai_vocab: { label: "Listed vocabulary", color: "#34d399" },
+  ai_quiz: { label: "Generated a quiz", color: "#a78bfa" },
+  ai_explain: { label: "Explained simply", color: "#60a5fa" },
+  ai_themes: { label: "Extracted themes", color: "#a78bfa" },
   bookmark: { label: "Bookmarked", color: "#60a5fa" },
 };
 
@@ -200,8 +212,8 @@ function GreetingHero({
 
   const subtext =
     docs.length === 0
-      ? "Your reading room is quiet. Import a document to begin."
-      : `You have ${docs.length} ${docs.length === 1 ? "document" : "documents"} in your library. ${inProgressCount} in progress.`;
+      ? "Your reading room is quiet. Import a document — a novel, a story, a textbook — and the AI companion adapts to you."
+      : `You have ${docs.length} ${docs.length === 1 ? "document" : "documents"} in your library. ${inProgressCount} in progress. Open one to meet your AI companion.`;
 
   return (
     <section className="noir-hero p-6 sm:p-10">
@@ -214,6 +226,20 @@ function GreetingHero({
           <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
             {subtext}
           </p>
+          <div className="flex flex-wrap gap-2 pt-1">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--noir-border)] bg-white/[0.03] px-3 py-1 text-xs text-muted-foreground">
+              <Sparkles className="h-3 w-3 text-[var(--noir-gold)]" />
+              Story Lover · for novel readers
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--noir-border)] bg-white/[0.03] px-3 py-1 text-xs text-muted-foreground">
+              <Sparkles className="h-3 w-3 text-[var(--noir-gold)]" />
+              Story Time · for children
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--noir-border)] bg-white/[0.03] px-3 py-1 text-xs text-muted-foreground">
+              <Sparkles className="h-3 w-3 text-[var(--noir-gold)]" />
+              Study Buddy · for students
+            </span>
+          </div>
         </div>
         <div className="shrink-0">
           {featuredDoc ? (
@@ -356,10 +382,11 @@ function EmptyLibraryCard() {
           Welcome to your reading room.
         </h3>
         <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
-          Lemniscate is a quiet, local-first library. Import a PDF, EPUB,
-          DOCX, Markdown or text file — it will be parsed into chapters,
-          indexed for search, and ready to read with focus mode and AI
-          assistance.
+          Lemniscate is a quiet, local-first library with an AI companion that
+          adapts to the reader you are today. Import a PDF, EPUB, DOCX,
+          Markdown or text file — then expand the story as a novel lover,
+          retell it warmly for a child, or turn it into study guides and
+          quizzes for students.
         </p>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-3">
