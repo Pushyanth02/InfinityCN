@@ -1,33 +1,66 @@
 import { NextResponse } from "next/server";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+import { safeErrorDetail } from "@/lib/safe-error";
+import type { NextRequest } from "next/server";
 
 export const runtime = "nodejs";
 
 /**
  * GET /api/health
  *
- * Lightweight health check endpoint for deployment platforms (Vercel,
- * Render, Supabase). Returns 200 with a JSON body if the server is
- * running and the database is reachable.
+ * Health check endpoint for deployment platforms. Checks:
+ *   - Database connectivity (Prisma query)
+ *   - AI provider availability (lazy SDK import check)
+ *
+ * Returns 200 if healthy, 503 if degraded. In production, error details
+ * are never exposed — only a generic "degraded" status.
  */
-export async function GET() {
-  try {
-    // Quick DB ping
-    const { db } = await import("@/lib/db");
-    await db.document.count();
-    return NextResponse.json({
-      status: "ok",
-      timestamp: new Date().toISOString(),
-      database: "connected",
-    });
-  } catch (err: any) {
+export async function GET(req: NextRequest) {
+  // Rate limit to prevent scraping.
+  const rl = checkRateLimit(req, RATE_LIMITS.read);
+  if (!rl.allowed) {
     return NextResponse.json(
-      {
-        status: "degraded",
-        timestamp: new Date().toISOString(),
-        database: "error",
-        error: err?.message ?? "Unknown database error",
-      },
-      { status: 503 },
+      { status: "degraded" },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } },
     );
   }
+
+  const checks: Record<string, string> = {};
+  let allOk = true;
+
+  // 1. Database check
+  try {
+    const { db } = await import("@/lib/db");
+    await db.document.count();
+    checks.database = "ok";
+  } catch {
+    checks.database = "error";
+    allOk = false;
+  }
+
+  // 2. AI provider check (just verify the SDK can be imported)
+  try {
+    await import("z-ai-web-dev-sdk");
+    checks.ai = "ok";
+  } catch {
+    checks.ai = "error";
+    allOk = false;
+  }
+
+  // 3. Storage check (database IS the storage for this app)
+  checks.storage = checks.database;
+
+  const status = allOk ? "ok" : "degraded";
+  const body: Record<string, unknown> = {
+    status,
+    timestamp: new Date().toISOString(),
+    ...checks,
+  };
+
+  // Only include error details in development.
+  const detail = safeErrorDetail(null);
+  if (detail) body.detail = detail;
+
+  return NextResponse.json(body, { status: allOk ? 200 : 503 });
 }
+

@@ -4,6 +4,7 @@ import { logActivity } from "@/lib/activity";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { isValidDocumentId } from "@/lib/security";
 import { buildExcerpt, aiComplete } from "@/lib/ai-helpers";
+import { safeErrorMessage } from "@/lib/safe-error";
 import type { ParsedDoc } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -141,7 +142,7 @@ Return ONLY the cleaned text, no commentary.`,
       where: { documentId },
       data: {
         status: "error",
-        error: err?.message ?? "Analysis failed",
+        error: safeErrorMessage(err, "Analysis failed"),
         updatedAt: new Date(),
       },
     });

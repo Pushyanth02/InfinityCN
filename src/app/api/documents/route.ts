@@ -5,6 +5,7 @@ import { CoreEngine } from "@/lib/engine/core-engine";
 import { logActivity } from "@/lib/activity";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { validateUploadedFile } from "@/lib/security";
+import { safeErrorMessage } from "@/lib/safe-error";
 
 export const runtime = "nodejs";
 
@@ -121,13 +122,14 @@ export async function POST(req: NextRequest) {
     try {
       result = await engine.ingest(buf, file.name, file.type);
     } catch (err: any) {
+      const msg = safeErrorMessage(err, "Parse failed");
       await db.document.update({
         where: { id: created.id },
-        data: { status: "error", error: err?.message ?? "Parse failed" },
+        data: { status: "error", error: msg },
       });
-      await logActivity({ type: "upload", documentId: created.id, detail: `error: ${err?.message}` });
+      await logActivity({ type: "upload", documentId: created.id, detail: `error: ${msg}` });
       return NextResponse.json(
-        { error: err?.message ?? "Parse failed", document: rowFromDoc({ ...created, coverGradient: gradient }) },
+        { error: msg, document: rowFromDoc({ ...created, coverGradient: gradient }) },
         { status: 200 },
       );
     }
@@ -162,6 +164,6 @@ export async function POST(req: NextRequest) {
       warnings,
     });
   } catch (err: any) {
-    return NextResponse.json({ error: err?.message ?? "Server error" }, { status: 500 });
+    return NextResponse.json({ error: safeErrorMessage(err, "Server error") }, { status: 500 });
   }
 }

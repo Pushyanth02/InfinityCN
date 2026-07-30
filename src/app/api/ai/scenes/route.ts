@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { logActivity } from "@/lib/activity";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { aiCompleteJson } from "@/lib/ai-helpers";
+import { scenesSchema, validate } from "@/lib/api-schemas";
 import type { ParsedDoc } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -37,9 +38,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { documentId, regenerate } = await req.json();
-  if (!documentId)
-    return NextResponse.json({ error: "documentId required" }, { status: 400 });
+  const body = await req.json();
+  const v = validate(scenesSchema, body);
+  if (!v.success)
+    return NextResponse.json({ error: v.error }, { status: 400 });
+  const { documentId, regenerate } = v.data;
 
   const doc = await db.document.findUnique({ where: { id: documentId } });
   if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404 });

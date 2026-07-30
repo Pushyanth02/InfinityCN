@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { logActivity } from "@/lib/activity";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
-import { isValidDocumentId } from "@/lib/security";
 import { buildExcerpt, aiComplete, aiCompleteJson } from "@/lib/ai-helpers";
+import { ouroSchema, validate } from "@/lib/api-schemas";
 import type { ParsedDoc } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -29,9 +29,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { documentId, tool = "chat", messages, chapterIndex } = await req.json();
-  if (!documentId || !isValidDocumentId(documentId))
-    return NextResponse.json({ error: "Valid documentId required" }, { status: 400 });
+  const body = await req.json();
+  const v = validate(ouroSchema, body);
+  if (!v.success)
+    return NextResponse.json({ error: v.error }, { status: 400 });
+  const { documentId, tool = "chat", messages, chapterIndex } = v.data;
 
   const doc = await db.document.findUnique({ where: { id: documentId } });
   if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404 });

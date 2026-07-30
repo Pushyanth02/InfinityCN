@@ -4,6 +4,7 @@ import { logActivity } from "@/lib/activity";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { isValidDocumentId } from "@/lib/security";
 import { buildExcerpt, aiComplete, estimateTokens, trackUsage } from "@/lib/ai-helpers";
+import { ankaaSchema, validate } from "@/lib/api-schemas";
 import type { ParsedDoc } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -54,9 +55,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { documentId, prompt, chapterIndex, wordTarget } = await req.json();
-  if (!prompt || typeof prompt !== "string" || prompt.trim().length < 3)
-    return NextResponse.json({ error: "A prompt is required" }, { status: 400 });
+  const body = await req.json();
+  const v = validate(ankaaSchema, body);
+  if (!v.success)
+    return NextResponse.json({ error: v.error }, { status: 400 });
+  const { documentId, prompt, chapterIndex, wordTarget } = v.data;
 
   // documentId is optional — Ankaa can write from the brief alone (blank canvas),
   // or ground itself in an existing document if one is provided.

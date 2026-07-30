@@ -15,6 +15,7 @@ import AnalyticsView from "@/components/dashboard/analytics-view";
 import HistoryView from "@/components/dashboard/history-view";
 import SearchView from "@/components/dashboard/search-view";
 import CreateView from "@/components/create/create-view";
+import { SectionErrorBoundary } from "@/components/ui/section-error-boundary";
 
 export default function Home() {
   const view = useNav((s) => s.view);
@@ -63,17 +64,39 @@ export default function Home() {
   return (
     <>
       <PageTransition trigger={view} />
-      {view === "landing" && <LandingPage />}
-      {view === "dashboard" && <DashboardView />}
-      {view === "library" && <LibraryView />}
-      {view === "upload" && <UploadView />}
-      {view === "reader" && <ReaderView />}
-      {view === "settings" && <SettingsView />}
-      {view === "account" && <AccountView />}
-      {view === "analytics" && <AnalyticsView />}
-      {view === "history" && <HistoryView />}
-      {view === "search" && <SearchView />}
-      {view === "create" && <CreateView />}
+      <SectionErrorBoundary label="landing">
+        {view === "landing" && <LandingPage />}
+      </SectionErrorBoundary>
+      <SectionErrorBoundary label="dashboard">
+        {view === "dashboard" && <DashboardView />}
+      </SectionErrorBoundary>
+      <SectionErrorBoundary label="library">
+        {view === "library" && <LibraryView />}
+      </SectionErrorBoundary>
+      <SectionErrorBoundary label="upload">
+        {view === "upload" && <UploadView />}
+      </SectionErrorBoundary>
+      <SectionErrorBoundary label="reader">
+        {view === "reader" && <ReaderView />}
+      </SectionErrorBoundary>
+      <SectionErrorBoundary label="settings">
+        {view === "settings" && <SettingsView />}
+      </SectionErrorBoundary>
+      <SectionErrorBoundary label="account">
+        {view === "account" && <AccountView />}
+      </SectionErrorBoundary>
+      <SectionErrorBoundary label="analytics">
+        {view === "analytics" && <AnalyticsView />}
+      </SectionErrorBoundary>
+      <SectionErrorBoundary label="history">
+        {view === "history" && <HistoryView />}
+      </SectionErrorBoundary>
+      <SectionErrorBoundary label="search">
+        {view === "search" && <SearchView />}
+      </SectionErrorBoundary>
+      <SectionErrorBoundary label="create">
+        {view === "create" && <CreateView />}
+      </SectionErrorBoundary>
     </>
   );
 }

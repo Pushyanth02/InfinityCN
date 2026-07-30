@@ -1,9 +1,17 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { gradientForId } from "@/lib/types";
 import { logActivity } from "@/lib/activity";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
+
+/**
+ * SEED ENDPOINT — DEVELOPMENT ONLY.
+ *
+ * This route is disabled in production. It seeds sample documents for local
+ * development and testing. In production, it returns 404.
+ */
 
 const SAMPLE_TITLE = "The Library of Liminal Hours";
 const SAMPLE_AUTHOR = "Ana Marquez";
@@ -99,7 +107,21 @@ She read.
 
 And the hours, pooled for a century in the corners of that quiet room, began at last to remember their shapes.`;
 
-export async function POST() {
+export async function POST(req: NextRequest) {
+  // Block in production — this endpoint is for development/testing only.
+  if (process.env.NODE_ENV === "production") {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  // Rate limit even in development to prevent accidental spam.
+  const rl = checkRateLimit(req, RATE_LIMITS.upload);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Rate limit exceeded" },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } },
+    );
+  }
+
   // Idempotent: if a doc with this title exists, return it.
   const existing = await db.document.findFirst({
     where: { title: SAMPLE_TITLE },

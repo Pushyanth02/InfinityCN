@@ -4,6 +4,8 @@ import { gradientForId } from "@/lib/types";
 import { CoreEngine } from "@/lib/engine/core-engine";
 import { logActivity } from "@/lib/activity";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+import { safeErrorMessage } from "@/lib/safe-error";
+import { createStorySchema, validate } from "@/lib/api-schemas";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -52,11 +54,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { title, content, author } = await req.json();
-  if (!title || typeof title !== "string" || !title.trim())
-    return NextResponse.json({ error: "A title is required" }, { status: 400 });
-  if (!content || typeof content !== "string" || content.trim().length < 10)
-    return NextResponse.json({ error: "Story content is too short" }, { status: 400 });
+  const body = await req.json();
+  const v = validate(createStorySchema, body);
+  if (!v.success)
+    return NextResponse.json({ error: v.error }, { status: 400 });
+  const { title, content, author } = v.data;
 
   // Normalize the story into a Markdown buffer the engine can parse.
   const md = `# ${title.trim()}\n\n${content.trim()}\n`;
@@ -82,12 +84,13 @@ export async function POST(req: NextRequest) {
   try {
     result = await engine.ingest(buf, `${title.trim()}.md`, "text/markdown");
   } catch (err: any) {
+    const msg = safeErrorMessage(err, "Parse failed");
     await db.document.update({
       where: { id: created.id },
-      data: { status: "error", error: err?.message ?? "Parse failed" },
+      data: { status: "error", error: msg },
     });
     return NextResponse.json(
-      { error: err?.message ?? "Parse failed", document: rowFromDoc({ ...created, coverGradient: gradient }) },
+      { error: msg, document: rowFromDoc({ ...created, coverGradient: gradient }) },
       { status: 200 },
     );
   }
