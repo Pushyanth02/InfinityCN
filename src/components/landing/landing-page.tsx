@@ -447,8 +447,8 @@ function Hero({ go }: { go: GoFn }) {
 
         <Reveal delay={80}>
           <h1 className="ld-display mt-6 text-5xl text-balance sm:text-6xl lg:text-7xl">
-            Turn any document into an{" "}
-            <span className="text-gradient-purple">interactive story</span>.
+            Meet <span className="text-gradient-purple">Luma</span>, your cosmic
+            reading companion.
           </h1>
         </Reveal>
 
@@ -457,10 +457,10 @@ function Hero({ go }: { go: GoFn }) {
             className="mx-auto mt-6 max-w-2xl text-base text-balance sm:text-lg"
             style={{ color: "var(--ld-ink-dim)" }}
           >
-            Upload a PDF, EPUB, DOCX, or Markdown file. Lemniscate parses it
-            into chapters — then an AI companion adapts to you: expand the
-            story for novel lovers, retell it warmly for children, or turn it
-            into study guides and quizzes for students.
+            Upload a PDF, EPUB, DOCX, or Markdown file — or write your own.
+            Luma adapts to the reader you are: a Story Lover expanding a novel,
+            a gentle voice retelling for children, or a patient tutor building
+            study guides and quizzes. Chat freely, or tap a suggestion.
           </p>
         </Reveal>
 

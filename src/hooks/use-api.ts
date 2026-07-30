@@ -526,3 +526,54 @@ export async function imaginePicture(documentId: string): Promise<{ prompts: str
     }),
   );
 }
+
+// ── Luma — the conversational companion ─────────────────────────────────────
+
+export type LumaMode = "story" | "kids" | "study";
+
+/** Chat with Luma — grounded in the open document, persona shifts per mode. */
+export async function lumaChat(
+  documentId: string,
+  mode: LumaMode,
+  messages: { role: "user" | "assistant"; content: string }[],
+  chapterIndex?: number,
+): Promise<{ reply: string }> {
+  return json(
+    await fetch("/api/ai/luma", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ documentId, mode, messages, chapterIndex }),
+    }),
+  );
+}
+
+/** Co-write a story in the Create view — Luma continues from the draft. */
+export async function lumaCreateContinue(
+  draft: string,
+  prompt: string,
+): Promise<{ continuation: string }> {
+  return json(
+    await fetch("/api/ai/luma-create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ draft, prompt }),
+    }),
+  );
+}
+
+// ── Create a story ──────────────────────────────────────────────────────────
+
+/** Create a new library document from raw authored text. */
+export async function createStory(
+  title: string,
+  content: string,
+  author?: string,
+): Promise<{ document: DocumentRow | null; error: string | null }> {
+  const res = await fetch("/api/stories", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title, content, author }),
+  });
+  const data = await res.json();
+  return { document: data.document ?? null, error: data.error ?? null };
+}

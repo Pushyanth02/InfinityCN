@@ -16,6 +16,7 @@ import AccountView from "@/components/account/account-view";
 import AnalyticsView from "@/components/dashboard/analytics-view";
 import HistoryView from "@/components/dashboard/history-view";
 import SearchView from "@/components/dashboard/search-view";
+import CreateView from "@/components/create/create-view";
 
 export default function Home() {
   const view = useNav((s) => s.view);
@@ -37,11 +38,11 @@ export default function Home() {
     if (typeof document === "undefined") return;
     const body = document.body;
     // Noir & Gold views always use a dark body background
-    const noirViews = ["dashboard", "library", "upload", "settings", "account", "analytics", "history", "search"];
+    const noirViews = ["dashboard", "library", "upload", "settings", "account", "analytics", "history", "search", "create"];
     if (view === "landing") {
       body.style.backgroundColor = "#0D0E12";
     } else if (noirViews.includes(view)) {
-      body.style.backgroundColor = "#0d0d0d";
+      body.style.backgroundColor = "#070713";
     } else {
       // Reader: let the theme/scope handle the background
       body.style.backgroundColor = "";
@@ -76,6 +77,7 @@ export default function Home() {
       {view === "analytics" && <AnalyticsView />}
       {view === "history" && <HistoryView />}
       {view === "search" && <SearchView />}
+      {view === "create" && <CreateView />}
     </>
   );
 }

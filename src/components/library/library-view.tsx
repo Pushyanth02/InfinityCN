@@ -57,6 +57,7 @@ import {
   LayoutList,
   Loader2,
   MoreHorizontal,
+  PenLine,
   Search,
   Trash2,
   Upload as UploadIcon,
@@ -268,14 +269,25 @@ export default function LibraryView() {
               Organize, filter, and read documents stored on this device.
             </p>
           </div>
-          <Button
-            type="button"
-            onClick={() => go("upload")}
-            className="noir-btn-gold shrink-0 rounded-full px-4 text-sm font-semibold"
-          >
-            <UploadIcon className="size-4" />
-            Import
-          </Button>
+          <div className="flex shrink-0 items-center gap-2">
+            <Button
+              type="button"
+              onClick={() => go("create")}
+              variant="outline"
+              className="rounded-full px-4 text-sm font-semibold"
+            >
+              <PenLine className="size-4" />
+              Create a story
+            </Button>
+            <Button
+              type="button"
+              onClick={() => go("upload")}
+              className="noir-btn-gold shrink-0 rounded-full px-4 text-sm font-semibold"
+            >
+              <UploadIcon className="size-4" />
+              Import
+            </Button>
+          </div>
         </header>
 
         {/* Toolbar */}

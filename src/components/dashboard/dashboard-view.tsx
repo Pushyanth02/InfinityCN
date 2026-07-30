@@ -212,12 +212,15 @@ function GreetingHero({
 
   const subtext =
     docs.length === 0
-      ? "Your reading room is quiet. Import a document — a novel, a story, a textbook — and the AI companion adapts to you."
-      : `You have ${docs.length} ${docs.length === 1 ? "document" : "documents"} in your library. ${inProgressCount} in progress. Open one to meet your AI companion.`;
+      ? "Your reading room is quiet under the stars. Import a document — or write your own — and Luma will meet you there."
+      : `You have ${docs.length} ${docs.length === 1 ? "document" : "documents"} in your library. ${inProgressCount} in progress. Open one to chat with Luma.`;
 
   return (
-    <section className="noir-hero p-6 sm:p-10">
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+    <section className="noir-hero relative overflow-hidden p-6 sm:p-10">
+      {/* Cosmic backdrop */}
+      <div aria-hidden className="pointer-events-none absolute inset-0" style={{ background: "radial-gradient(60% 80% at 85% 0%, rgba(124, 58, 237, 0.18), transparent 60%), radial-gradient(50% 60% at 10% 100%, rgba(240, 198, 116, 0.08), transparent 55%)" }} />
+      <div aria-hidden className="pointer-events-none absolute inset-0" style={{ backgroundImage: "radial-gradient(1px 1px at 20% 30%, rgba(255,255,255,0.7), transparent), radial-gradient(1px 1px at 70% 60%, rgba(196,181,253,0.6), transparent), radial-gradient(1.5px 1.5px at 40% 80%, rgba(255,255,255,0.5), transparent), radial-gradient(1px 1px at 90% 20%, rgba(240,198,116,0.6), transparent), radial-gradient(1px 1px at 55% 15%, rgba(255,255,255,0.4), transparent)", backgroundSize: "320px 320px", opacity: 0.5 }} />
+      <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
         <div className="max-w-2xl space-y-3">
           <p className="noir-eyebrow">{todayLabel()}</p>
           <h1 className="noir-display text-4xl sm:text-5xl lg:text-6xl">
@@ -229,19 +232,23 @@ function GreetingHero({
           <div className="flex flex-wrap gap-2 pt-1">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--noir-border)] bg-white/[0.03] px-3 py-1 text-xs text-muted-foreground">
               <Sparkles className="h-3 w-3 text-[var(--noir-gold)]" />
-              Story Lover · for novel readers
+              Luma · Story Lover
             </span>
             <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--noir-border)] bg-white/[0.03] px-3 py-1 text-xs text-muted-foreground">
               <Sparkles className="h-3 w-3 text-[var(--noir-gold)]" />
-              Story Time · for children
+              Luma · Story Time
             </span>
             <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--noir-border)] bg-white/[0.03] px-3 py-1 text-xs text-muted-foreground">
               <Sparkles className="h-3 w-3 text-[var(--noir-gold)]" />
-              Study Buddy · for students
+              Luma · Study Buddy
             </span>
           </div>
         </div>
-        <div className="shrink-0">
+        <div className="flex shrink-0 items-center gap-2">
+          <GhostButton onClick={() => go("create")}>
+            <Sparkles className="h-4 w-4" />
+            Create a story
+          </GhostButton>
           {featuredDoc ? (
             <GoldButton
               onClick={() => go("reader", { documentId: featuredDoc.id })}

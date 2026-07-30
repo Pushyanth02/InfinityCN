@@ -596,6 +596,157 @@ html[data-motion="reduced"] .shine-on-hover::before {
   margin: 1rem 0;
 }
 
+/* ========================================================================== */
+/*  Luma cosmic scope — deep space + warm gold, glassmorphism + starfield      */
+/*  Applied via .luma-cosmic wrapper. Independent of user theme (always dark). */
+/* ========================================================================== */
+.luma-cosmic {
+  --luma-bg: #070713;
+  --luma-bg-2: #0b0b1f;
+  --luma-surface: rgba(20, 22, 48, 0.55);
+  --luma-surface-2: rgba(28, 30, 64, 0.7);
+  --luma-border: rgba(168, 139, 250, 0.18);
+  --luma-border-strong: rgba(168, 139, 250, 0.32);
+  --luma-violet: #a78bfa;
+  --luma-violet-bright: #c4b5fd;
+  --luma-violet-deep: #7c3aed;
+  --luma-gold: #f0c674;
+  --luma-gold-soft: #f5d99a;
+  --luma-ink: #e8ecff;
+  --luma-ink-dim: rgba(232, 236, 255, 0.74);
+  --luma-ink-mute: rgba(232, 236, 255, 0.5);
+  --luma-ink-faint: rgba(232, 236, 255, 0.3);
+  --luma-glow: rgba(167, 139, 250, 0.45);
+  background: var(--luma-bg);
+  color: var(--luma-ink);
+  color-scheme: dark;
+}
+.luma-cosmic .luma-glass {
+  background: var(--luma-surface);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  border: 1px solid var(--luma-border);
+}
+.luma-cosmic .luma-glass-strong {
+  background: var(--luma-surface-2);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid var(--luma-border-strong);
+}
+.luma-cosmic .luma-gold-text { color: var(--luma-gold); }
+.luma-cosmic .luma-violet-text { color: var(--luma-violet-bright); }
+.luma-cosmic .luma-ink-dim { color: var(--luma-ink-dim); }
+.luma-cosmic .luma-ink-mute { color: var(--luma-ink-mute); }
+
+/* Cosmic nebula glow behind content */
+.luma-cosmic .luma-nebula {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(50% 50% at 18% 22%, rgba(124, 58, 237, 0.22), transparent 70%),
+    radial-gradient(45% 45% at 82% 18%, rgba(167, 139, 250, 0.16), transparent 70%),
+    radial-gradient(55% 55% at 50% 88%, rgba(240, 198, 116, 0.08), transparent 70%);
+  filter: blur(36px);
+}
+
+/* CSS starfield — lightweight, no WebGL. Three layers for parallax depth. */
+.luma-cosmic .luma-stars {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.luma-cosmic .luma-stars::before,
+.luma-cosmic .luma-stars::after {
+  content: "";
+  position: absolute;
+  inset: -50%;
+  background-image:
+    radial-gradient(1px 1px at 20px 30px, rgba(255,255,255,0.9), transparent),
+    radial-gradient(1px 1px at 120px 80px, rgba(255,255,255,0.6), transparent),
+    radial-gradient(1.5px 1.5px at 200px 150px, rgba(196,181,253,0.8), transparent),
+    radial-gradient(1px 1px at 300px 50px, rgba(255,255,255,0.5), transparent),
+    radial-gradient(1px 1px at 380px 220px, rgba(240,198,116,0.7), transparent),
+    radial-gradient(1px 1px at 80px 260px, rgba(255,255,255,0.6), transparent),
+    radial-gradient(1.5px 1.5px at 260px 320px, rgba(255,255,255,0.85), transparent),
+    radial-gradient(1px 1px at 160px 380px, rgba(196,181,253,0.5), transparent),
+    radial-gradient(1px 1px at 340px 300px, rgba(255,255,255,0.7), transparent);
+  background-size: 420px 420px;
+  animation: luma-twinkle 6s ease-in-out infinite alternate;
+}
+.luma-cosmic .luma-stars::after {
+  background-size: 520px 520px;
+  opacity: 0.6;
+  animation-duration: 9s;
+  animation-delay: -3s;
+}
+@keyframes luma-twinkle {
+  0%   { opacity: 0.5; transform: translateY(0); }
+  100% { opacity: 1;   transform: translateY(-6px); }
+}
+
+/* Luma chat bubbles */
+.luma-cosmic .luma-bubble-user {
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.28), rgba(167, 139, 250, 0.18));
+  border: 1px solid var(--luma-border);
+  color: var(--luma-ink);
+}
+.luma-cosmic .luma-bubble-luma {
+  background: var(--luma-surface);
+  border: 1px solid var(--luma-border);
+  color: var(--luma-ink);
+}
+.luma-cosmic .luma-chip {
+  background: rgba(167, 139, 250, 0.1);
+  border: 1px solid var(--luma-border);
+  color: var(--luma-violet-bright);
+  transition: all 160ms ease;
+}
+.luma-cosmic .luma-chip:hover {
+  background: rgba(167, 139, 250, 0.2);
+  border-color: var(--luma-border-strong);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px -4px var(--luma-glow);
+}
+.luma-cosmic .luma-input {
+  background: rgba(10, 10, 24, 0.6);
+  border: 1px solid var(--luma-border);
+  color: var(--luma-ink);
+}
+.luma-cosmic .luma-input:focus {
+  border-color: var(--luma-violet);
+  box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.18);
+}
+.luma-cosmic .luma-btn-gold {
+  background: linear-gradient(180deg, var(--luma-gold-soft), var(--luma-gold));
+  color: #1a1208;
+  border: 1px solid rgba(240, 198, 116, 0.5);
+  box-shadow: 0 6px 18px -6px rgba(240, 198, 116, 0.5);
+}
+.luma-cosmic .luma-btn-gold:hover { filter: brightness(1.06); }
+.luma-cosmic .luma-btn-ghost {
+  background: transparent;
+  color: var(--luma-ink-dim);
+  border: 1px solid var(--luma-border);
+}
+.luma-cosmic .luma-btn-ghost:hover {
+  color: var(--luma-ink);
+  border-color: var(--luma-border-strong);
+  background: rgba(167, 139, 250, 0.08);
+}
+
+/* Soft pulsing orb used as Luma's avatar */
+.luma-cosmic .luma-orb {
+  background: radial-gradient(circle at 35% 30%, var(--luma-violet-bright), var(--luma-violet-deep) 60%, transparent 75%);
+  box-shadow: 0 0 18px -2px var(--luma-glow), inset 0 0 8px rgba(255,255,255,0.2);
+  animation: luma-pulse 3s ease-in-out infinite;
+}
+@keyframes luma-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.9; }
+  50%      { transform: scale(1.08); opacity: 1; }
+}
+
 /* ---------- Reader: focus mode, adaptive typography ---------- */
 /* Focus mode dims non-active chunks and highlights the active one with a
    smooth, buttery transition. The active chunk gets a subtle left-edge

@@ -107,3 +107,41 @@ Stage Summary:
 - "##" formatting fixed everywhere: AiMarkdown renders AI responses as proper markdown (headings, bold, lists); parse.ts strips markdown heading markers from reader article chunks. Verified 0 literal "##" in both AI panel and reader article.
 - Landing/Dashboard/Settings all updated to reflect the 3-audience positioning with new copy, feature cards, FAQ, and activity labels.
 - Lint clean, zero console errors, all AI routes return 200, server healthy on port 3000.
+
+---
+Task ID: luma-rebrand-1
+Agent: orchestrator (Z.ai Code)
+Task: Rebrand AI companion as "Luma" (chatbot), merge all tools into chat, scenes on reader screen, custom story creation, cosmic aesthetic across landing/dashboard/reader.
+
+Work Log:
+- **Luma conversational API** (src/app/api/ai/luma/route.ts): grounded chat with 3 mode personas (Story Lover/Story Time/Study Buddy), takes chat history + chapter context, returns a reply. Logs ai_luma_chat activity.
+- **Luma co-writer API** (src/app/api/ai/luma-create/route.ts): continues a user's story draft in the Create view.
+- **Stories API** (src/app/api/stories/route.ts): creates a library document from raw authored text via the CoreEngine (title + content → parsed into chapters, fully readable).
+- **use-api.ts**: added lumaChat(), lumaCreateContinue(), createStory(), LumaMode type.
+- **LumaChat component** (src/components/reader/luma-chat.tsx): a self-contained chatbot UI replacing the tabbed AI panel. Features: message list with user/Luma bubbles (Luma rendered via AiMarkdown), mode dropdown (Story Lover/Story Time/Study Buddy), context-aware suggestion chips per mode that dispatch to existing tools (Continue/Ending/World/Characters/Themes/Criticism/Scenes for story; Retell/Meet/WhatIf/Imagine for kids; StudyGuide/Vocab/Quiz/Explain/Summary for study), free-text input → lumaChat API, auto-greeting on open, auto-scroll, scene-card rendering inline. This merges ALL tools into the chat.
+- **Reader AI panel replaced**: deleted ~950 lines of tabbed AI panel + 283 lines of dead handlers/state from reader-view.tsx; replaced with <LumaChat /> mounted inside the Sheet. Header button rebranded "AI panel" → "Open Luma". SheetTitle → "Luma" (sr-only header).
+- **Scenes reader overlay**: new "View as scenes" toggle button (Film icon) in the reader header. When active, replaces the article with cinematized scene cards rendered on the reading screen (with Regenerate button). Reuses /api/ai/scenes. Empty state nudges to Luma's "Cinematize scenes" chip.
+- **Create view** (src/components/create/create-view.tsx): dedicated writing page with cosmic backdrop. Title input + body textarea + Luma co-writer sidebar (instruction input + "Continue the story" button + 6 story starters). "Save & read" runs the story through the CoreEngine and opens it in the reader. Added "create" to ViewName + page.tsx routing.
+- **Library "Create a story" button**: added next to Import in the library header; also added to the dashboard hero as a GhostButton.
+- **Cosmic aesthetic** (globals.css .luma-cosmic scope): deep space (#070713) + violet (#a78bfa) + warm gold (#f0c674). Glassmorphism (.luma-glass/.luma-glass-strong), CSS starfield (.luma-stars, two twinkling layers), nebula glow (.luma-nebula), chat bubbles, chips, inputs, gold/ghost buttons, pulsing Luma orb avatar. Applied to: Luma chat panel, Create view, dashboard hero (starfield + nebula radial gradients).
+- **Landing rebrand**: hero headline → "Meet Luma, your cosmic reading companion."; subheadline rewritten to mention Luma's 3 modes + "chat freely, or tap a suggestion".
+- **Dashboard rebrand**: greeting subtext mentions Luma; AI-modes chips relabeled "Luma · Story Lover/Story Time/Study Buddy"; cosmic starfield+nebula backdrop added to the hero; "Create a story" GhostButton added.
+- **Verification (Agent Browser)**:
+  * Landing: hero reads "Meet Luma, your cosmic reading companion."
+  * Dashboard: cosmic hero, "Create a story" button present, Luma mode chips.
+  * Library: "Create a story" button next to Import.
+  * Create view: title/body inputs, Luma sidebar with 6 starters; story starter populates title+body; Luma co-writing works (POST /api/ai/luma-create 200 in 5s, body extended with AI prose).
+  * Reader: header shows Chapter index / View as scenes / Open Luma.
+  * Luma chat: greeting message grounded in the open chapter ("that third bell... something green and patient"); mode dropdown switches chips (Story Lover→8 chips, Story Time→4 kids chips, Study Buddy→5 study chips).
+  * Cinematize scenes chip: POST /api/ai/scenes 200, 6 scene cards rendered inline in chat with markdown bodies.
+  * Scenes overlay: "View as scenes" toggle replaces article with 6 scene cards on the reader screen; Regenerate button works.
+  * Console errors: ZERO throughout. dev.log error count: 0.
+  * `bun run lint`: clean.
+
+Stage Summary:
+- AI companion rebranded as **Luma** — a conversational chatbot with a mode dropdown (Story Lover/Story Time/Study Buddy) and context-aware suggestion chips that merge ALL existing tools into the chat. Free-text goes to a grounded /api/ai/luma route.
+- **Scenes on reader screen**: a header toggle (Film icon) overlays cinematized scene cards on the reading screen, with regenerate.
+- **Custom story creation**: new "create" view with a writing canvas + Luma co-writer sidebar; saves to the library via the CoreEngine; "Create a story" buttons in library + dashboard.
+- **Cosmic aesthetic**: new .luma-cosmic CSS scope (deep space + violet + gold, glassmorphism, CSS starfield, nebula glow, pulsing orb avatar) applied to Luma panel, Create view, and dashboard hero.
+- 3 new API routes (luma, luma-create, stories), 1 new component (luma-chat), 1 new view (create), ~1200 lines of dead code removed from reader-view.tsx.
+- Lint clean, zero console errors, all routes 200, server healthy on port 3000.

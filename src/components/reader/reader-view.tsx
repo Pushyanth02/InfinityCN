@@ -71,6 +71,7 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Slider } from "@/components/ui/slider";
 import { AiMarkdown } from "@/components/ui/ai-markdown";
+import { LumaChat } from "@/components/reader/luma-chat";
 import {
   Select,
   SelectContent,
@@ -461,80 +462,12 @@ export default function ReaderView() {
   const [chapterSheetOpen, setChapterSheetOpen] = useState(false);
   const [settingsSheetOpen, setSettingsSheetOpen] = useState(false);
   const [aiSheetOpen, setAiSheetOpen] = useState(false);
-  const [aiMode, setAiMode] = useState<AiMode>("story");
-  const [aiTab, setAiTab] = useState<ToolTabKey>("summary");
+  const [scenesView, setScenesView] = useState(false);
+  const [scenesData, setScenesData] = useState<AiScene[] | null>(null);
+  const [scenesLoading, setScenesLoading] = useState(false);
 
   const [bookmarks, setBookmarks] = useState<Set<string>>(new Set());
   const [sessionMarkedRead, setSessionMarkedRead] = useState(false);
-
-  // --- Summary state (chapter + novel) ---
-  const [summaryScope, setSummaryScope] = useState<SummaryScope>("chapter");
-  const [summaryChapterIndex, setSummaryChapterIndex] = useState(0);
-  const [chapterSummaries, setChapterSummaries] = useState<
-    Record<number, CachedChapterSummary>
-  >({});
-  const [chapterSummaryLoading, setChapterSummaryLoading] = useState<
-    number | null
-  >(null);
-  const [novelSummary, setNovelSummary] = useState<string | null>(null);
-  const [novelSummaryLoading, setNovelSummaryLoading] = useState(false);
-
-  // --- Q&A state ---
-  const [qaList, setQaList] = useState<QaItem[]>([]);
-  const [qaLoading, setQaLoading] = useState(false);
-  const [qaInput, setQaInput] = useState("");
-  const qaIdRef = useRef(0);
-
-  // --- Scenes state (cinematic scenes, cached server-side) ---
-  const [scenes, setScenes] = useState<AiScene[] | null>(null);
-  const [scenesFetched, setScenesFetched] = useState(false);
-  const [scenesLoading, setScenesLoading] = useState(false);
-
-  // --- Analysis cache for literary tools (characters, themes, criticism) ---
-  const [analysisCache, setAnalysisCache] = useState<
-    Record<AnalysisTabKey, string | null>
-  >({
-    characters: null,
-    criticism: null,
-    themes: null,
-  });
-  const [analysisLoading, setAnalysisLoading] = useState<AnalysisTabKey | null>(
-    null,
-  );
-
-  // --- Creative tool caches (Story Lover mode) ---
-  const [continueResult, setContinueResult] = useState<string | null>(null);
-  const [continueLoading, setContinueLoading] = useState(false);
-  const [endingResult, setEndingResult] = useState<string | null>(null);
-  const [endingLoading, setEndingLoading] = useState(false);
-  const [endingTwist, setEndingTwist] = useState("");
-  const [worldResult, setWorldResult] = useState<string | null>(null);
-  const [worldLoading, setWorldLoading] = useState(false);
-
-  // --- Story Time (kids) caches ---
-  const [retellResult, setRetellResult] = useState<string | null>(null);
-  const [retellLoading, setRetellLoading] = useState(false);
-  const [retellScope, setRetellScope] = useState<SummaryScope>("chapter");
-  const [meetResult, setMeetResult] = useState<string | null>(null);
-  const [meetLoading, setMeetLoading] = useState(false);
-  const [whatifResult, setWhatifResult] = useState<string | null>(null);
-  const [whatifLoading, setWhatifLoading] = useState(false);
-  const [imagineResult, setImagineResult] = useState<string | null>(null);
-  const [imagineLoading, setImagineLoading] = useState(false);
-
-  // --- Study Buddy caches ---
-  const [guideResult, setGuideResult] = useState<string | null>(null);
-  const [guideLoading, setGuideLoading] = useState(false);
-  const [guideScope, setGuideScope] = useState<SummaryScope>("chapter");
-  const [vocabResult, setVocabResult] = useState<string | null>(null);
-  const [vocabLoading, setVocabLoading] = useState(false);
-  const [vocabScope, setVocabScope] = useState<SummaryScope>("chapter");
-  const [quizState, setQuizState] = useState<QuizState | null>(null);
-  const [quizLoading, setQuizLoading] = useState(false);
-  const [quizScope, setQuizScope] = useState<SummaryScope>("chapter");
-  const [explainResult, setExplainResult] = useState<string | null>(null);
-  const [explainLoading, setExplainLoading] = useState(false);
-  const [explainScope, setExplainScope] = useState<SummaryScope>("chapter");
 
   // --- Per-chapter OCR refinement state ---
   const [refining, setRefining] = useState(false);
@@ -603,46 +536,6 @@ export default function ReaderView() {
     setActiveChunkIndex(Math.max(0, chunkIdx));
     // Only on doc open — subsequent changes come from navigation.
   }, [doc?.id]);
-
-  /* ---------- pre-seed novel summary from doc.summary ---------- */
-  useEffect(() => {
-    if (
-      aiSheetOpen &&
-      aiTab === "summary" &&
-      doc?.summary &&
-      novelSummary === null
-    ) {
-      setNovelSummary(doc.summary);
-    }
-  }, [aiSheetOpen, aiTab, doc?.summary, novelSummary]);
-
-  /* ---------- auto-load cached scenes when scenes tab opens ---------- */
-  // fetchScenes(documentId, false) returns cached scenes if they exist, or an
-  // empty array if not. We auto-load on first open of the Scenes tab so any
-  // previously-generated cinematic scenes show up immediately.
-  useEffect(() => {
-    if (!aiSheetOpen || aiTab !== "scenes" || !documentId) return;
-    if (scenesFetched || scenes) return;
-    let cancelled = false;
-    setScenesLoading(true);
-    fetchScenes(documentId, false)
-      .then((r) => {
-        if (cancelled) return;
-        setScenes(r.scenes);
-        setScenesFetched(true);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setScenes([]);
-        setScenesFetched(true);
-      })
-      .finally(() => {
-        if (!cancelled) setScenesLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [aiSheetOpen, aiTab, scenesFetched, scenes, documentId]);
 
   // Clear refining state when chapter changes (the previous chapter's
   // refinement job is abandoned — its result will be ignored via the abort ref)
@@ -860,294 +753,42 @@ export default function ReaderView() {
     return () => window.removeEventListener("keydown", onKey);
   }, [nextChunk, prevChunk, settings.focusMode, update]);
 
-  /* ---------- open AI panel: default summary chapter to current ---------- */
+  /* ---------- open Luma panel ---------- */
   const openAiPanel = useCallback(() => {
-    setSummaryChapterIndex(currentChapterIndex);
     setAiSheetOpen(true);
-  }, [currentChapterIndex]);
+  }, []);
 
-  /* ---------- AI handlers ---------- */
-  const handleGenerateChapterSummary = useCallback(
-    async (chapterIndex: number, regenerate: boolean) => {
-      if (!documentId) return;
-      setChapterSummaryLoading(chapterIndex);
-      try {
-        const { summary, chapterTitle } = await generateChapterSummary(
-          documentId,
-          chapterIndex,
-          regenerate,
-        );
-        setChapterSummaries((prev) => ({
-          ...prev,
-          [chapterIndex]: { summary, chapterTitle },
-        }));
-        toast.success(
-          regenerate ? "Chapter summary regenerated" : "Chapter summary generated",
-        );
-      } catch (e) {
-        toast.error(
-          e instanceof Error ? e.message : "Failed to generate chapter summary",
-        );
-      } finally {
-        setChapterSummaryLoading(null);
-      }
-    },
-    [documentId],
-  );
-
-  const handleGenerateNovelSummary = useCallback(
-    async (regenerate: boolean) => {
-      if (!documentId) return;
-      setNovelSummaryLoading(true);
-      try {
-        const { summary } = await generateSummary(documentId, regenerate);
-        setNovelSummary(summary);
-        setDoc((d) => (d ? { ...d, summary } : d));
-        toast.success(
-          regenerate ? "Novel summary regenerated" : "Novel summary generated",
-        );
-      } catch (e) {
-        toast.error(
-          e instanceof Error ? e.message : "Failed to generate novel summary",
-        );
-      } finally {
-        setNovelSummaryLoading(false);
-      }
-    },
-    [documentId, setDoc],
-  );
-
-  const handleAsk = useCallback(async () => {
-    if (!documentId || !qaInput.trim() || qaLoading) return;
-    const question = qaInput.trim();
-    setQaInput("");
-    setQaLoading(true);
-    const id = ++qaIdRef.current;
-    try {
-      const { answer, citations } = await askQuestion(documentId, question);
-      setQaList((list) => [{ id, question, answer, citations }, ...list]);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to answer");
-    } finally {
-      setQaLoading(false);
-    }
-  }, [documentId, qaInput, qaLoading]);
-
-  const handleFetchScenes = useCallback(
-    async (regenerate: boolean) => {
-      if (!documentId) return;
+  /* ---------- scenes overlay: fetch + toggle ---------- */
+  const toggleScenesView = useCallback(async () => {
+    if (!documentId) return;
+    // If turning on and we have no data yet, fetch first.
+    if (!scenesView && !scenesData && !scenesLoading) {
       setScenesLoading(true);
       try {
-        const { scenes: fetched } = await fetchScenes(documentId, regenerate);
-        setScenes(fetched);
-        setScenesFetched(true);
-        toast.success(regenerate ? "Scenes regenerated" : "Scenes generated");
-      } catch (e) {
-        toast.error(
-          e instanceof Error ? e.message : "Failed to generate scenes",
-        );
+        const { scenes } = await fetchScenes(documentId, false);
+        setScenesData(scenes);
+      } catch {
+        toast.error("Couldn't load scenes. Try asking Luma to cinematize.");
       } finally {
         setScenesLoading(false);
       }
-    },
-    [documentId],
-  );
-
-  // Generic analysis handler for the literary analysis tabs (Characters,
-  // Criticism, Themes). Caches the result so switching tabs and coming back
-  // doesn't lose the analysis.
-  const handleAnalysis = useCallback(
-    async (tab: AnalysisTabKey, fn: () => Promise<{ analysis: string }>) => {
-      if (!documentId) return;
-      setAnalysisLoading(tab);
-      try {
-        const result = await fn();
-        setAnalysisCache((prev) => ({ ...prev, [tab]: result.analysis }));
-      } catch {
-        /* ignore — best-effort, non-blocking */
-      } finally {
-        setAnalysisLoading(null);
-      }
-    },
-    [documentId],
-  );
-
-  /* ---------- Creative tool handlers (Story Lover) ---------- */
-  const handleContinueStory = useCallback(async () => {
-    if (!documentId) return;
-    setContinueLoading(true);
-    try {
-      const { continuation } = await continueStory(documentId, summaryChapterIndex);
-      setContinueResult(continuation);
-      toast.success("Continuation written");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to continue the story");
-    } finally {
-      setContinueLoading(false);
     }
-  }, [documentId, summaryChapterIndex]);
+    setScenesView((v) => !v);
+  }, [documentId, scenesView, scenesData, scenesLoading]);
 
-  const handleAlternateEnding = useCallback(async () => {
+  const regenerateScenes = useCallback(async () => {
     if (!documentId) return;
-    setEndingLoading(true);
+    setScenesLoading(true);
     try {
-      const { ending } = await alternateEnding(documentId, endingTwist);
-      setEndingResult(ending);
-      toast.success("Alternate ending written");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to write an alternate ending");
+      const { scenes } = await fetchScenes(documentId, true);
+      setScenesData(scenes);
+      toast.success("Scenes regenerated");
+    } catch {
+      toast.error("Couldn't regenerate scenes.");
     } finally {
-      setEndingLoading(false);
-    }
-  }, [documentId, endingTwist]);
-
-  const handleWorldLore = useCallback(async () => {
-    if (!documentId) return;
-    setWorldLoading(true);
-    try {
-      const { lore } = await worldLore(documentId);
-      setWorldResult(lore);
-      toast.success("World & lore expanded");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to expand the world");
-    } finally {
-      setWorldLoading(false);
+      setScenesLoading(false);
     }
   }, [documentId]);
-
-  /* ---------- Story Time handlers (kids) ---------- */
-  const handleRetell = useCallback(async () => {
-    if (!documentId) return;
-    setRetellLoading(true);
-    try {
-      const { story } = await retellForKids(
-        documentId,
-        retellScope === "chapter" ? summaryChapterIndex : undefined,
-      );
-      setRetellResult(story);
-      toast.success("Story retold for kids");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to retell the story");
-    } finally {
-      setRetellLoading(false);
-    }
-  }, [documentId, retellScope, summaryChapterIndex]);
-
-  const handleMeet = useCallback(async () => {
-    if (!documentId) return;
-    setMeetLoading(true);
-    try {
-      const { intro } = await meetCharacters(documentId);
-      setMeetResult(intro);
-      toast.success("Characters introduced");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to introduce characters");
-    } finally {
-      setMeetLoading(false);
-    }
-  }, [documentId]);
-
-  const handleWhatIf = useCallback(async () => {
-    if (!documentId) return;
-    setWhatifLoading(true);
-    try {
-      const { scenarios } = await whatIf(documentId);
-      setWhatifResult(scenarios);
-      toast.success("What-if scenarios ready");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to invent scenarios");
-    } finally {
-      setWhatifLoading(false);
-    }
-  }, [documentId]);
-
-  const handleImagine = useCallback(async () => {
-    if (!documentId) return;
-    setImagineLoading(true);
-    try {
-      const { prompts } = await imaginePicture(documentId);
-      setImagineResult(prompts);
-      toast.success("Picture prompts ready");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to imagine the picture");
-    } finally {
-      setImagineLoading(false);
-    }
-  }, [documentId]);
-
-  /* ---------- Study Buddy handlers ---------- */
-  const handleStudyGuide = useCallback(async () => {
-    if (!documentId) return;
-    setGuideLoading(true);
-    try {
-      const { guide } = await studyGuide(
-        documentId,
-        guideScope === "chapter" ? summaryChapterIndex : undefined,
-      );
-      setGuideResult(guide);
-      toast.success("Study guide ready");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to build the study guide");
-    } finally {
-      setGuideLoading(false);
-    }
-  }, [documentId, guideScope, summaryChapterIndex]);
-
-  const handleVocabulary = useCallback(async () => {
-    if (!documentId) return;
-    setVocabLoading(true);
-    try {
-      const { vocabulary: vocab } = await vocabulary(
-        documentId,
-        vocabScope === "chapter" ? summaryChapterIndex : undefined,
-      );
-      setVocabResult(vocab);
-      toast.success("Vocabulary list ready");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to extract vocabulary");
-    } finally {
-      setVocabLoading(false);
-    }
-  }, [documentId, vocabScope, summaryChapterIndex]);
-
-  const handleQuiz = useCallback(async () => {
-    if (!documentId) return;
-    setQuizLoading(true);
-    try {
-      const { questions, scope } = await quizMe(
-        documentId,
-        quizScope === "chapter" ? summaryChapterIndex : undefined,
-      );
-      setQuizState({
-        questions,
-        scope,
-        picked: questions.map(() => null),
-        revealed: false,
-      });
-      toast.success("Quiz ready");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to generate the quiz");
-    } finally {
-      setQuizLoading(false);
-    }
-  }, [documentId, quizScope, summaryChapterIndex]);
-
-  const handleExplain = useCallback(async () => {
-    if (!documentId) return;
-    setExplainLoading(true);
-    try {
-      const { explanation } = await explainSimply(
-        documentId,
-        explainScope === "chapter" ? summaryChapterIndex : undefined,
-      );
-      setExplainResult(explanation);
-      toast.success("Explanation ready");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to explain simply");
-    } finally {
-      setExplainLoading(false);
-    }
-  }, [documentId, explainScope, summaryChapterIndex]);
 
   const toggleBookmark = useCallback(() => {
     if (!currentChapter) return;
@@ -1235,10 +876,6 @@ export default function ReaderView() {
   const sourceLabel = SOURCE_LABELS[doc.sourceType] ?? "DOC";
 
   // Resolve the currently-relevant summary view-model.
-  const activeChapterSummary =
-    chapterSummaries[summaryChapterIndex] ?? null;
-  const isChapterSummaryLoading =
-    chapterSummaryLoading === summaryChapterIndex;
 
   return (
     <div className="min-h-dvh bg-background text-foreground">
@@ -1295,8 +932,18 @@ export default function ReaderView() {
             <Button
               variant="ghost"
               size="icon"
+              className={cn("h-9 w-9", scenesView && "text-foreground")}
+              aria-label={scenesView ? "Hide scenes" : "View as scenes"}
+              aria-pressed={scenesView}
+              onClick={toggleScenesView}
+            >
+              {scenesLoading ? <LemniscateSpinner size={20} /> : <Film className="h-4 w-4" />}
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
               className="h-9 w-9"
-              aria-label="AI panel"
+              aria-label="Open Luma"
               onClick={openAiPanel}
             >
               <Sparkles className="h-4 w-4" />
@@ -1394,8 +1041,76 @@ export default function ReaderView() {
           />
         </section>
 
-        {/* Article */}
-        {currentChapter &&
+        {/* Scenes overlay OR Article */}
+        {scenesView ? (
+          <div className="mx-auto max-w-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                  Cinematic scenes
+                </p>
+                <h2 className="font-display text-xl text-foreground">{doc.title}</h2>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1"
+                disabled={scenesLoading}
+                onClick={regenerateScenes}
+              >
+                {scenesLoading ? <LemniscateSpinner size={24} /> : <RefreshCw className="h-3.5 w-3.5" />}
+                Regenerate
+              </Button>
+            </div>
+            {scenesLoading && (!scenesData || scenesData.length === 0) ? (
+              <div className="flex flex-col items-center gap-3 rounded-lg border border-border bg-muted/30 px-4 py-16 text-center">
+                <LemniscateSpinner size={56} />
+                <p className="text-xs text-muted-foreground">Cinematizing the story…</p>
+              </div>
+            ) : scenesData && scenesData.length > 0 ? (
+              <ol className="space-y-4">
+                {scenesData.map((sc) => {
+                  const mood = moodColor(sc.mood);
+                  const chars = sc.characters ?? [];
+                  return (
+                    <li key={sc.id ?? sc.ordinal} className="rounded-xl border border-border bg-card p-5">
+                      <div className="flex items-start gap-3">
+                        <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-foreground text-xs font-bold tabular-nums text-background">
+                          {sc.ordinal + 1}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <h3 className="font-display text-lg leading-tight text-foreground">{sc.title}</h3>
+                          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                            {sc.mood && (
+                              <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium" style={moodChipStyle(mood.color)}>
+                                {mood.label}
+                              </span>
+                            )}
+                            {chars.map((c, j) => (
+                              <span key={j} className="inline-flex items-center rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[11px] text-muted-foreground">
+                                {c}
+                              </span>
+                            ))}
+                          </div>
+                          <div className="mt-3">
+                            <AiMarkdown>{sc.body}</AiMarkdown>
+                          </div>
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
+            ) : (
+              <div className="rounded-lg border border-dashed border-border p-8 text-center">
+                <p className="text-sm text-muted-foreground">
+                  No scenes yet. Open <strong>Luma</strong> and tap{" "}
+                  <strong>Cinematize scenes</strong> to turn this story into scene cards.
+                </p>
+              </div>
+            )}
+          </div>
+        ) : currentChapter &&
         (currentChapter.refinedText || currentChapter.chunks.length > 0) ? (
           <article
             className="reader-article mx-auto space-y-6 text-foreground"
@@ -1821,958 +1536,22 @@ export default function ReaderView() {
         </SheetContent>
       </Sheet>
 
-      {/* AI sheet — Summary / Ask / Scenes */}
+      {/* Luma — the AI companion chat */}
       <Sheet open={aiSheetOpen} onOpenChange={setAiSheetOpen}>
         <SheetContent
           side="right"
-          className="w-full overflow-y-auto sm:max-w-md"
+          className="flex w-full flex-col p-0 sm:max-w-md"
           aria-describedby={undefined}
         >
-          <SheetHeader>
-            <SheetTitle className="flex items-center gap-2 font-display text-xl">
-              <Sparkles className="h-4 w-4" />
-              AI companion
-            </SheetTitle>
-            <p className="line-clamp-1 text-xs text-muted-foreground">
-              {doc.title} · {formatBytes(doc.byteSize)}
-            </p>
+          <SheetHeader className="sr-only">
+            <SheetTitle>Luma</SheetTitle>
           </SheetHeader>
-
-          {/* ── Audience mode selector ── */}
-          <div className="px-4 pt-2">
-            <SegmentedToggle<AiMode>
-              ariaLabel="AI companion mode"
-              options={[
-                { label: "Story Lover", value: "story" },
-                { label: "Story Time", value: "kids" },
-                { label: "Study Buddy", value: "study" },
-              ]}
-              value={aiMode}
-              onChange={(m) => {
-                setAiMode(m);
-                // Pick a sensible default tab per mode.
-                if (m === "story") setAiTab("summary");
-                else if (m === "kids") setAiTab("retell");
-                else setAiTab("guide");
-              }}
-            />
-            <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-              {aiMode === "story" &&
-                "For novel readers — expand the story, meet its people, and reimagine its turns."}
-              {aiMode === "kids" &&
-                "For young imaginations — cozy retellings, friendly faces, and things to draw."}
-              {aiMode === "study" &&
-                "For students — study guides, vocabulary, quizzes, and plain-language explanations."}
-            </p>
-          </div>
-
-          <Tabs
-            value={aiTab}
-            onValueChange={(v) => setAiTab(v as ToolTabKey)}
-            className="flex flex-1 flex-col px-4 pb-6"
-          >
-            <TabsList className="flex h-auto w-full gap-1 overflow-x-auto p-1">
-              {aiMode === "story" && (
-                <>
-                  <TabsTrigger value="summary" className="shrink-0 gap-1 px-2 py-1 text-xs">
-                    <Sparkles className="h-3.5 w-3.5" /> Summary
-                  </TabsTrigger>
-                  <TabsTrigger value="characters" className="shrink-0 gap-1 px-2 py-1 text-xs">
-                    <Users className="h-3.5 w-3.5" /> Characters
-                  </TabsTrigger>
-                  <TabsTrigger value="themes" className="shrink-0 gap-1 px-2 py-1 text-xs">
-                    <Tags className="h-3.5 w-3.5" /> Themes
-                  </TabsTrigger>
-                  <TabsTrigger value="criticism" className="shrink-0 gap-1 px-2 py-1 text-xs">
-                    <Feather className="h-3.5 w-3.5" /> Criticism
-                  </TabsTrigger>
-                  <TabsTrigger value="scenes" className="shrink-0 gap-1 px-2 py-1 text-xs">
-                    <Film className="h-3.5 w-3.5" /> Scenes
-                  </TabsTrigger>
-                  <TabsTrigger value="continue" className="shrink-0 gap-1 px-2 py-1 text-xs">
-                    <PenLine className="h-3.5 w-3.5" /> Continue
-                  </TabsTrigger>
-                  <TabsTrigger value="ending" className="shrink-0 gap-1 px-2 py-1 text-xs">
-                    <Rocket className="h-3.5 w-3.5" /> Alt Ending
-                  </TabsTrigger>
-                  <TabsTrigger value="world" className="shrink-0 gap-1 px-2 py-1 text-xs">
-                    <Globe2 className="h-3.5 w-3.5" /> World
-                  </TabsTrigger>
-                  <TabsTrigger value="ask" className="shrink-0 gap-1 px-2 py-1 text-xs">
-                    <MessageSquareQuote className="h-3.5 w-3.5" /> Ask
-                  </TabsTrigger>
-                </>
-              )}
-              {aiMode === "kids" && (
-                <>
-                  <TabsTrigger value="retell" className="shrink-0 gap-1 px-2 py-1 text-xs">
-                    <BookHeart className="h-3.5 w-3.5" /> Retell
-                  </TabsTrigger>
-                  <TabsTrigger value="meet" className="shrink-0 gap-1 px-2 py-1 text-xs">
-                    <Users className="h-3.5 w-3.5" /> Meet
-                  </TabsTrigger>
-                  <TabsTrigger value="whatif" className="shrink-0 gap-1 px-2 py-1 text-xs">
-                    <HelpCircle className="h-3.5 w-3.5" /> What If?
-                  </TabsTrigger>
-                  <TabsTrigger value="imagine" className="shrink-0 gap-1 px-2 py-1 text-xs">
-                    <Palette className="h-3.5 w-3.5" /> Imagine
-                  </TabsTrigger>
-                  <TabsTrigger value="ask" className="shrink-0 gap-1 px-2 py-1 text-xs">
-                    <MessageSquareQuote className="h-3.5 w-3.5" /> Ask
-                  </TabsTrigger>
-                </>
-              )}
-              {aiMode === "study" && (
-                <>
-                  <TabsTrigger value="guide" className="shrink-0 gap-1 px-2 py-1 text-xs">
-                    <ListChecks className="h-3.5 w-3.5" /> Study Guide
-                  </TabsTrigger>
-                  <TabsTrigger value="vocab" className="shrink-0 gap-1 px-2 py-1 text-xs">
-                    <SpellCheck2 className="h-3.5 w-3.5" /> Vocabulary
-                  </TabsTrigger>
-                  <TabsTrigger value="quiz" className="shrink-0 gap-1 px-2 py-1 text-xs">
-                    <Brain className="h-3.5 w-3.5" /> Quiz
-                  </TabsTrigger>
-                  <TabsTrigger value="explain" className="shrink-0 gap-1 px-2 py-1 text-xs">
-                    <Lightbulb className="h-3.5 w-3.5" /> Explain
-                  </TabsTrigger>
-                  <TabsTrigger value="summary" className="shrink-0 gap-1 px-2 py-1 text-xs">
-                    <Sparkles className="h-3.5 w-3.5" /> Summary
-                  </TabsTrigger>
-                  <TabsTrigger value="ask" className="shrink-0 gap-1 px-2 py-1 text-xs">
-                    <MessageSquareQuote className="h-3.5 w-3.5" /> Ask
-                  </TabsTrigger>
-                </>
-              )}
-            </TabsList>
-
-            {/* ───────── Summary tab (shared by story + study) ───────── */}
-            <TabsContent value="summary" className="mt-4 space-y-4">
-              <SegmentedToggle<SummaryScope>
-                ariaLabel="Summary scope"
-                options={[
-                  { label: "Chapter", value: "chapter" },
-                  { label: "Novel", value: "novel" },
-                ]}
-                value={summaryScope}
-                onChange={setSummaryScope}
-              />
-
-              {summaryScope === "chapter" ? (
-                <div className="space-y-3">
-                  <div className="space-y-1.5">
-                    <SectionLabel>Chapter</SectionLabel>
-                    <Select
-                      value={String(summaryChapterIndex)}
-                      onValueChange={(v) => setSummaryChapterIndex(Number(v))}
-                    >
-                      <SelectTrigger className="w-full" aria-label="Select chapter">
-                        <SelectValue placeholder="Select a chapter" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {chapters.map((ch, i) => (
-                          <SelectItem key={ch.id ?? i} value={String(i)}>
-                            Chapter {(ch.ordinal ?? i) + 1}: {ch.title}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs text-muted-foreground">
-                      {activeChapterSummary
-                        ? "Summary cached — regenerate to refresh."
-                        : "Generate a tight summary of this chapter."}
-                    </p>
-                    <Button
-                      size="sm"
-                      className="shrink-0 gap-1"
-                      disabled={isChapterSummaryLoading}
-                      onClick={() =>
-                        handleGenerateChapterSummary(
-                          summaryChapterIndex,
-                          Boolean(activeChapterSummary),
-                        )
-                      }
-                    >
-                      {isChapterSummaryLoading ? (
-                        <LemniscateSpinner size={28} />
-                      ) : activeChapterSummary ? (
-                        <RefreshCw className="h-3.5 w-3.5" />
-                      ) : (
-                        <Sparkles className="h-3.5 w-3.5" />
-                      )}
-                      {activeChapterSummary ? "Regenerate" : "Generate"}
-                    </Button>
-                  </div>
-
-                  {isChapterSummaryLoading && !activeChapterSummary ? (
-                    <div className="flex flex-col items-center gap-3 rounded-lg border border-border bg-muted/30 px-4 py-10 text-center">
-                      <LemniscateSpinner size={56} />
-                      <p className="text-xs text-muted-foreground">
-                        Reading this chapter…
-                      </p>
-                    </div>
-                  ) : activeChapterSummary ? (
-                    <blockquote className="rounded-lg border-l-2 border-foreground/30 bg-muted/30 p-4">
-                      <p className="mb-2 font-display text-sm font-medium text-foreground">
-                        {activeChapterSummary.chapterTitle}
-                      </p>
-                      <AiMarkdown>{activeChapterSummary.summary}</AiMarkdown>
-                    </blockquote>
-                  ) : (
-                    <div className="rounded-lg border border-dashed border-border p-6 text-center">
-                      <p className="text-sm text-muted-foreground">
-                        No chapter summary yet. Click{" "}
-                        <strong>Generate</strong> to create one.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs text-muted-foreground">
-                      {novelSummary
-                        ? "Novel summary cached — regenerate to refresh."
-                        : "Generate a summary of the entire document."}
-                    </p>
-                    <Button
-                      size="sm"
-                      className="shrink-0 gap-1"
-                      disabled={novelSummaryLoading}
-                      onClick={() =>
-                        handleGenerateNovelSummary(Boolean(novelSummary))
-                      }
-                    >
-                      {novelSummaryLoading ? (
-                        <LemniscateSpinner size={28} />
-                      ) : novelSummary ? (
-                        <RefreshCw className="h-3.5 w-3.5" />
-                      ) : (
-                        <Sparkles className="h-3.5 w-3.5" />
-                      )}
-                      {novelSummary ? "Regenerate" : "Generate"}
-                    </Button>
-                  </div>
-
-                  {novelSummaryLoading && !novelSummary ? (
-                    <div className="flex flex-col items-center gap-3 rounded-lg border border-border bg-muted/30 px-4 py-10 text-center">
-                      <LemniscateSpinner size={56} />
-                      <p className="text-xs text-muted-foreground">
-                        Reading through the document…
-                      </p>
-                    </div>
-                  ) : novelSummary ? (
-                    <blockquote className="rounded-lg border-l-2 border-foreground/30 bg-muted/30 p-4">
-                      <p className="mb-2 font-display text-sm font-medium text-foreground">
-                        {doc.title}
-                      </p>
-                      <AiMarkdown>{novelSummary}</AiMarkdown>
-                    </blockquote>
-                  ) : (
-                    <div className="rounded-lg border border-dashed border-border p-6 text-center">
-                      <p className="text-sm text-muted-foreground">
-                        No novel summary yet. Click{" "}
-                        <strong>Generate</strong> to create one.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </TabsContent>
-
-            {/* ───────── Characters tab ───────── */}
-            <TabsContent value="characters" className="mt-4">
-              <AnalysisTabPanel
-                loading={analysisLoading === "characters"}
-                cached={analysisCache.characters}
-                description="Assess personality traits, motivations, and relationships."
-                loadingLabel="Analyzing characters…"
-                onGenerate={() =>
-                  handleAnalysis("characters", () => analyzeCharacters(documentId))
-                }
-                icon={<Users className="h-3.5 w-3.5" />}
-              />
-            </TabsContent>
-
-            {/* ───────── Themes tab ───────── */}
-            <TabsContent value="themes" className="mt-4">
-              <AnalysisTabPanel
-                loading={analysisLoading === "themes"}
-                cached={analysisCache.themes}
-                description="Identify and categorize the central ideas of the text."
-                loadingLabel="Extracting themes…"
-                onGenerate={() =>
-                  handleAnalysis("themes", () => analyzeThemes(documentId))
-                }
-                icon={<Tags className="h-3.5 w-3.5" />}
-              />
-            </TabsContent>
-
-            {/* ───────── Criticism tab ───────── */}
-            <TabsContent value="criticism" className="mt-4">
-              <AnalysisTabPanel
-                loading={analysisLoading === "criticism"}
-                cached={analysisCache.criticism}
-                description="Evaluate style, symbolism, and authorial intent."
-                loadingLabel="Applying literary criticism…"
-                onGenerate={() =>
-                  handleAnalysis("criticism", () => analyzeCriticism(documentId))
-                }
-                icon={<Feather className="h-3.5 w-3.5" />}
-              />
-            </TabsContent>
-
-            {/* ───────── Scenes tab ───────── */}
-            <TabsContent value="scenes" className="mt-4 space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs text-muted-foreground">
-                  {scenes && scenes.length > 0
-                    ? "Cinematic scene cards — mood, beats, and cast."
-                    : "Turn prose into a sequence of cinematic scene cards."}
-                </p>
-                <Button
-                  size="sm"
-                  className="shrink-0 gap-1"
-                  disabled={scenesLoading}
-                  onClick={() =>
-                    handleFetchScenes(Boolean(scenes && scenes.length > 0))
-                  }
-                >
-                  {scenesLoading ? (
-                    <LemniscateSpinner size={28} />
-                  ) : scenes && scenes.length > 0 ? (
-                    <RefreshCw className="h-3.5 w-3.5" />
-                  ) : (
-                    <Film className="h-3.5 w-3.5" />
-                  )}
-                  {scenes && scenes.length > 0 ? "Regenerate" : "Generate scenes"}
-                </Button>
-              </div>
-
-              {!scenesFetched ? (
-                <div className="flex flex-col items-center gap-3 rounded-lg border border-border bg-muted/30 px-4 py-10 text-center">
-                  <LemniscateSpinner size={48} />
-                  <p className="text-xs text-muted-foreground">
-                    Loading cached scenes…
-                  </p>
-                </div>
-              ) : scenesLoading && (!scenes || scenes.length === 0) ? (
-                <div className="flex flex-col items-center gap-3 rounded-lg border border-border bg-muted/30 px-4 py-10 text-center">
-                  <LemniscateSpinner size={56} />
-                  <p className="text-xs text-muted-foreground">
-                    Adapting the prose into scenes…
-                  </p>
-                </div>
-              ) : scenes && scenes.length > 0 ? (
-                <ol className="space-y-3">
-                  {scenes.map((sc) => {
-                    const mood = moodColor(sc.mood);
-                    const characters = sc.characters ?? [];
-                    return (
-                      <li
-                        key={sc.id ?? sc.ordinal}
-                        className="rounded-lg border border-border bg-card p-4"
-                      >
-                        <div className="flex items-start gap-3">
-                          <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-foreground text-xs font-bold tabular-nums text-background">
-                            {sc.ordinal + 1}
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <h4 className="font-display text-lg leading-tight text-foreground">
-                              {sc.title}
-                            </h4>
-                            <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                              {sc.mood ? (
-                                <span
-                                  className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium"
-                                  style={moodChipStyle(mood.color)}
-                                >
-                                  {mood.label}
-                                </span>
-                              ) : null}
-                              {characters.map((c, j) => (
-                                <span
-                                  key={j}
-                                  className="inline-flex items-center rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[11px] text-muted-foreground"
-                                >
-                                  {c}
-                                </span>
-                              ))}
-                            </div>
-                            <div className="mt-3">
-                              <AiMarkdown>{sc.body}</AiMarkdown>
-                            </div>
-                          </div>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ol>
-              ) : (
-                <div className="rounded-lg border border-dashed border-border p-6 text-center">
-                  <p className="text-sm text-muted-foreground">
-                    No scenes yet. Click <strong>Generate scenes</strong> to
-                    begin.
-                  </p>
-                </div>
-              )}
-            </TabsContent>
-
-            {/* ───────── Continue the Story tab (Story Lover) ───────── */}
-            <TabsContent value="continue" className="mt-4">
-              <AnalysisTabPanel
-                loading={continueLoading}
-                cached={continueResult}
-                description="Let the AI write the next passage in the author's voice."
-                loadingLabel="Writing the next passage…"
-                onGenerate={handleContinueStory}
-                generateLabel="Continue"
-                regenerateLabel="Regenerate"
-                icon={<PenLine className="h-3.5 w-3.5" />}
-              >
-                <div className="space-y-1.5">
-                  <SectionLabel>Chapter to continue from</SectionLabel>
-                  <Select
-                    value={String(summaryChapterIndex)}
-                    onValueChange={(v) => setSummaryChapterIndex(Number(v))}
-                  >
-                    <SelectTrigger className="w-full" aria-label="Select chapter to continue">
-                      <SelectValue placeholder="Select a chapter" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {chapters.map((ch, i) => (
-                        <SelectItem key={ch.id ?? i} value={String(i)}>
-                          Chapter {(ch.ordinal ?? i) + 1}: {ch.title}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </AnalysisTabPanel>
-            </TabsContent>
-
-            {/* ───────── Alternate Ending tab (Story Lover) ───────── */}
-            <TabsContent value="ending" className="mt-4">
-              <AnalysisTabPanel
-                loading={endingLoading}
-                cached={endingResult}
-                description="Reimagine how the story could end — add a twist if you like."
-                loadingLabel="Writing an alternate ending…"
-                onGenerate={handleAlternateEnding}
-                generateLabel="Write ending"
-                regenerateLabel="Regenerate"
-                icon={<Rocket className="h-3.5 w-3.5" />}
-              >
-                <div className="space-y-1.5">
-                  <SectionLabel>Optional twist to honor</SectionLabel>
-                  <Input
-                    value={endingTwist}
-                    onChange={(e) => setEndingTwist(e.target.value)}
-                    placeholder="e.g., the hero changes their mind, it was all a dream"
-                    disabled={endingLoading}
-                  />
-                </div>
-              </AnalysisTabPanel>
-            </TabsContent>
-
-            {/* ───────── World & Lore tab (Story Lover) ───────── */}
-            <TabsContent value="world" className="mt-4">
-              <AnalysisTabPanel
-                loading={worldLoading}
-                cached={worldResult}
-                description="Expand the setting, history, and rules of the story's world."
-                loadingLabel="Building the world…"
-                onGenerate={handleWorldLore}
-                generateLabel="Expand"
-                regenerateLabel="Regenerate"
-                icon={<Globe2 className="h-3.5 w-3.5" />}
-              />
-            </TabsContent>
-
-            {/* ───────── Retell for Kids tab (Story Time) ───────── */}
-            <TabsContent value="retell" className="mt-4">
-              <AnalysisTabPanel
-                loading={retellLoading}
-                cached={retellResult}
-                description="A warm, wonder-filled retelling for a young reader."
-                loadingLabel="Retelling the story…"
-                onGenerate={handleRetell}
-                generateLabel="Retell"
-                regenerateLabel="Retell again"
-                icon={<BookHeart className="h-3.5 w-3.5" />}
-              >
-                <SegmentedToggle<SummaryScope>
-                  ariaLabel="Retell scope"
-                  options={[
-                    { label: "This chapter", value: "chapter" },
-                    { label: "Whole story", value: "novel" },
-                  ]}
-                  value={retellScope}
-                  onChange={setRetellScope}
-                />
-                {retellScope === "chapter" && (
-                  <div className="space-y-1.5">
-                    <SectionLabel>Chapter</SectionLabel>
-                    <Select
-                      value={String(summaryChapterIndex)}
-                      onValueChange={(v) => setSummaryChapterIndex(Number(v))}
-                    >
-                      <SelectTrigger className="w-full" aria-label="Select chapter to retell">
-                        <SelectValue placeholder="Select a chapter" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {chapters.map((ch, i) => (
-                          <SelectItem key={ch.id ?? i} value={String(i)}>
-                            Chapter {(ch.ordinal ?? i) + 1}: {ch.title}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-              </AnalysisTabPanel>
-            </TabsContent>
-
-            {/* ───────── Meet the Characters tab (Story Time) ───────── */}
-            <TabsContent value="meet" className="mt-4">
-              <AnalysisTabPanel
-                loading={meetLoading}
-                cached={meetResult}
-                description="Friendly, vivid introductions to the people of the story."
-                loadingLabel="Introducing the characters…"
-                onGenerate={handleMeet}
-                generateLabel="Meet them"
-                regenerateLabel="Regenerate"
-                icon={<Users className="h-3.5 w-3.5" />}
-              />
-            </TabsContent>
-
-            {/* ───────── What If? tab (Story Time) ───────── */}
-            <TabsContent value="whatif" className="mt-4">
-              <AnalysisTabPanel
-                loading={whatifLoading}
-                cached={whatifResult}
-                description="Playful hypothetical twists that spark imagination."
-                loadingLabel="Inventing what-ifs…"
-                onGenerate={handleWhatIf}
-                generateLabel="Invent"
-                regenerateLabel="Invent again"
-                icon={<HelpCircle className="h-3.5 w-3.5" />}
-              />
-            </TabsContent>
-
-            {/* ───────── Imagine the Picture tab (Story Time) ───────── */}
-            <TabsContent value="imagine" className="mt-4">
-              <AnalysisTabPanel
-                loading={imagineLoading}
-                cached={imagineResult}
-                description="Vivid scene descriptions a child could illustrate."
-                loadingLabel="Painting picture prompts…"
-                onGenerate={handleImagine}
-                generateLabel="Imagine"
-                regenerateLabel="Regenerate"
-                icon={<Palette className="h-3.5 w-3.5" />}
-              />
-            </TabsContent>
-
-            {/* ───────── Study Guide tab (Study Buddy) ───────── */}
-            <TabsContent value="guide" className="mt-4">
-              <AnalysisTabPanel
-                loading={guideLoading}
-                cached={guideResult}
-                description="Key points, themes, terms, and discussion questions."
-                loadingLabel="Building the study guide…"
-                onGenerate={handleStudyGuide}
-                generateLabel="Build guide"
-                regenerateLabel="Regenerate"
-                icon={<ListChecks className="h-3.5 w-3.5" />}
-              >
-                <SegmentedToggle<SummaryScope>
-                  ariaLabel="Study guide scope"
-                  options={[
-                    { label: "This chapter", value: "chapter" },
-                    { label: "Whole text", value: "novel" },
-                  ]}
-                  value={guideScope}
-                  onChange={setGuideScope}
-                />
-                {guideScope === "chapter" && (
-                  <div className="space-y-1.5">
-                    <SectionLabel>Chapter</SectionLabel>
-                    <Select
-                      value={String(summaryChapterIndex)}
-                      onValueChange={(v) => setSummaryChapterIndex(Number(v))}
-                    >
-                      <SelectTrigger className="w-full" aria-label="Select chapter">
-                        <SelectValue placeholder="Select a chapter" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {chapters.map((ch, i) => (
-                          <SelectItem key={ch.id ?? i} value={String(i)}>
-                            Chapter {(ch.ordinal ?? i) + 1}: {ch.title}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-              </AnalysisTabPanel>
-            </TabsContent>
-
-            {/* ───────── Vocabulary tab (Study Buddy) ───────── */}
-            <TabsContent value="vocab" className="mt-4">
-              <AnalysisTabPanel
-                loading={vocabLoading}
-                cached={vocabResult}
-                description="Definitions of the challenging and notable words in the text."
-                loadingLabel="Gathering vocabulary…"
-                onGenerate={handleVocabulary}
-                generateLabel="List words"
-                regenerateLabel="Regenerate"
-                icon={<SpellCheck2 className="h-3.5 w-3.5" />}
-              >
-                <SegmentedToggle<SummaryScope>
-                  ariaLabel="Vocabulary scope"
-                  options={[
-                    { label: "This chapter", value: "chapter" },
-                    { label: "Whole text", value: "novel" },
-                  ]}
-                  value={vocabScope}
-                  onChange={setVocabScope}
-                />
-                {vocabScope === "chapter" && (
-                  <div className="space-y-1.5">
-                    <SectionLabel>Chapter</SectionLabel>
-                    <Select
-                      value={String(summaryChapterIndex)}
-                      onValueChange={(v) => setSummaryChapterIndex(Number(v))}
-                    >
-                      <SelectTrigger className="w-full" aria-label="Select chapter">
-                        <SelectValue placeholder="Select a chapter" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {chapters.map((ch, i) => (
-                          <SelectItem key={ch.id ?? i} value={String(i)}>
-                            Chapter {(ch.ordinal ?? i) + 1}: {ch.title}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-              </AnalysisTabPanel>
-            </TabsContent>
-
-            {/* ───────── Quiz tab (Study Buddy) ───────── */}
-            <TabsContent value="quiz" className="mt-4 space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs text-muted-foreground">
-                  {quizState
-                    ? `${quizState.questions.length} questions — ${quizState.scope}.`
-                    : "Generate multiple-choice comprehension questions."}
-                </p>
-                <div className="flex items-center gap-2">
-                  {quizState && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="gap-1"
-                      onClick={() =>
-                        setQuizState((q) =>
-                          q
-                            ? { ...q, picked: q.questions.map(() => null), revealed: false }
-                            : null,
-                        )
-                      }
-                    >
-                      Reset
-                    </Button>
-                  )}
-                  <Button
-                    size="sm"
-                    className="shrink-0 gap-1"
-                    disabled={quizLoading}
-                    onClick={handleQuiz}
-                  >
-                    {quizLoading ? (
-                      <LemniscateSpinner size={28} />
-                    ) : quizState ? (
-                      <RefreshCw className="h-3.5 w-3.5" />
-                    ) : (
-                      <Brain className="h-3.5 w-3.5" />
-                    )}
-                    {quizState ? "Regenerate" : "New quiz"}
-                  </Button>
-                </div>
-              </div>
-
-              <SegmentedToggle<SummaryScope>
-                ariaLabel="Quiz scope"
-                options={[
-                  { label: "This chapter", value: "chapter" },
-                  { label: "Whole text", value: "novel" },
-                ]}
-                value={quizScope}
-                onChange={setQuizScope}
-              />
-              {quizScope === "chapter" && (
-                <div className="space-y-1.5">
-                  <SectionLabel>Chapter</SectionLabel>
-                  <Select
-                    value={String(summaryChapterIndex)}
-                    onValueChange={(v) => setSummaryChapterIndex(Number(v))}
-                  >
-                    <SelectTrigger className="w-full" aria-label="Select chapter">
-                      <SelectValue placeholder="Select a chapter" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {chapters.map((ch, i) => (
-                        <SelectItem key={ch.id ?? i} value={String(i)}>
-                          Chapter {(ch.ordinal ?? i) + 1}: {ch.title}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
-              {quizLoading && !quizState ? (
-                <div className="flex flex-col items-center gap-3 rounded-lg border border-border bg-muted/30 px-4 py-10 text-center">
-                  <LemniscateSpinner size={56} />
-                  <p className="text-xs text-muted-foreground">Writing questions…</p>
-                </div>
-              ) : quizState ? (
-                <ol className="space-y-4">
-                  {quizState.questions.map((q, qi) => {
-                    const picked = quizState.picked[qi];
-                    return (
-                      <li key={qi} className="rounded-lg border border-border bg-card p-4">
-                        <p className="mb-3 text-sm font-medium text-foreground">
-                          <span className="mr-1.5 text-muted-foreground">{qi + 1}.</span>
-                          {q.question}
-                        </p>
-                        <div className="space-y-1.5">
-                          {q.options.map((opt, oi) => {
-                            const isPicked = picked === oi;
-                            const isCorrect = q.answerIndex === oi;
-                            const showState = quizState.revealed || picked !== null;
-                            return (
-                              <button
-                                key={oi}
-                                type="button"
-                                disabled={quizState.revealed}
-                                onClick={() =>
-                                  setQuizState((s) =>
-                                    s
-                                      ? {
-                                          ...s,
-                                          picked: s.picked.map((p, i) =>
-                                            i === qi ? oi : p,
-                                          ),
-                                        }
-                                      : s,
-                                  )
-                                }
-                                className={cn(
-                                  "flex w-full items-center gap-2 rounded-md border px-3 py-2 text-left text-sm transition-colors",
-                                  !showState &&
-                                    "border-border hover:bg-muted/40",
-                                  showState &&
-                                    isCorrect &&
-                                    "border-emerald-500/60 bg-emerald-500/10 text-foreground",
-                                  showState &&
-                                    isPicked &&
-                                    !isCorrect &&
-                                    "border-rose-500/60 bg-rose-500/10 text-foreground",
-                                  showState &&
-                                    !isCorrect &&
-                                    !isPicked &&
-                                    "border-border text-muted-foreground",
-                                )}
-                              >
-                                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-current text-[11px] font-medium">
-                                  {String.fromCharCode(65 + oi)}
-                                </span>
-                                <span className="flex-1">{opt}</span>
-                                {showState && isCorrect && (
-                                  <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-                                    correct
-                                  </span>
-                                )}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        {quizState.revealed && q.explanation && (
-                          <p className="mt-2 rounded-md bg-muted/40 px-3 py-2 text-xs italic text-muted-foreground">
-                            {q.explanation}
-                          </p>
-                        )}
-                      </li>
-                    );
-                  })}
-                  {!quizState.revealed &&
-                    quizState.picked.every((p) => p !== null) && (
-                      <Button
-                        className="w-full"
-                        onClick={() =>
-                          setQuizState((s) => (s ? { ...s, revealed: true } : s))
-                        }
-                      >
-                        Reveal answers
-                      </Button>
-                    )}
-                  {quizState.revealed && (
-                    <p className="text-center text-sm text-muted-foreground">
-                      You scored{" "}
-                      <span className="font-semibold text-foreground">
-                        {
-                          quizState.picked.filter(
-                            (p, i) => p === quizState.questions[i].answerIndex,
-                          ).length
-                        }
-                        /{quizState.questions.length}
-                      </span>
-                      .
-                    </p>
-                  )}
-                </ol>
-              ) : (
-                <div className="rounded-lg border border-dashed border-border p-6 text-center">
-                  <p className="text-sm text-muted-foreground">
-                    No quiz yet. Click <strong>New quiz</strong> to begin.
-                  </p>
-                </div>
-              )}
-            </TabsContent>
-
-            {/* ───────── Explain Simply tab (Study Buddy) ───────── */}
-            <TabsContent value="explain" className="mt-4">
-              <AnalysisTabPanel
-                loading={explainLoading}
-                cached={explainResult}
-                description="Restate the text in plain, friendly language."
-                loadingLabel="Explaining simply…"
-                onGenerate={handleExplain}
-                generateLabel="Explain"
-                regenerateLabel="Regenerate"
-                icon={<Lightbulb className="h-3.5 w-3.5" />}
-              >
-                <SegmentedToggle<SummaryScope>
-                  ariaLabel="Explain scope"
-                  options={[
-                    { label: "This chapter", value: "chapter" },
-                    { label: "Whole text", value: "novel" },
-                  ]}
-                  value={explainScope}
-                  onChange={setExplainScope}
-                />
-                {explainScope === "chapter" && (
-                  <div className="space-y-1.5">
-                    <SectionLabel>Chapter</SectionLabel>
-                    <Select
-                      value={String(summaryChapterIndex)}
-                      onValueChange={(v) => setSummaryChapterIndex(Number(v))}
-                    >
-                      <SelectTrigger className="w-full" aria-label="Select chapter">
-                        <SelectValue placeholder="Select a chapter" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {chapters.map((ch, i) => (
-                          <SelectItem key={ch.id ?? i} value={String(i)}>
-                            Chapter {(ch.ordinal ?? i) + 1}: {ch.title}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-              </AnalysisTabPanel>
-            </TabsContent>
-
-            {/* ───────── Ask tab (shared) ───────── */}
-            <TabsContent value="ask" className="mt-4 space-y-4">
-              <div className="flex items-center gap-2">
-                <Input
-                  value={qaInput}
-                  onChange={(e) => setQaInput(e.target.value)}
-                  placeholder="Ask anything about this document…"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      handleAsk();
-                    }
-                  }}
-                  disabled={qaLoading}
-                  className="flex-1"
-                />
-                <Button
-                  size="icon"
-                  onClick={handleAsk}
-                  disabled={qaLoading || !qaInput.trim()}
-                  aria-label="Send question"
-                >
-                  {qaLoading ? (
-                    <LemniscateSpinner size={28} />
-                  ) : (
-                    <Send className="h-4 w-4" />
-                  )}
-                </Button>
-              </div>
-
-              {qaLoading && qaList.length === 0 ? (
-                <div className="flex flex-col items-center gap-3 rounded-lg border border-border bg-muted/30 px-4 py-10 text-center">
-                  <LemniscateSpinner size={56} />
-                  <p className="text-xs text-muted-foreground">
-                    Searching the text for an answer…
-                  </p>
-                </div>
-              ) : qaList.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-border p-6 text-center">
-                  <p className="text-sm text-muted-foreground">
-                    Ask a question and Lemniscate will answer using the
-                    document&apos;s text.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-5">
-                  {qaList.map((item) => (
-                    <div key={item.id} className="space-y-2">
-                      <div className="rounded-md bg-muted/40 px-3 py-2">
-                        <p className="text-xs font-medium text-muted-foreground">
-                          Q
-                        </p>
-                        <p className="text-sm text-foreground">
-                          {item.question}
-                        </p>
-                      </div>
-                      <blockquote className="rounded-md border-l-2 border-foreground/30 bg-muted/20 py-2 pl-3 pr-2">
-                        <AiMarkdown>{item.answer}</AiMarkdown>
-                      </blockquote>
-                      {item.citations.length > 0 ? (
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="text-[11px] text-muted-foreground">
-                            Cited:
-                          </span>
-                          {item.citations.map((c, j) => (
-                            <span
-                              key={j}
-                              className="inline-flex items-center rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[11px] text-muted-foreground"
-                            >
-                              {c}
-                            </span>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </TabsContent>
-          </Tabs>
+          <LumaChat
+            documentId={documentId}
+            docTitle={doc.title}
+            chapters={chapters}
+            currentChapterIndex={currentChapterIndex}
+          />
         </SheetContent>
       </Sheet>
     </div>

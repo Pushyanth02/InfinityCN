@@ -65,7 +65,8 @@ export type ViewName =
   | "account"
   | "analytics"
   | "history"
-  | "search";
+  | "search"
+  | "create";
 
 export interface ReaderSettings {
   // The six reader-selectable families from the typographic brief, plus
