@@ -527,24 +527,132 @@ export async function imaginePicture(documentId: string): Promise<{ prompts: str
   );
 }
 
-// ── Luma — the conversational companion ─────────────────────────────────────
+// ── The three AI bots: Luma (chat), Ouro (study), Ankaa (agent) ─────────────
 
-export type LumaMode = "story" | "kids" | "study";
+export type BotId = "luma" | "ouro" | "ankaa";
 
-/** Chat with Luma — grounded in the open document, persona shifts per mode. */
+/** Chat with Luma — the fast, high-quality Normal Chatbot. */
 export async function lumaChat(
   documentId: string,
-  mode: LumaMode,
   messages: { role: "user" | "assistant"; content: string }[],
   chapterIndex?: number,
-): Promise<{ reply: string }> {
+): Promise<{ reply: string; bot: "luma" }> {
   return json(
     await fetch("/api/ai/luma", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ documentId, mode, messages, chapterIndex }),
+      body: JSON.stringify({ documentId, messages, chapterIndex }),
     }),
   );
+}
+
+/** Chat with Ouro — the Study Buddy tutor. */
+export async function ouroChat(
+  documentId: string,
+  messages: { role: "user" | "assistant"; content: string }[],
+  chapterIndex?: number,
+): Promise<{ reply: string; bot: "ouro" }> {
+  return json(
+    await fetch("/api/ai/ouro", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ documentId, tool: "chat", messages, chapterIndex }),
+    }),
+  );
+}
+
+/** Ouro study guide (Markdown). */
+export async function ouroGuide(
+  documentId: string,
+  chapterIndex?: number,
+): Promise<{ guide: string; scope: string; bot: "ouro" }> {
+  return json(
+    await fetch("/api/ai/ouro", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ documentId, tool: "guide", chapterIndex }),
+    }),
+  );
+}
+
+export interface QuizQuestion {
+  question: string;
+  options: string[];
+  answerIndex: number;
+  explanation: string;
+}
+
+/** Ouro quiz (6 multiple-choice questions). */
+export async function ouroQuiz(
+  documentId: string,
+  chapterIndex?: number,
+): Promise<{ questions: QuizQuestion[]; scope: string; bot: "ouro" }> {
+  return json(
+    await fetch("/api/ai/ouro", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ documentId, tool: "quiz", chapterIndex }),
+    }),
+  );
+}
+
+export interface Flashcard {
+  front: string;
+  back: string;
+}
+
+/** Ouro flashcards (8-12 Q/A cards). */
+export async function ouroFlashcards(
+  documentId: string,
+  chapterIndex?: number,
+): Promise<{ flashcards: Flashcard[]; scope: string; bot: "ouro" }> {
+  return json(
+    await fetch("/api/ai/ouro", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ documentId, tool: "flashcards", chapterIndex }),
+    }),
+  );
+}
+
+/** Start an Ankaa long-form creative-writing job (returns immediately). */
+export async function ankaaStart(
+  documentId: string,
+  prompt: string,
+  opts?: { chapterIndex?: number; wordTarget?: number },
+): Promise<{ jobId: string; etaSeconds: number; wordTarget: number; bot: "ankaa" }> {
+  return json(
+    await fetch("/api/ai/ankaa", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ documentId, prompt, chapterIndex: opts?.chapterIndex, wordTarget: opts?.wordTarget }),
+    }),
+  );
+}
+
+/** Poll an Ankaa job's status. */
+export async function ankaaPoll(jobId: string): Promise<{
+  jobId: string;
+  status: "running" | "complete" | "error";
+  result: string | null;
+  error: string | null;
+  elapsedSeconds: number;
+  etaSeconds: number;
+  prompt: string;
+}> {
+  return json(await fetch(`/api/ai/ankaa?jobId=${encodeURIComponent(jobId)}`, { cache: "no-store" }));
+}
+
+/** Usage monitoring — last 24h stats across all bots. */
+export async function fetchUsage(): Promise<{
+  window: string;
+  total: number;
+  totalTokens: number;
+  totalErrors: number;
+  byBot: Record<string, { count: number; tokens: number; errors: number; avgLatencyMs: number }>;
+  recent: { bot: string; kind: string; tokens: number; latencyMs: number; status: string; at: string }[];
+}> {
+  return json(await fetch("/api/ai/usage", { cache: "no-store" }));
 }
 
 /** Co-write a story in the Create view — Luma continues from the draft. */

@@ -10,28 +10,24 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
-type LumaMode = "story" | "kids" | "study";
-
-const PERSONAS: Record<LumaMode, string> = {
-  story: `You are Luma, a thoughtful literary companion for novel readers. You're warm, perceptive, and a little poetic — the kind of friend who lingers over a good sentence. You discuss characters, themes, and craft with insight, and you love to imagine where a story could go next. You speak in clear, friendly prose. Use Markdown (italics, short headings, bold) when it helps. Never say "this document" or "the text" — speak about the story directly.`,
-  kids: `You are Luma, a gentle, playful storyteller for children. You're warm, a little wonder-struck, and never scary. You use simple, musical words and you love to ask "what if?". You retell things cozy and bright, you introduce characters like new friends, and you always leave room for imagination. Keep sentences short and friendly. Use *italics* for special or whispered words. Never say "this document".`,
-  study: `You are Luma, a patient, encouraging tutor for students. You're clear, organized, and never condescending. You break ideas down plainly, define tricky words, and you love to check understanding with a quick question. You use Markdown structure (## headings, **bold** terms, bullet lists) to keep things tidy. Never say "this document" — speak about the passage directly.`,
-};
 
 /**
- * Luma — the conversational heart of the AI companion.
- * Grounded in the open document, persona shifts per audience mode.
+ * Luma — the Normal Chatbot.
+ * Combines Story Time (warm, imaginative storytelling for all ages) with
+ * Study Buddy-lite (clear explanations, vocabulary, quick analysis) into one
+ * fast, high-quality companion. Optimized for low latency: tight excerpts,
+ * short system prompt, last-6-turn history.
  */
 export async function POST(req: NextRequest) {
-  const rl = checkRateLimit(req, RATE_LIMITS.ai);
+  const rl = checkRateLimit(req, RATE_LIMITS.luma);
   if (!rl.allowed) {
     return NextResponse.json(
-      { error: "Rate limit exceeded. Please try again." },
+      { error: "Luma is busy — please try again in a moment.", bot: "luma" },
       { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } },
     );
   }
 
-  const { documentId, mode, messages, chapterIndex } = await req.json();
+  const { documentId, messages, chapterIndex } = await req.json();
   if (!documentId || !isValidDocumentId(documentId))
     return NextResponse.json({ error: "Valid documentId required" }, { status: 400 });
 
@@ -48,40 +44,42 @@ export async function POST(req: NextRequest) {
   }
   if (!parsed) return NextResponse.json({ error: "No content" }, { status: 400 });
 
+  // Token-optimized: chapter-scoped (4000 chars) or whole-doc sample (4000).
   const idx = typeof chapterIndex === "number" ? chapterIndex : 0;
   let excerpt: string;
   let contextLabel: string;
   if (typeof chapterIndex === "number" && parsed.chapters[chapterIndex]) {
     const ch = parsed.chapters[chapterIndex];
-    excerpt = (ch.refinedText ?? ch.chunks.map((c) => c.text).join("\n\n")).slice(0, 6000);
+    excerpt = (ch.refinedText ?? ch.chunks.map((c) => c.text).join("\n\n")).slice(0, 4000);
     contextLabel = `Currently open: Chapter ${(ch.ordinal ?? idx) + 1} — "${ch.title}"`;
   } else {
-    excerpt = buildExcerpt(parsed, 6, 800, 6000);
+    excerpt = buildExcerpt(parsed, 4, 800, 4000);
     contextLabel = `Document: ${doc.title}`;
   }
 
-  const persona = PERSONAS[(mode as LumaMode) ?? "story"] ?? PERSONAS.story;
-  const history = Array.isArray(messages) ? (messages as ChatMessage[]) : [];
-  const recent = history.slice(-8);
+  const system = `You are Luma, a radiant, fast-thinking reading companion. You blend two gifts:
+- A storyteller's warmth — you retell passages vividly, imagine what-ifs, and expand the story for readers of any age.
+- A tutor's clarity — you explain tricky ideas, define words, and summarize plainly.
 
-  const system = `${persona}
+Be concise and lively. Respond in 1-3 short paragraphs unless asked for more. Use Markdown (italics, **bold**, short bullets) when it helps. Stay grounded in the excerpt — never invent plot. If the reader wants a deep study session (quizzes, flashcards, full study guide), suggest switching to **Ouro**. If they want a long creative work (a new chapter, a full short story), suggest **Ankaa**.
 
-You are helping a reader with: ${doc.title}.
+You are helping with: ${doc.title}.
 ${contextLabel}
-
-Below is an excerpt of what they're reading. Stay grounded in it — quote or paraphrase when useful, but never invent plot or facts that aren't supported. If the reader asks for something you can't do in conversation (like generate a quiz, retell the whole chapter for kids, or write the next passage), point them to the suggestion chips in the panel.
 
 Excerpt:
 ${excerpt}`;
 
+  const history = Array.isArray(messages) ? (messages as ChatMessage[]) : [];
+  // Token optimization: last 6 turns only.
+  const recent = history.slice(-6);
+
   const userContent =
     recent.length > 0
-      ? recent.map((m) => `${m.role === "user" ? "Reader" : "Luma"}: ${m.content}`).join("\n\n") +
-        "\n\nLuma:"
-      : "(The reader just opened the chat. Greet them briefly and offer one specific idea about what they're reading.)";
+      ? recent.map((m) => `${m.role === "user" ? "Reader" : "Luma"}: ${m.content}`).join("\n\n") + "\n\nLuma:"
+      : "(The reader just opened the chat. Greet them in one sentence and offer one specific, vivid idea about what they're reading.)";
 
-  const reply = await aiComplete(system, userContent);
+  const reply = await aiComplete(system, userContent, { bot: "luma", kind: "chat", documentId });
 
   await logActivity({ type: "ai_luma_chat", documentId, detail: doc.title });
-  return NextResponse.json({ reply });
+  return NextResponse.json({ reply, bot: "luma" });
 }

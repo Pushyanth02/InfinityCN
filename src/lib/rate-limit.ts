@@ -98,8 +98,14 @@ export function checkRateLimit(
  * Convenience: standard rate limit configs.
  */
 export const RATE_LIMITS = {
-  /** AI routes: 10 requests per minute per IP */
+  /** Default AI routes: 10 requests per minute per IP */
   ai: { windowMs: 60_000, max: 10, prefix: "ai" },
+  /** Luma (Normal Chatbot): fast chat, 15/min */
+  luma: { windowMs: 60_000, max: 15, prefix: "luma" },
+  /** Ouro (Study Buddy): heavier structured outputs, 8/min */
+  ouro: { windowMs: 60_000, max: 8, prefix: "ouro" },
+  /** Ankaa (Agent): long-form, expensive, 3/min */
+  ankaa: { windowMs: 60_000, max: 3, prefix: "ankaa" },
   /** Upload: 5 uploads per minute per IP */
   upload: { windowMs: 60_000, max: 5, prefix: "upload" },
   /** Document read: 60 requests per minute per IP */

@@ -1,0 +1,165 @@
+import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import { logActivity } from "@/lib/activity";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+import { isValidDocumentId } from "@/lib/security";
+import { buildExcerpt, aiComplete, estimateTokens, trackUsage } from "@/lib/ai-helpers";
+import type { ParsedDoc } from "@/lib/types";
+
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
+/* ── In-memory job store (single-instance; suitable for this deployment) ── */
+export interface AnkaaJob {
+  jobId: string;
+  documentId: string;
+  docTitle: string;
+  prompt: string;
+  status: "running" | "complete" | "error";
+  result: string | null;
+  error: string | null;
+  createdAt: number;
+  completedAt: number | null;
+  etaSeconds: number;
+}
+
+// Module-level store survives across requests in the same server process.
+export const ankaaJobs = new Map<string, AnkaaJob>();
+
+/** Generate a short job ID. */
+function makeJobId(): string {
+  return `ankaa_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/** Estimate ETA for a long-form work (word target → seconds). */
+function estimateEta(wordTarget: number): number {
+  // Empirical: the model produces ~30-40 words/sec of long-form prose.
+  return Math.max(15, Math.ceil(wordTarget / 30) + 5);
+}
+
+/**
+ * POST — start a long-form creative-writing job.
+ * Body: { documentId, prompt, scope?: "chapter"|"novel", chapterIndex?, wordTarget? }
+ * Returns immediately with { jobId, etaSeconds, wordTarget }.
+ *
+ * The job runs in the background (fire-and-forget) and stores its result in
+ * the in-memory `ankaaJobs` map. The client polls GET to check progress.
+ */
+export async function POST(req: NextRequest) {
+  const rl = checkRateLimit(req, RATE_LIMITS.ankaa);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Ankaa is already weaving a long-form work — please wait for it to finish.", bot: "ankaa" },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } },
+    );
+  }
+
+  const { documentId, prompt, chapterIndex, wordTarget } = await req.json();
+  if (!documentId || !isValidDocumentId(documentId))
+    return NextResponse.json({ error: "Valid documentId required" }, { status: 400 });
+  if (!prompt || typeof prompt !== "string" || prompt.trim().length < 3)
+    return NextResponse.json({ error: "A prompt is required" }, { status: 400 });
+
+  const doc = await db.document.findUnique({ where: { id: documentId } });
+  if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (doc.status !== "ready")
+    return NextResponse.json({ error: "Document not ready" }, { status: 400 });
+
+  let parsed: ParsedDoc | null = null;
+  try {
+    parsed = doc.contentJson ? JSON.parse(doc.contentJson) : null;
+  } catch {
+    // ignore
+  }
+  if (!parsed) return NextResponse.json({ error: "No content" }, { status: 400 });
+
+  // Build a rich context excerpt so Ankaa can write a detailed, grounded narrative.
+  const idx = typeof chapterIndex === "number" ? chapterIndex : 0;
+  let excerpt: string;
+  let scopeLabel: string;
+  if (typeof chapterIndex === "number" && parsed.chapters[chapterIndex]) {
+    const ch = parsed.chapters[chapterIndex];
+    excerpt = (ch.refinedText ?? ch.chunks.map((c) => c.text).join("\n\n")).slice(0, 8000);
+    scopeLabel = `Chapter ${(ch.ordinal ?? idx) + 1}: ${ch.title}`;
+  } else {
+    excerpt = buildExcerpt(parsed, 8, 1200, 8000);
+    scopeLabel = doc.title;
+  }
+
+  const words = Math.min(2000, Math.max(300, typeof wordTarget === "number" ? wordTarget : 800));
+  const eta = estimateEta(words);
+  const jobId = makeJobId();
+
+  const job: AnkaaJob = {
+    jobId,
+    documentId,
+    docTitle: doc.title,
+    prompt: prompt.trim(),
+    status: "running",
+    result: null,
+    error: null,
+    createdAt: Date.now(),
+    completedAt: null,
+    etaSeconds: eta,
+  };
+  ankaaJobs.set(jobId, job);
+
+  // Fire-and-forget the long-form generation.
+  (async () => {
+    const started = Date.now();
+    try {
+      const system = `You are Ankaa, a masterful creative-writing agent specializing in rich, long-form storytelling. You write with vivid sensory detail, layered characters, and a strong narrative voice. You draw on the supplied source material for tone, setting, and characters, but you're free to imagine deeply.
+
+Write approximately ${words} words. Use paragraph breaks. You may use *italics* for emphasis. Do not use headings unless the work is explicitly episodic. Do not include preamble, notes, or "here is your story" — begin the narrative directly and sustain it.
+
+Source material for tone and context — ${doc.title} (${scopeLabel}):
+
+${excerpt}`;
+
+      const user = `Creative brief: ${prompt.trim()}
+
+Begin the long-form work now.`;
+
+      const result = await aiComplete(system, user, { bot: "ankaa", kind: "longform", documentId });
+      const stored = ankaaJobs.get(jobId);
+      if (stored) {
+        stored.status = "complete";
+        stored.result = result;
+        stored.completedAt = Date.now();
+      }
+      await logActivity({ type: "ai_ankaa_complete", documentId, detail: `${doc.title} (${words}w)` });
+    } catch (err: any) {
+      const stored = ankaaJobs.get(jobId);
+      if (stored) {
+        stored.status = "error";
+        stored.error = err?.message ?? "Ankaa couldn't complete the work.";
+        stored.completedAt = Date.now();
+      }
+      await trackUsage({ bot: "ankaa", kind: "longform", documentId, tokensEstimate: estimateTokens(prompt), latencyMs: Date.now() - started, status: "error" }).catch(() => {});
+    }
+  })();
+
+  return NextResponse.json({ jobId, etaSeconds: eta, wordTarget: words, bot: "ankaa" });
+}
+
+/**
+ * GET — poll a job's status.
+ * Query: ?jobId=ankaa_...
+ * Returns { status, result?, error?, elapsedSeconds, etaSeconds }
+ */
+export async function GET(req: NextRequest) {
+  const jobId = req.nextUrl.searchParams.get("jobId");
+  if (!jobId || !ankaaJobs.has(jobId))
+    return NextResponse.json({ error: "Unknown job" }, { status: 404 });
+  const job = ankaaJobs.get(jobId)!;
+  const elapsed = Math.ceil((Date.now() - job.createdAt) / 1000);
+  return NextResponse.json({
+    jobId: job.jobId,
+    status: job.status,
+    result: job.result,
+    error: job.error,
+    elapsedSeconds: elapsed,
+    etaSeconds: job.etaSeconds,
+    prompt: job.prompt,
+  });
+}

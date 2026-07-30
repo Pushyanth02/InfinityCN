@@ -145,3 +145,37 @@ Stage Summary:
 - **Cosmic aesthetic**: new .luma-cosmic CSS scope (deep space + violet + gold, glassmorphism, CSS starfield, nebula glow, pulsing orb avatar) applied to Luma panel, Create view, and dashboard hero.
 - 3 new API routes (luma, luma-create, stories), 1 new component (luma-chat), 1 new view (create), ~1200 lines of dead code removed from reader-view.tsx.
 - Lint clean, zero console errors, all routes 200, server healthy on port 3000.
+
+---
+Task ID: luma-3bots-1
+Agent: orchestrator (Z.ai Code)
+Task: Upgrade Luma into a 3-bot system (Luma chat, Ouro study, Ankaa agent), unique logos, robust architecture, landing/dashboard updates, thorough testing.
+
+Work Log:
+- **3 distinct SVG logos** (src/components/ui/bot-logos.tsx): LumaMark (glowing orb + comet trail, violet→gold), OuroMark (circular learning loop, teal→violet, ouroboros-inspired), AnkaaMark (phoenix star burst, amber→rose→magenta). Each is a self-contained, themeable SVG with unique gradient fills.
+- **Robust AI infrastructure** (src/lib/ai-helpers.ts): withRetry() wrapper with exponential backoff (retries on rate/timeout/network/503), aiComplete() and aiCompleteJson() now track usage + retry automatically, estimateTokens() (~4 chars/token), robust JSON extraction (strips fences, extracts first [...], tolerates trailing commas), trackUsage() writes UsageEvent rows.
+- **Usage monitoring** (Prisma UsageEvent model + /api/ai/usage): tracks bot, kind, tokensEstimate, latencyMs, status per request. GET returns 24h aggregates (per-bot count/tokens/errors/avgLatency + recent activity).
+- **Per-bot rate limits** (rate-limit.ts): luma 15/min, ouro 8/min, ankaa 3/min — tuned to each bot's cost profile.
+- **Luma (Normal Chatbot)** (/api/ai/luma): rewritten as a single fast persona blending storytelling + quick study help. Token-optimized: 4000-char excerpts, last-6-turn history, concise system prompt. Confirmed ~1s response time.
+- **Ouro (Study Buddy)** (/api/ai/ouro): NotebookLM-style. One route, 4 tools via `tool` param: chat (tutoring), guide (Markdown study guide), quiz (6 MCQs as JSON), flashcards (8-12 flip cards as JSON). 6000-char excerpts for deeper study context.
+- **Ankaa (Agent Mode)** (/api/ai/ankaa): long-form creative writing as a BACKGROUND process. POST starts a fire-and-forget job, returns immediately with {jobId, etaSeconds, wordTarget}. In-memory job store (Map). GET polls status. Client auto-polls every 3s. Live ETA estimation (wordTarget/30 words/sec). Confirmed: 800-word job completed in ~29s with rich, detailed prose.
+- **use-api.ts**: added lumaChat, ouroChat, ouroGuide, ouroQuiz, ouroFlashcards, ankaaStart, ankaaPoll, fetchUsage, BotId type, QuizQuestion/Flashcard interfaces.
+- **LumaChat component** (luma-chat.tsx): redesigned with 3 bot tabs (Luma/Ouro/Ankaa) each showing its logo + accent color. Per-bot: greeting, suggestion chips, send button colored to match bot. Rich message rendering: QuizView (interactive MCQ with reveal + score), FlashcardView (flip cards), AnkaaJobCard (live progress bar + ETA + "Read the work" reveal), inline scene cards, markdown for all text.
+- **Landing page**: new "Meet the three minds" section with 3 bot cards (logo, tag, description, accent glow). Updated FEATURES array (Three AI minds, Study like a pro, Long-form agent). Updated FAQ (What are the three AI bots?, How does Ankaa's background writing work?). Hero headline unchanged ("Meet Luma, your cosmic reading companion").
+- **Dashboard**: hero chips relabeled to Luma/Ouro/Ankaa with accent colors (violet/teal/rose).
+- **Testing (Agent Browser)**:
+  * Landing: "Meet the three minds" section renders 3 bot cards with logos; FAQ updated.
+  * Luma: greeted in 1.1s (fast), chips (Summarize, Cinematize, Explain).
+  * Ouro: greeted in 1.4s; Quiz tool generated 6 MCQs (after JSON robustness fix); Flashcards generated 7 flip cards; Study guide chip available.
+  * Ankaa: instant greeting (no API call); started 800-word long-form job → POST returned in 324ms with jobId+ETA(32s); progress bar ticked ("~29s remaining", "running in the background"); job completed in ~29s → full rich creative work appeared ("Elias stared at the words... the ships... a secret delivered to the edge of the world").
+  * Usage monitoring: GET /api/ai/usage returns 24h stats — 8 total requests, 3824 tokens, per-bot breakdown (Luma 0.9s avg, Ouro 9.3s avg, Ankaa 29s avg), 1 error (the pre-fix quiz JSON parse).
+  * Console errors: ZERO. dev.log error count: 0.
+  * `bun run lint`: clean.
+
+Stage Summary:
+- 3-bot architecture: Luma (fast chat, 15/min), Ouro (NotebookLM-style study with quiz/flashcards/guide, 8/min), Ankaa (background long-form agent with ETA + progress, 3/min).
+- 3 unique SVG logos (orb/loop/phoenix-star) with distinct gradients.
+- Robust system: retry-with-backoff, per-bot rate limits, usage monitoring (Prisma UsageEvent + /api/ai/usage), token optimization (capped excerpts/history), robust JSON parsing.
+- Ankaa runs as a true background process: POST returns immediately with jobId+ETA, client polls GET, fire-and-forget async generation, live progress bar.
+- All 3 bots tested with real tasks: Luma chat, Ouro quiz+flashcards, Ankaa long-form — all functional.
+- Lint clean, zero console errors, all routes 200.

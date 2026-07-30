@@ -11,12 +11,12 @@ import {
   BookOpen,
   Keyboard,
   BookHeart,
-  Baby,
   GraduationCap,
 } from "lucide-react";
 import { useNav } from "@/lib/nav-store";
 import { FanLemniscateMark } from "@/components/ui/fan-logo";
 import { ShaderBackground } from "@/components/ui/shader-background";
+import { LumaMark, OuroMark, AnkaaMark } from "@/components/ui/bot-logos";
 import { cn } from "@/lib/utils";
 import { Reveal, ScrollProgress } from "@/components/ui/reveal";
 import { ParticleField } from "@/components/ui/particle-field";
@@ -86,23 +86,18 @@ const FEATURES = [
   },
   {
     icon: BookHeart,
-    title: "For novel readers",
-    desc: "Continue the story, reimagine the ending, and expand the world. The AI writes in the author's own voice.",
-  },
-  {
-    icon: Baby,
-    title: "For young imaginations",
-    desc: "Cozy retellings for kids, friendly character intros, playful what-ifs, and vivid scenes to draw.",
+    title: "Three AI minds",
+    desc: "Luma for fast vivid chat, Ouro for NotebookLM-style study, and Ankaa for long-form creative writing.",
   },
   {
     icon: GraduationCap,
-    title: "For students",
-    desc: "Study guides, vocabulary lists, comprehension quizzes, and plain-language explanations of any passage.",
+    title: "Study like a pro",
+    desc: "Ouro builds study guides, flashcards, and quizzes from any passage — grounded, structured, ready to learn.",
   },
   {
     icon: Sparkles,
-    title: "AI summary & analysis",
-    desc: "Chapter or whole-book summaries, plus character, theme, and criticism analysis — grounded in your text.",
+    title: "Long-form agent",
+    desc: "Ankaa weaves full chapters and stories in the background, with a live ETA and progress bar.",
   },
   {
     icon: MessageSquareQuote,
@@ -188,20 +183,20 @@ const FAQS = [
     a: "PDF, EPUB, DOCX, Markdown, TXT, and HTML. DOCX and EPUB are extracted from their zip containers; PDF uses a best-effort text extraction. Markdown and plain text are fully supported.",
   },
   {
-    q: "Who is the AI companion for?",
-    a: "Three readers, all in one place. Story Lover mode helps novel readers continue the story, reimagine endings, and expand the world. Story Time mode retells texts warmly for children, with friendly character intros and picture prompts. Study Buddy mode builds study guides, vocabulary lists, and quizzes for students.",
+    q: "What are the three AI bots?",
+    a: "Luma is your fast, everyday chatbot — vivid storytelling plus quick study help. Ouro is a NotebookLM-style study assistant that builds study guides, quizzes, and flashcards. Ankaa is a creative-writing agent that weaves long-form chapters and stories in the background, with a live ETA.",
+  },
+  {
+    q: "How does Ankaa's background writing work?",
+    a: "Give Ankaa a brief — \"write the next chapter\", \"an alternate ending\", \"expand this scene\" — and it starts a background job. You'll see an estimated completion time and a live progress bar. When it's done, the full work appears in the chat ready to read.",
   },
   {
     q: "Can it really write the next chapter?",
-    a: "Yes. In Story Lover mode, Continue the Story has the AI read a chapter closely — absorbing its voice, rhythm, and tone — then writes the next passage in the author's style. Alternate Ending reimagines how the story could finish, with an optional twist you supply.",
-  },
-  {
-    q: "Is it good for kids?",
-    a: "Story Time mode is built for young imaginations. It retells chapters as cozy bedtime tales, introduces characters in friendly terms, invents playful what-if scenarios, and describes vivid scenes a child could illustrate.",
+    a: "Yes. Ankaa reads the document closely — absorbing its voice, rhythm, and tone — then writes a rich, detailed passage in the author's style. For long works it runs as a background agent with an ETA.",
   },
   {
     q: "Does it help with studying?",
-    a: "Study Buddy mode generates a structured study guide, pulls out vocabulary with definitions, creates multiple-choice quizzes you can take and score, and explains any passage in plain language.",
+    a: "Ouro generates structured study guides, creates multiple-choice quizzes you can take and score, builds flip-card flashcards, and explains any passage in plain language — all grounded in the text you're reading.",
   },
   {
     q: "Do I need an account?",
@@ -714,6 +709,95 @@ function InteractiveDemo() {
 }
 
 /* -------------------------------------------------------------------------- */
+/*  Meet the three AI minds — Luma, Ouro, Ankaa                                */
+/* -------------------------------------------------------------------------- */
+
+const BOTS_LANDING = [
+  {
+    name: "Luma",
+    tag: "Normal Chatbot",
+    desc: "Fast, vivid conversation that blends storytelling warmth with quick study help. Your everyday reading companion — retell a scene, explain a line, or imagine what's next, in seconds.",
+    accent: "#a78bfa",
+    Logo: LumaMark,
+  },
+  {
+    name: "Ouro",
+    tag: "Study Buddy",
+    desc: "A NotebookLM-style study assistant. Ouro builds structured study guides, generates quizzes you can take and score, and creates flip-cards — all grounded in the text you're reading.",
+    accent: "#5eead4",
+    Logo: OuroMark,
+  },
+  {
+    name: "Ankaa",
+    tag: "Agent Mode",
+    desc: "A creative-writing agent for long-form work. Give Ankaa a brief and it weaves a full chapter or story in the background — with a live ETA and progress bar, so you're never left waiting in the dark.",
+    accent: "#fb7185",
+    Logo: AnkaaMark,
+  },
+] as const;
+
+function MeetTheBots({ go }: { go: GoFn }) {
+  return (
+    <section id="bots" className="py-20 sm:py-28">
+      <div className="mx-auto max-w-6xl px-6">
+        <SectionHeading
+          eyebrow="One panel, three minds"
+          title="Meet your AI companions"
+          sub="Each bot has a distinct personality and craft. Switch between them with a tap — they all share the document you're reading."
+        />
+        <div className="mt-12 grid gap-5 md:grid-cols-3">
+          {BOTS_LANDING.map((b, i) => {
+            const Logo = b.Logo;
+            return (
+              <Reveal key={b.name} delay={(i % 3) * 90}>
+                <article
+                  className="ld-card ld-card-hover relative h-full overflow-hidden p-7"
+                  style={{ borderColor: "var(--ld-border)" }}
+                >
+                  <div
+                    aria-hidden
+                    className="pointer-events-none absolute -right-8 -top-8 opacity-20"
+                    style={{ filter: `drop-shadow(0 0 16px ${b.accent})` }}
+                  >
+                    <Logo size={120} />
+                  </div>
+                  <div className="relative">
+                    <div
+                      className="mb-5 inline-flex size-14 items-center justify-center rounded-2xl"
+                      style={{ background: `color-mix(in oklab, ${b.accent} 14%, transparent)`, border: `1px solid ${b.accent}33` }}
+                    >
+                      <Logo size={36} />
+                    </div>
+                    <p className="text-[11px] font-medium uppercase tracking-wider" style={{ color: b.accent }}>
+                      {b.tag}
+                    </p>
+                    <h3 className="ld-display mt-1 text-2xl">{b.name}</h3>
+                    <p className="mt-3 text-sm leading-relaxed" style={{ color: "var(--ld-ink-dim)" }}>
+                      {b.desc}
+                    </p>
+                  </div>
+                </article>
+              </Reveal>
+            );
+          })}
+        </div>
+        <Reveal delay={120}>
+          <div className="mt-10 flex justify-center">
+            <MagneticButton
+              onClick={() => go("dashboard")}
+              className="ld-btn-primary shine-on-hover inline-flex items-center gap-2 rounded-full px-6 py-3 text-base font-semibold focus-ring"
+            >
+              Try them on a document
+              <ArrowRight className="size-4" />
+            </MagneticButton>
+          </div>
+        </Reveal>
+      </div>
+    </section>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
 /*  Features                                                                   */
 /* -------------------------------------------------------------------------- */
 
@@ -1150,6 +1234,7 @@ export default function LandingPage() {
         <StatsBand />
         <LogoStrip />
         <InteractiveDemo />
+        <MeetTheBots go={go} />
         <Features />
         <OriginalVsCinematized />
         <Testimonials />

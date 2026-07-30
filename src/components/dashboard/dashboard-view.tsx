@@ -231,16 +231,16 @@ function GreetingHero({
           </p>
           <div className="flex flex-wrap gap-2 pt-1">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--noir-border)] bg-white/[0.03] px-3 py-1 text-xs text-muted-foreground">
-              <Sparkles className="h-3 w-3 text-[var(--noir-gold)]" />
-              Luma · Story Lover
+              <Sparkles className="h-3 w-3" style={{ color: "#a78bfa" }} />
+              Luma · fast chat
             </span>
             <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--noir-border)] bg-white/[0.03] px-3 py-1 text-xs text-muted-foreground">
-              <Sparkles className="h-3 w-3 text-[var(--noir-gold)]" />
-              Luma · Story Time
+              <Sparkles className="h-3 w-3" style={{ color: "#5eead4" }} />
+              Ouro · study buddy
             </span>
             <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--noir-border)] bg-white/[0.03] px-3 py-1 text-xs text-muted-foreground">
-              <Sparkles className="h-3 w-3 text-[var(--noir-gold)]" />
-              Luma · Study Buddy
+              <Sparkles className="h-3 w-3" style={{ color: "#fb7185" }} />
+              Ankaa · long-form agent
             </span>
           </div>
         </div>

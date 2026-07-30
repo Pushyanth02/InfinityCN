@@ -114,5 +114,21 @@ model AiScene {
 
 model Preference {
   id    String @id
-  value String 
+  value String
+}
+
+/// Tracks AI bot usage for monitoring, rate analytics, and cost estimation.
+/// One row per AI request across all bots (luma, ouro, ankaa, + legacy tools).
+model UsageEvent {
+  id            String   @id @default(cuid())
+  bot           String   // luma | ouro | ankaa | summarize | scenes | etc.
+  documentId    String?
+  kind          String   // chat | quiz | flashcards | study_guide | longform | etc.
+  tokensEstimate Int     @default(0)  // rough char/4 estimate of prompt+response
+  latencyMs     Int      @default(0)
+  status        String   @default("ok") // ok | error | rate_limited
+  createdAt     DateTime @default(now())
+
+  @@index([bot])
+  @@index([createdAt])
 }
