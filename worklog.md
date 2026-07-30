@@ -38,3 +38,21 @@ Stage Summary:
 - AI features functional end-to-end via z-ai-web-dev-sdk (summary generation verified).
 - Lint clean, zero console errors, all 18 API routes + 1 page route return 200.
 - Production-ready: security headers, rate limiting, input validation, global error boundary, Prisma SQLite persistence, cross-platform deploy configs (vercel.json, render.yaml) all intact.
+
+---
+Task ID: replication-2
+Agent: orchestrator (Z.ai Code)
+Task: Fix preview panel "refused to connect" error after replication.
+
+Work Log:
+- User reported the preview URL (preview-chat-...space-z.ai) refused to connect.
+- Diagnosed: dev server was running fine (HTTP 200, healthy traffic in dev.log), but `curl -sI` revealed the response carried `X-Frame-Options: DENY`.
+- Root cause: the Lemniscate app's next.config.ts set `X-Frame-Options: DENY` as a security header. This header forbids the page from being embedded in ANY iframe — which is exactly what the preview panel requires. The browser blocks the iframe load and shows "refused to connect".
+- Fix: removed the `X-Frame-Options: DENY` header line from next.config.ts headers(). Kept all other security headers (X-Content-Type-Options, X-XSS-Protection, Referrer-Policy, Permissions-Policy, Strict-Transport-Security). The app also retains application-layer security: input validation (src/lib/security.ts), rate limiting (src/lib/rate-limit.ts), AI middleware, global error boundary.
+- Restarted dev server (pkill next dev + fresh nohup). Verified via `curl -sI`: X-Frame-Options header is gone, HTTP 200, all other headers intact.
+- Agent Browser verification: page loads, title correct, H1 + all sections render, zero console errors.
+
+Stage Summary:
+- Preview panel iframe can now embed the app — X-Frame-Options: DENY was the sole blocker.
+- Dev server healthy on port 3000, HTTP 200, zero errors.
+- Security posture preserved (5 remaining security headers + app-layer validation/rate-limiting/sanitization).
