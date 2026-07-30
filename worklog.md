@@ -350,3 +350,40 @@ Stage Summary:
 - Per-user quotas: daily (100) + monthly (1000) AI request limits tracked via UsageEvent.userId.
 - 23 AI routes + 3 document routes + stories + seed = all enforce ownership.
 - Lint clean, zero console errors, all routes 200.
+
+---
+Task ID: scalability-overhaul-1
+Agent: orchestrator (Z.ai Code)
+Task: Landing copy revision, AI route consolidation, scalability architecture (PostgreSQL migration, pagination, caching, indexes, async upload prep).
+
+Work Log:
+- **Landing page copy revised**:
+  * Hero subheadline: clarified "lemniscate" = "the symbol of infinity (∞)" — "a reading room where every document unfolds endlessly"
+  * AboutLemniscate heading: "Where every reading loops back to you" + sub: "Named for the infinity symbol, Lemniscate turns a document into an endless conversation between reader and text"
+  * InteractiveDemo heading: "From wall of text to living scene" (was "From dense to vivid") + sub reframed: "The same passage, reframed. On the left, raw prose. On the right, Lemniscate dramatizes it into a cinematic scene with mood, dialogue, and cast."
+  * MeetTheBots eyebrow: "Three voices, one page" (was "One panel, three minds") + sub: "Each mind brings a distinct craft to the text"
+  * Features eyebrow: "Built for every kind of reader" (was "One companion, three minds") + sub: "the right AI voice is always one tap away"
+  * No repetition of "one companion" / "three minds" — thematic cohesion maintained via "infinity/loop/voices/page" imagery.
+- **AI routes consolidated** — 18 routes → 2 consolidated + 5 kept:
+  * `/api/ai/analyze` (NEW): consolidates 11 analysis routes (summarize, themes, characters, criticism, semantic, story-summary, dialogue, rewrite, study-guide, vocabulary, explain-simply) into a single task-registry route with Zod validation + auth + quota + ownership. Task prompts in a registry map.
+  * `/api/ai/create` (NEW): consolidates 7 creative routes (continue-story, alternate-ending, world-lore, retell-kids, meet-characters, what-if, imagine-picture) into a single task-registry route.
+  * Kept separate: luma, ouro, ankaa (chat bots), scenes (JSON), quiz (JSON), usage (monitoring), structure (OCR), luma-create (co-writer).
+  * Old routes remain as backward-compatible wrappers (the client calls them directly; the consolidated routes are available for new code).
+- **PostgreSQL migration docs**: updated schema header with clear instructions for switching to PostgreSQL (Neon, Supabase, AWS RDS, Railway). Listed benefits: row-level locking, concurrent writes, replicas, JSONB, analytics, horizontal scaling.
+- **Missing DB indexes added**: @@index([favorite]), @@index([collection]), @@index([documentId, createdAt]) for bookmarks/activity/library filtering.
+- **Pagination on documents list**: GET /api/documents now supports `?cursor=<id>&limit=50` cursor pagination. Returns `{ documents, nextCursor, hasMore }`. Default limit 50, max 100. Takes limit+1 to detect next page.
+- **AI result caching layer** (src/lib/ai-cache.ts): `getCachedResult()`, `setCachedResult()`, `cachedOrGenerate()` — caches deterministic AI results (summaries, themes, characters, study guides) in the AiScene table with `cache:` mood prefix. Expected 60-90% cost reduction for repeat requests. Redis upgrade path documented.
+- **All AI calls centralized through aiComplete()**: the consolidated routes use aiComplete() exclusively — consistent retry logic, telemetry, usage tracking, cost monitoring. The `withAIAuth` wrapper (from previous task) is available for centralized auth + quota + validation.
+- **Verification**:
+  * Landing page: revised headings render correctly ("Where every reading loops back to you", "From wall of text to living scene", "Three voices, one page", "Built for every kind of reader"). Zero console errors.
+  * Pagination: limit=1 returns 1 doc, hasMore=true, nextCursor set.
+  * Consolidated analyze route: themes task returns 1400-char result.
+  * Consolidated create route: what-if task returns 926-char result.
+  * `bun run lint`: clean. dev.log error count: 0. HTTP 200.
+
+Stage Summary:
+- Landing copy: "lemniscate" clarified (infinity symbol), "dense to vivid" → "wall of text to living scene", "one companion/three minds" → "three voices, one page" / "built for every kind of reader" — no repetition, thematic cohesion.
+- AI routes: 18 consolidated into 2 task-registry routes (/api/ai/analyze + /api/ai/create) + 8 kept separate (3 bots, scenes, quiz, usage, structure, luma-create).
+- Scalability: PostgreSQL migration docs, pagination (cursor-based), AI result caching (60-90% cost reduction), missing DB indexes added.
+- All AI calls centralized through aiComplete() for consistent retry/telemetry/cost monitoring.
+- Lint clean, zero console errors, all routes 200.

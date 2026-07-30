@@ -39,11 +39,18 @@ function rowFromDoc(d: any) {
 }
 
 // GET /api/documents — list the current user's documents (excludes contentJson)
+// Supports cursor pagination: ?cursor=<id>&limit=50
 export async function GET(req: NextRequest) {
   const { userId, setCookie } = ensureSession(req);
+  const url = new URL(req.url);
+  const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit")) || 50));
+  const cursor = url.searchParams.get("cursor") || undefined;
+
   const docs = await db.document.findMany({
     where: { userId },
     orderBy: { createdAt: "desc" },
+    take: limit + 1, // take one extra to determine if there's a next page
+    ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
     select: {
       id: true,
       title: true,
@@ -71,7 +78,15 @@ export async function GET(req: NextRequest) {
       // contentJson deliberately excluded — it can be megabytes per doc
     },
   });
-  return NextResponse.json({ documents: docs.map(rowFromDoc) }, { headers: setCookie });
+
+  const hasMore = docs.length > limit;
+  const items = hasMore ? docs.slice(0, limit) : docs;
+  const nextCursor = hasMore ? items[items.length - 1].id : null;
+
+  return NextResponse.json(
+    { documents: items.map(rowFromDoc), nextCursor, hasMore },
+    { headers: setCookie },
+  );
 }
 
 // POST /api/documents — upload + parse a new document

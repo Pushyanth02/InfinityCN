@@ -2,8 +2,11 @@
 // Persistent server-side storage replacing the original IndexedDB-only model.
 //
 // ── Database Provider ──────────────────────────────────────────────────────
-// Default: SQLite (for local development and Render's disk storage).
-// For Vercel/Supabase/Postgres deployments, change `provider` to "postgresql":
+// Default: SQLite (for local development only).
+//
+// For production, migrate to PostgreSQL (recommended) or a managed alternative
+// (Neon, Supabase, AWS RDS, Railway PostgreSQL). Change `provider` to
+// "postgresql" and set DATABASE_URL to the Postgres connection string:
 //
 //   datasource db {
 //     provider = "postgresql"
@@ -12,6 +15,9 @@
 //
 // Then run `bun run db:push` to create the schema on the new database.
 // The schema is identical for both providers — only the provider line changes.
+//
+// PostgreSQL benefits: row-level locking, concurrent writes, replicas,
+// better indexing (JSONB), analytics queries, horizontal scaling.
 
 generator client {
   provider = "prisma-client-js"
@@ -59,6 +65,8 @@ model Document {
   @@index([createdAt])
   @@index([lastReadAt])
   @@index([userId])
+  @@index([favorite])
+  @@index([collection])
 }
 
 model Bookmark {
@@ -98,6 +106,7 @@ model ActivityEvent {
 
   @@index([createdAt])
   @@index([documentId])
+  @@index([documentId, createdAt])
 }
 
 model AiScene {

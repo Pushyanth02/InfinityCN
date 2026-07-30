@@ -379,11 +379,11 @@ function Hero({ go }: { go: GoFn }) {
             className="mx-auto mt-6 max-w-2xl text-base text-balance sm:text-lg"
             style={{ color: "var(--ld-ink-dim)" }}
           >
-            Lemniscate is a local-first reading room that turns any document
-            into an interactive experience. Upload a PDF, EPUB, or Markdown
-            file — or write your own story — and three AI companions meet you
-            on the page: Luma for fast chat, Ouro for literary study, and Ankaa
-            for long-form creative writing.
+            Lemniscate — named for the lemniscate, the symbol of infinity (∞) —
+            is a reading room where every document unfolds endlessly. Upload a
+            PDF, EPUB, or Markdown file, or write your own story, and three AI
+            minds meet you on the page: Luma for fast conversation, Ouro for
+            literary study, and Ankaa for long-form creative writing.
           </p>
         </Reveal>
 
@@ -483,8 +483,8 @@ function AboutLemniscate({ go }: { go: GoFn }) {
       <div className="mx-auto max-w-5xl px-6">
         <SectionHeading
           eyebrow="What is Lemniscate"
-          title="A reading room that thinks with you"
-          sub="Bring a document, read it your way, and let three AI companions meet you on the page."
+          title="Where every reading loops back to you"
+          sub="Named for the infinity symbol, Lemniscate turns a document into an endless conversation between reader and text."
         />
         <div className="mt-12 grid gap-5 sm:grid-cols-3">
           {tiles.map((t, i) => {
@@ -530,8 +530,8 @@ function InteractiveDemo() {
       <div className="mx-auto max-w-6xl px-6">
         <SectionHeading
           eyebrow="The transformation"
-          title="From dense to vivid"
-          sub="Same prose, two readings. On the left, the source. On the right, Lemniscate has cinematized the passage into a scene card."
+          title="From wall of text to living scene"
+          sub="The same passage, reframed. On the left, raw prose. On the right, Lemniscate dramatizes it into a cinematic scene with mood, dialogue, and cast."
         />
 
         <div className="mt-12 grid gap-6 lg:grid-cols-2">
@@ -665,9 +665,9 @@ function MeetTheBots({ go }: { go: GoFn }) {
     <section id="bots" className="py-20 sm:py-28">
       <div className="mx-auto max-w-6xl px-6">
         <SectionHeading
-          eyebrow="One panel, three minds"
+          eyebrow="Three voices, one page"
           title="Meet your AI companions"
-          sub="Each bot has a distinct personality and craft. Switch between them with a tap — they all share the document you're reading."
+          sub="Each mind brings a distinct craft to the text. Switch between them with a tap — they all read the same document you do."
         />
         <div className="mt-12 grid gap-5 md:grid-cols-3">
           {BOTS_LANDING.map((b, i) => {
@@ -730,9 +730,9 @@ function Features() {
     <section id="features" className="py-20 sm:py-28">
       <div className="mx-auto max-w-6xl px-6">
         <SectionHeading
-          eyebrow="One companion, three minds"
+          eyebrow="Built for every kind of reader"
           title="A reading room that grows with you"
-          sub="Whether you're lost in a novel, sharing a bedtime story, or studying for an exam, the AI companion adapts to the reader you are today."
+          sub="Whether you're lost in a novel, sharing a bedtime story, or studying for an exam, the right AI voice is always one tap away."
         />
 
         <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
