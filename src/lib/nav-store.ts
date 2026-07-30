@@ -9,9 +9,11 @@ interface NavState {
   activeDocumentId: string | null;
   /** Optional return target after finishing a flow (e.g. reader → library). */
   returnTo: ViewName | null;
+  /** Optional sub-section for the target view (e.g. settings "about" tab). */
+  section: string | null;
   /** Lightweight history stack so browser back button isn't needed. */
   history: ViewName[];
-  go: (view: ViewName, opts?: { documentId?: string; returnTo?: ViewName }) => void;
+  go: (view: ViewName, opts?: { documentId?: string; returnTo?: ViewName; section?: string }) => void;
   back: () => void;
   reset: () => void;
 }
@@ -20,6 +22,7 @@ export const useNav = create<NavState>((set, get) => ({
   view: "landing",
   activeDocumentId: null,
   returnTo: null,
+  section: null,
   history: [],
   go: (view, opts) =>
     set((s) => ({
@@ -27,6 +30,7 @@ export const useNav = create<NavState>((set, get) => ({
       history: [...s.history, s.view].slice(-12),
       activeDocumentId: opts?.documentId ?? (view === "reader" ? s.activeDocumentId : null),
       returnTo: opts?.returnTo ?? null,
+      section: opts?.section ?? null,
     })),
   back: () => {
     const h = get().history;
@@ -38,5 +42,5 @@ export const useNav = create<NavState>((set, get) => ({
     set({ view: prev, history: h.slice(0, -1) });
   },
   reset: () =>
-    set({ view: "landing", activeDocumentId: null, returnTo: null, history: [] }),
+    set({ view: "landing", activeDocumentId: null, returnTo: null, section: null, history: [] }),
 }));

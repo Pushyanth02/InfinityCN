@@ -4,7 +4,6 @@ import { useMemo, type ReactNode } from "react";
 import {
   Activity,
   BarChart3,
-  BookOpen,
   CheckCircle2,
   Clock,
   FileStack,
@@ -13,14 +12,11 @@ import {
   Hash,
   Loader2,
   Library as LibraryIcon,
-  Sparkles,
   Upload as UploadIcon,
-  MessageSquareQuote,
-  Film,
-  Bookmark,
 } from "lucide-react";
 
 import { AppHeader } from "@/components/nav/app-header";
+import { activityMeta } from "@/lib/activity-meta";
 import { useNav } from "@/lib/nav-store";
 import {
   useActivity,
@@ -56,32 +52,6 @@ function weekdayShort(iso: string): string {
 function isToday(iso: string): boolean {
   const today = new Date().toISOString().slice(0, 10);
   return iso === today;
-}
-
-const ACTIVITY_META: Record<
-  string,
-  { label: string; color: string; icon: typeof Activity }
-> = {
-  upload: { label: "Imported", color: "var(--noir-gold)", icon: UploadIcon },
-  read: { label: "Read", color: "#a78bfa", icon: BookOpen },
-  ai_summarize: { label: "Summarized", color: "#60a5fa", icon: Sparkles },
-  ai_cinematize: { label: "Cinematized", color: "var(--noir-gold-soft)", icon: Film },
-  bookmark: { label: "Bookmarked", color: "#34d399", icon: Bookmark },
-  ai_qa: { label: "Asked", color: "#f472b6", icon: MessageSquareQuote },
-};
-
-function activityMeta(type: string): {
-  label: string;
-  color: string;
-  icon: typeof Activity;
-} {
-  return (
-    ACTIVITY_META[type] ?? {
-      label: type,
-      color: "var(--noir-ink-mute)",
-      icon: Activity,
-    }
-  );
 }
 
 /* ------------------------------------------------------------------ */

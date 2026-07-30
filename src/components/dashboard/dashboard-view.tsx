@@ -24,6 +24,7 @@ import {
   type DocumentRow,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { activityMeta } from "@/lib/activity-meta";
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                            */
@@ -48,30 +49,6 @@ function formatWordCount(n: number): string {
   if (n < 1000) return `${n}`;
   if (n < 1_000_000) return `${(n / 1000).toFixed(1)}k`;
   return `${(n / 1_000_000).toFixed(1)}M`;
-}
-
-const ACTIVITY_META: Record<string, { label: string; color: string }> = {
-  upload: { label: "Imported", color: "var(--noir-gold)" },
-  read: { label: "Read", color: "var(--noir-ink)" },
-  ai_summarize: { label: "Summarized", color: "#a78bfa" },
-  ai_cinematize: { label: "Cinematized", color: "var(--noir-gold)" },
-  ai_continue: { label: "Continued the story", color: "#a78bfa" },
-  ai_ending: { label: "Reimagined an ending", color: "#f472b6" },
-  ai_world: { label: "Expanded the world", color: "#60a5fa" },
-  ai_kids: { label: "Retold for kids", color: "#fbbf24" },
-  ai_characters_intro: { label: "Met the characters", color: "#34d399" },
-  ai_whatif: { label: "Invented what-ifs", color: "#f472b6" },
-  ai_imagine: { label: "Imagined pictures", color: "#fbbf24" },
-  ai_study: { label: "Built a study guide", color: "#60a5fa" },
-  ai_vocab: { label: "Listed vocabulary", color: "#34d399" },
-  ai_quiz: { label: "Generated a quiz", color: "#a78bfa" },
-  ai_explain: { label: "Explained simply", color: "#60a5fa" },
-  ai_themes: { label: "Extracted themes", color: "#a78bfa" },
-  bookmark: { label: "Bookmarked", color: "#60a5fa" },
-};
-
-function activityMeta(type: string): { label: string; color: string } {
-  return ACTIVITY_META[type] ?? { label: type, color: "var(--noir-ink-mute)" };
 }
 
 function isFinished(d: DocumentRow): boolean {
@@ -496,14 +473,17 @@ function ContinueReadingSection({ docs }: { docs: DocumentRow[] }) {
 
 function ActivityRowItem({ row }: { row: ActivityRow }) {
   const meta = activityMeta(row.type);
+  const Icon = meta.icon;
   const title = row.documentTitle || row.detail || "—";
   return (
     <li className="flex items-center gap-3 py-3">
       <span
-        className="size-2 shrink-0 rounded-full"
-        style={{ background: meta.color, boxShadow: `0 0 8px ${meta.color}` }}
+        className="flex size-7 shrink-0 items-center justify-center rounded-full border"
+        style={{ borderColor: `${meta.color}44`, background: `${meta.color}14`, color: meta.color }}
         aria-hidden
-      />
+      >
+        <Icon className="size-3.5" />
+      </span>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm text-foreground">
           <span className="text-muted-foreground">{meta.label}</span>

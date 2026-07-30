@@ -291,8 +291,15 @@ function SliderRow({
 
 export default function SettingsView() {
   const go = useNav((s) => s.go);
+  const navSection = useNav((s) => s.section);
   const { settings, update } = useReaderSettings();
-  const [section, setSection] = useState<SectionId>("appearance");
+  // If the nav-store carries a requested section (e.g. from a footer link),
+  // open it directly; otherwise default to "appearance".
+  const [section, setSection] = useState<SectionId>(
+    (navSection && ["appearance", "typography", "accessibility", "ai", "storage", "about"].includes(navSection))
+      ? (navSection as SectionId)
+      : "appearance",
+  );
 
   return (
     <div className="dashboard-noir min-h-dvh">

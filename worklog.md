@@ -220,3 +220,34 @@ Stage Summary:
 - Landing page revised: detailed Lemniscate description, truthful feature tiles, FAQ/Testimonials/fabricated-praise removed, footer/header nav updated, About/Privacy/Docs reflect 2026, all keyboard shortcuts removed.
 - Settings aligned to Luma/Ouro/Ankaa taxonomy with bot logos + 2026 info.
 - Lint clean, zero console errors, all routes 200.
+
+---
+Task ID: luma-polish-1
+Agent: orchestrator (Z.ai Code)
+Task: Condense AboutLemniscate, fix footer links, remove dashboard hamburger, replace system-type activity labels with descriptive names + icons, redesign bot logos, thorough testing.
+
+Work Log:
+- **AboutLemniscate condensed** (landing-page.tsx): replaced the 4-paragraph text block with 3 concise, action-oriented interactive tiles: "Bring a document" (Import), "Read your way" (Open reader), "Write your own" (Create a story). Each tile has an icon (Upload/Focus/BookOpen), title, one-line description, and a clickable action link with an arrow — navigates to the relevant view. VLM-verified: 3 interactive tiles with icons, titles, descriptions, and action links confirmed.
+- **Footer links fully clickable + deep-linking**: extended nav-store.go to accept a `section?: string` option; SettingsView now reads `section` from nav-store on mount and opens the requested sub-section directly. FOOTER_COLUMNS "About" links (About Lemniscate / Privacy / Documentation) now pass `{ view: "settings", section: "about" }` — clicking them navigates to Settings → About section directly. Verified: footer "About Lemniscate" opens the About section showing "Version 2.0 · 2026" + 3-bot description.
+- **Dashboard hamburger removed** (app-header.tsx): deleted the mobile Sheet (3-line menu toggle) entirely — the `<Sheet>`/`<SheetTrigger>`/`<SheetContent>` block, the `open` state, and the `Menu`/`X`/`Button`/`Sheet*` imports. Features are accessible via the account dropdown menu (Dashboard/Library/Import/Settings/Analytics/Search/Sign out) and the desktop nav. Verified on mobile (390×844): no "Open menu" hamburger, only "Account menu".
+- **Activity labels: system-type → descriptive + icons**: created a shared `src/lib/activity-meta.ts` module (single source of truth) mapping every activity type to { label, color, icon }. All 23 types now have descriptive names: "Chatted with Luma", "Studied with Ouro", "Ankaa finished a story", "Continued the story", "Built a study guide", "Generated a quiz", etc. — no more raw `ai_*` strings. Dashboard ActivityRowItem now renders a colored icon badge (was a plain dot). Analytics-view and history-view updated to import the shared map (was 6-entry incomplete copies). Verified: dashboard recent activity shows "Ankaa finished a story", "Chatted with Luma", "Studied with Ouro" with icons.
+- **Bot logos redesigned** (bot-logos.tsx): all 3 logos rebuilt with cleaner, more recognizable forms:
+  * Luma — a 4-point sparkle/star (two crossed diamonds + accent rays + bright center) representing the radiant chatbot. VLM-confirmed: "four-pointed sparkle or star shape, luminous".
+  * Ouro — an open book (two pages + spine + page lines + knowledge spark) representing the study companion. VLM-confirmed: "open book shape, teal, with spine and pages".
+  * Ankaa — a quill/feather (curved feather body + rachis + barbs + nib + flame trail) representing the creative-writing agent. VLM-confirmed: "quill or feather shape, reddish-pink, diagonal, with vane and shaft".
+- **Verification (Agent Browser + VLM)**:
+  * Landing AboutLemniscate: VLM confirms 3 interactive tiles ("Bring a document", "Read your way", "Write your own") with icons + action links.
+  * Footer "About Lemniscate" link: navigates to Settings → About section (Version 2.0 · 2026, 3-bot description).
+  * Dashboard mobile (390×844): no hamburger menu, only Account menu.
+  * Activity labels: descriptive ("Ankaa finished a story", "Chatted with Luma", "Studied with Ouro") with icon badges.
+  * Bot logos: VLM confirms all 3 redesigned logos render correctly (sparkle/star, open book, quill/feather).
+  * Console errors: ZERO. dev.log error count: 0.
+  * `bun run lint`: clean.
+
+Stage Summary:
+- AboutLemniscate condensed from 4 paragraphs to 3 concise interactive tiles with icons + action links.
+- Footer links fully clickable + deep-link to Settings sub-sections (About/Privacy/Documentation).
+- Dashboard hamburger removed; features accessible via account menu.
+- Activity labels: shared module with 23 descriptive names + icons (no more raw ai_* strings); used across dashboard/analytics/history.
+- Bot logos redesigned: Luma (sparkle/star), Ouro (open book), Ankaa (quill/feather) — VLM-verified as accurate forms.
+- Lint clean, zero console errors, all routes 200.

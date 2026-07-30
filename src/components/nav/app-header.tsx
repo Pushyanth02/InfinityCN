@@ -8,16 +8,13 @@ import {
   HardDrive,
   LifeBuoy,
   LogOut,
-  Menu,
   Search,
   Settings as SettingsIcon,
   User as UserIcon,
   BookOpen,
   Upload as UploadIcon,
   LayoutDashboard,
-  X,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,14 +23,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Sheet,
-  SheetClose,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
 import { Breadcrumbs, type Crumb } from "./breadcrumbs";
 import { useReaderSettings } from "@/hooks/use-reader-settings";
 
@@ -63,7 +52,6 @@ export function AppHeader({
 }) {
   const { view, go, reset } = useNav();
   const { settings } = useReaderSettings();
-  const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -187,46 +175,6 @@ export function AppHeader({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-
-          {/* Mobile sheet */}
-          <Sheet open={open} onOpenChange={setOpen}>
-            <SheetTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="md:hidden"
-                aria-label="Open menu"
-              >
-                <Menu className="h-5 w-5" />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="w-72" aria-describedby={undefined}>
-              <SheetHeader>
-                <SheetTitle className="flex items-center gap-2">
-                  <LemniscateMark className="h-5 w-8 text-brand" />
-                  Lemniscate
-                </SheetTitle>
-              </SheetHeader>
-              <nav className="mt-4 grid gap-1">
-                {PRIMARY_NAV.map((item) => (
-                  <SheetClose asChild key={item.view}>
-                    <button
-                      onClick={() => go(item.view)}
-                      className={cn(
-                        "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition",
-                        isActive(item.view)
-                          ? "bg-accent font-medium text-accent-foreground"
-                          : "hover:bg-muted",
-                      )}
-                    >
-                      <item.icon className="h-4 w-4" />
-                      {item.label}
-                    </button>
-                  </SheetClose>
-                ))}
-              </nav>
-            </SheetContent>
-          </Sheet>
         </div>
       </div>
     </header>

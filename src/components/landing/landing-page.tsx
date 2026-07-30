@@ -158,9 +158,9 @@ const FOOTER_COLUMNS = [
   {
     title: "About",
     links: [
-      { label: "About Lemniscate", view: "settings" as ViewName },
-      { label: "Privacy", view: "settings" as ViewName },
-      { label: "Documentation", view: "settings" as ViewName },
+      { label: "About Lemniscate", view: "settings" as ViewName, section: "about" },
+      { label: "Privacy", view: "settings" as ViewName, section: "about" },
+      { label: "Documentation", view: "settings" as ViewName, section: "about" },
     ],
   },
 ] as const;
@@ -472,45 +472,50 @@ function StatsBand() {
 /*  About Lemniscate — what it is, in detail                                    */
 /* -------------------------------------------------------------------------- */
 
-function AboutLemniscate() {
+function AboutLemniscate({ go }: { go: GoFn }) {
+  const tiles = [
+    { icon: Upload, title: "Bring a document", desc: "PDF, EPUB, DOCX, Markdown, or text — parsed into chapters and stored locally.", action: "Import", view: "upload" as ViewName },
+    { icon: Focus, title: "Read your way", desc: "Focus mode, adaptive fonts, and a cinematic scene overlay for long sessions.", action: "Open reader", view: "library" as ViewName },
+    { icon: BookOpen, title: "Write your own", desc: "Hand the page to Ankaa and draft a complete story from brief to ending.", action: "Create a story", view: "create" as ViewName },
+  ];
   return (
     <section className="py-20 sm:py-28">
-      <div className="mx-auto max-w-3xl px-6">
+      <div className="mx-auto max-w-5xl px-6">
         <SectionHeading
           eyebrow="What is Lemniscate"
           title="A reading room that thinks with you"
+          sub="Bring a document, read it your way, and let three AI companions meet you on the page."
         />
-        <Reveal delay={80} className="mt-8 space-y-5 text-base leading-relaxed" >
-          <p style={{ color: "var(--ld-ink-dim)" }}>
-            Lemniscate is a local-first reading application. You bring a
-            document — a PDF, an EPUB, a Markdown file, a Word document, plain
-            text, or HTML — and Lemniscate parses it into chapters, indexes it
-            for search, and stores it in a persistent library that lives on
-            this device. No account is required, and your library stays yours.
-          </p>
-          <p style={{ color: "var(--ld-ink-dim)" }}>
-            The reader is built for long sessions. Focus mode dims the
-            paragraphs around the one you're reading. Adaptive typography lets
-            you choose the font, size, line height, and reading width that suit
-            you. A scene-card overlay can reframe the prose as a sequence of
-            cinematic beats, each with a title, a mood, and a cast.
-          </p>
-          <p style={{ color: "var(--ld-ink-dim)" }}>
-            Three AI companions live inside the reader. <strong style={{ color: "var(--ld-purple-bright)" }}>Luma</strong> is the
-            everyday chatbot — fast, vivid, and happy to retell a scene, explain
-            a line, or imagine what comes next. <strong style={{ color: "#5eead4" }}>Ouro</strong> is a literary study
-            companion that builds study guides, quizzes, and flashcards grounded
-            in the text you're reading. <strong style={{ color: "#fb7185" }}>Ankaa</strong> is a creative-writing agent
-            that weaves long-form chapters and stories in the background, with a
-            live ETA so you know when the work will be ready.
-          </p>
-          <p style={{ color: "var(--ld-ink-dim)" }}>
-            You can also write your own. The Create view hands the page to
-            Ankaa — give it a brief and it will draft a complete story from its
-            true beginning to its natural end, which you can then edit, save,
-            and read in the library alongside everything else.
-          </p>
-        </Reveal>
+        <div className="mt-12 grid gap-5 sm:grid-cols-3">
+          {tiles.map((t, i) => {
+            const Icon = t.icon;
+            return (
+              <Reveal key={t.title} delay={(i % 3) * 80}>
+                <button
+                  type="button"
+                  onClick={() => go(t.view)}
+                  className="ld-card ld-card-hover group flex h-full w-full flex-col items-start p-6 text-left"
+                  style={{ borderColor: "var(--ld-border)" }}
+                >
+                  <div
+                    className="mb-4 inline-flex size-11 items-center justify-center rounded-xl transition-transform group-hover:scale-110"
+                    style={{ background: "rgba(139, 92, 246, 0.12)", color: "var(--ld-purple-bright)" }}
+                  >
+                    <Icon className="size-5" />
+                  </div>
+                  <h3 className="font-display text-base font-medium">{t.title}</h3>
+                  <p className="mt-1.5 flex-1 text-sm leading-relaxed" style={{ color: "var(--ld-ink-dim)" }}>
+                    {t.desc}
+                  </p>
+                  <span className="mt-4 inline-flex items-center gap-1 text-xs font-medium" style={{ color: "var(--ld-purple-bright)" }}>
+                    {t.action}
+                    <ArrowRight className="size-3 transition-transform group-hover:translate-x-0.5" />
+                  </span>
+                </button>
+              </Reveal>
+            );
+          })}
+        </div>
       </div>
     </section>
   );
@@ -981,7 +986,7 @@ function Footer({ go }: { go: GoFn }) {
                         type="button"
                         onClick={() =>
                           "view" in link && link.view
-                            ? go(link.view as ViewName)
+                            ? go(link.view as ViewName, "section" in link && link.section ? { section: link.section } : undefined)
                             : undefined
                         }
                         className="rounded-md text-sm transition-colors focus-ring"
@@ -1041,7 +1046,7 @@ export default function LandingPage() {
       <main id="main-content">
         <Hero go={go} />
         <StatsBand />
-        <AboutLemniscate />
+        <AboutLemniscate go={go} />
         <InteractiveDemo />
         <MeetTheBots go={go} />
         <Features />

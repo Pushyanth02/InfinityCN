@@ -2,19 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  Activity,
-  BookOpen,
-  Bookmark,
   Clock,
-  Film,
   History as HistoryIcon,
   Library as LibraryIcon,
-  MessageSquareQuote,
-  Sparkles,
   Upload as UploadIcon,
 } from "lucide-react";
 
 import { AppHeader } from "@/components/nav/app-header";
+import { activityMeta } from "@/lib/activity-meta";
 import { useNav } from "@/lib/nav-store";
 import { useActivity } from "@/hooks/use-api";
 import { cn } from "@/lib/utils";
@@ -33,32 +28,6 @@ const FILTERS: { id: FilterKey; label: string }[] = [
   { id: "uploads", label: "Uploads" },
   { id: "ai", label: "AI actions" },
 ];
-
-const ACTIVITY_META: Record<
-  string,
-  { label: string; color: string; icon: typeof Activity }
-> = {
-  upload: { label: "Imported", color: "var(--noir-gold)", icon: UploadIcon },
-  read: { label: "Read", color: "#a78bfa", icon: BookOpen },
-  ai_summarize: { label: "Summarized", color: "#60a5fa", icon: Sparkles },
-  ai_cinematize: { label: "Cinematized", color: "var(--noir-gold-soft)", icon: Film },
-  bookmark: { label: "Bookmarked", color: "#34d399", icon: Bookmark },
-  ai_qa: { label: "Asked", color: "#f472b6", icon: MessageSquareQuote },
-};
-
-function activityMeta(type: string): {
-  label: string;
-  color: string;
-  icon: typeof Activity;
-} {
-  return (
-    ACTIVITY_META[type] ?? {
-      label: type,
-      color: "var(--noir-ink-mute)",
-      icon: Activity,
-    }
-  );
-}
 
 function isRead(type: string): boolean {
   return type === "read" || type === "bookmark";
