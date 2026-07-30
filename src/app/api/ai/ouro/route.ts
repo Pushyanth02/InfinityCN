@@ -5,6 +5,8 @@ import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { buildExcerpt, aiComplete, aiCompleteJson } from "@/lib/ai-helpers";
 import { ouroSchema, validate } from "@/lib/api-schemas";
 import type { ParsedDoc } from "@/lib/types";
+import { ensureSession } from "@/lib/auth";
+import { verifyDocumentOwnership, checkUserQuota } from "@/lib/quota";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -21,6 +23,8 @@ type ChatMessage = { role: "user" | "assistant"; content: string };
  *   - tool=guide       → a structured Markdown study guide
  */
 export async function POST(req: NextRequest) {
+  const { userId, setCookie } = ensureSession(req);
+
   const rl = checkRateLimit(req, RATE_LIMITS.ouro);
   if (!rl.allowed) {
     return NextResponse.json(
@@ -35,7 +39,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: v.error }, { status: 400 });
   const { documentId, tool = "chat", messages, chapterIndex } = v.data;
 
-  const doc = await db.document.findUnique({ where: { id: documentId } });
+  const doc = await verifyDocumentOwnership(documentId, userId);
   if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (doc.status !== "ready")
     return NextResponse.json({ error: "Document not ready" }, { status: 400 });

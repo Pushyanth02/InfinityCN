@@ -5,6 +5,8 @@ import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { aiCompleteJson } from "@/lib/ai-helpers";
 import { scenesSchema, validate } from "@/lib/api-schemas";
 import type { ParsedDoc } from "@/lib/types";
+import { ensureSession } from "@/lib/auth";
+import { verifyDocumentOwnership, checkUserQuota } from "@/lib/quota";
 
 export const runtime = "nodejs";
 export const maxDuration = 90;
@@ -30,6 +32,8 @@ interface Scene {
  * information and content from the source.
  */
 export async function POST(req: NextRequest) {
+  const { userId, setCookie } = ensureSession(req);
+
   const rl = checkRateLimit(req, RATE_LIMITS.ai);
   if (!rl.allowed) {
     return NextResponse.json(
@@ -44,7 +48,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: v.error }, { status: 400 });
   const { documentId, regenerate } = v.data;
 
-  const doc = await db.document.findUnique({ where: { id: documentId } });
+  const doc = await verifyDocumentOwnership(documentId, userId);
   if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (doc.status !== "ready")
     return NextResponse.json({ error: "Document not ready" }, { status: 400 });

@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { gradientForId } from "@/lib/types";
 import { logActivity } from "@/lib/activity";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+import { ensureSession } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
@@ -113,6 +114,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
+  const { userId, setCookie } = ensureSession(req);
+
   // Rate limit even in development to prevent accidental spam.
   const rl = checkRateLimit(req, RATE_LIMITS.upload);
   if (!rl.allowed) {
@@ -122,12 +125,12 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Idempotent: if a doc with this title exists, return it.
+  // Idempotent: if a doc with this title exists for this user, return it.
   const existing = await db.document.findFirst({
-    where: { title: SAMPLE_TITLE },
+    where: { title: SAMPLE_TITLE, userId },
   });
   if (existing) {
-    return NextResponse.json({ ok: true, id: existing.id, alreadySeeded: true });
+    return NextResponse.json({ ok: true, id: existing.id, alreadySeeded: true }, { headers: setCookie });
   }
 
   // Parse the sample text into chapters/chunks (same logic as engine)
@@ -190,6 +193,7 @@ export async function POST(req: NextRequest) {
 
   const created = await db.document.create({
     data: {
+      userId,
       title: docTitle,
       author: SAMPLE_AUTHOR,
       sourceType: "md",
@@ -231,6 +235,7 @@ Every reading session ends. The art is in making the return effortless — openi
   ];
   const tech = await db.document.create({
     data: {
+      userId,
       title: "A Note on Persistence",
       author: "Lemniscate Press",
       sourceType: "md",
@@ -253,5 +258,5 @@ Every reading session ends. The art is in making the return effortless — openi
   await logActivity({ type: "read", documentId: created.id, detail: docTitle });
   await logActivity({ type: "ai_summarize", documentId: created.id, detail: docTitle });
 
-  return NextResponse.json({ ok: true, id: created.id, alreadySeeded: false });
+  return NextResponse.json({ ok: true, id: created.id, alreadySeeded: false }, { headers: setCookie });
 }

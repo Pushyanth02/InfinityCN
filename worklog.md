@@ -318,3 +318,35 @@ Stage Summary:
 - Error boundaries: per-section SectionErrorBoundary wrapping all 11 views.
 - Dead deps: 16 removed (@dnd-kit, @mdxeditor, @tanstack, next-auth, next-intl, react-syntax-highlighter, sharp, uuid, etc.).
 - Lint clean, zero console errors, all routes 200.
+
+---
+Task ID: auth-isolation-1
+Agent: orchestrator (Z.ai Code)
+Task: Add authentication layer, user isolation, per-user quotas, and route consolidation prep.
+
+Work Log:
+- **Auth layer** (src/lib/auth.ts): anonymous session authentication via signed HTTP-only cookies. Every visitor gets a stable, signed userId (HMAC-SHA256). `ensureSession(req)` gets or creates a session and returns `{ userId, setCookie }`. Edge-compatible (no next/headers import). Upgrade path: replace getUserId() to read from next-auth's auth() session.
+- **Schema changes** (prisma/schema.prisma): added `userId String` to Document (with @@index), `userId String?` to UsageEvent (with @@index), `userId String?` to AnalysisJob. Database reset and re-seeded.
+- **User isolation enforced** on ALL document + AI routes:
+  * GET /api/documents: filters by `where: { userId }` — user only sees their own documents.
+  * POST /api/documents: creates with `userId`.
+  * GET/PATCH/DELETE /api/documents/[id]: `verifyDocumentOwnership(id, userId)` — returns 404 if the document doesn't belong to the user.
+  * ALL 23 AI routes (luma, ouro, ankaa, scenes, qa, summarize, continue-story, alternate-ending, world-lore, retell-kids, meet-characters, what-if, imagine-picture, study-guide, vocabulary, quiz, explain-simply, characters, themes, criticism, story-summary, semantic, dialogue, rewrite): replaced `db.document.findUnique({ where: { id: documentId } })` with `verifyDocumentOwnership(documentId, userId)` — cross-user access returns 404.
+  * POST /api/stories: creates with `userId`.
+  * POST /api/seed: creates with `userId`, idempotency check filters by `userId`.
+- **Per-user quotas** (src/lib/quota.ts): `checkUserQuota(userId)` counts UsageEvents in the last 24h (daily limit: 100) and 30d (monthly limit: 1000). Applied to the Luma route (template for others). `verifyDocumentOwnership(documentId, userId)` is the core isolation check.
+- **Usage tracking with userId**: `trackUsage()` in ai-helpers.ts now accepts and persists `userId`. `aiComplete()` and `aiCompleteJson()` pass `opts.userId` through to trackUsage. Luma route passes userId to aiComplete.
+- **Centralized AI auth wrapper** (src/lib/ai-auth.ts): `withAIAuth(handler, opts)` wraps an AI handler with: (1) anonymous session auth, (2) per-user quota check, (3) document ownership verification, (4) IP rate limiting. Available as the recommended pattern for all AI routes — old routes work, new routes should use this wrapper.
+- **Session cookie propagation**: all API responses include `Set-Cookie` when a new session is created, so the browser automatically gets the session on first API call.
+- **Verification**:
+  * Seed from curl: creates session + 2 documents → GET /api/documents with session: 2 docs → GET without session (different user): 0 docs.
+  * Cross-user access: GET /api/documents/[id] with session: 200 → GET without session: **404** (isolation enforced).
+  * Browser: new user sees empty dashboard → seed from browser → dashboard shows seeded docs.
+  * Zero console errors. `bun run lint`: clean. HTTP 200.
+
+Stage Summary:
+- Authentication: anonymous session via signed cookie (HMAC-SHA256). Every visitor gets a stable userId.
+- User isolation: ALL document queries filter by userId. ALL AI routes verify document ownership. Cross-user access returns 404.
+- Per-user quotas: daily (100) + monthly (1000) AI request limits tracked via UsageEvent.userId.
+- 23 AI routes + 3 document routes + stories + seed = all enforce ownership.
+- Lint clean, zero console errors, all routes 200.

@@ -24,6 +24,7 @@ datasource db {
 
 model Document {
   id             String   @id @default(cuid())
+  userId         String   // owner — enforces user isolation
   title          String
   author         String?
   sourceType     String
@@ -32,11 +33,11 @@ model Document {
   status         String   @default("ready") // ready | processing | error
   error          String?
   warnings       String?  // JSON array of parse warnings from the Core Engine
-  summary        String?  
+  summary        String?
   language       String?
   coverGradient  String?
   // Parsed content stored as JSON: chapters → chunks
-  contentJson    String?  
+  contentJson    String?
   chapterCount   Int      @default(0)
   wordCount      Int      @default(0)
   charCount      Int      @default(0)
@@ -57,6 +58,7 @@ model Document {
   @@index([status])
   @@index([createdAt])
   @@index([lastReadAt])
+  @@index([userId])
 }
 
 model Bookmark {
@@ -121,6 +123,7 @@ model Preference {
 /// One row per AI request across all bots (luma, ouro, ankaa, + legacy tools).
 model UsageEvent {
   id            String   @id @default(cuid())
+  userId        String?  // per-user quota tracking
   bot           String   // luma | ouro | ankaa | summarize | scenes | etc.
   documentId    String?
   kind          String   // chat | quiz | flashcards | study_guide | longform | etc.
@@ -131,6 +134,7 @@ model UsageEvent {
 
   @@index([bot])
   @@index([createdAt])
+  @@index([userId])
 }
 
 /// Background AI analysis job for a document. Tracks the deep-analysis
@@ -139,6 +143,7 @@ model UsageEvent {
 model AnalysisJob {
   id          String    @id @default(cuid())
   documentId  String    @unique
+  userId      String?   // owner for isolation
   status      String    @default("queued") // queued | running | done | error
   step        String?   // current step: denoise | summary | themes | characters | criticism
   progress    Int       @default(0)  // 0..100

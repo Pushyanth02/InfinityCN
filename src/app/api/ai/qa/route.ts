@@ -3,11 +3,15 @@ import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import type { ParsedDoc } from "@/lib/types";
+import { ensureSession } from "@/lib/auth";
+import { verifyDocumentOwnership, checkUserQuota } from "@/lib/quota";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
+  const { userId, setCookie } = ensureSession(req);
+
   const rl = checkRateLimit(req, RATE_LIMITS.ai);
   if (!rl.allowed) {
     return NextResponse.json(
@@ -19,7 +23,7 @@ export async function POST(req: NextRequest) {
   if (!documentId || !question) {
     return NextResponse.json({ error: "documentId and question required" }, { status: 400 });
   }
-  const doc = await db.document.findUnique({ where: { id: documentId } });
+  const doc = await verifyDocumentOwnership(documentId, userId);
   if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   let parsed: ParsedDoc | null = null;

@@ -78,7 +78,7 @@ export async function withRetry<T>(
 export async function aiComplete(
   systemPrompt: string,
   userContent: string,
-  opts: { bot?: string; kind?: string; documentId?: string } = {},
+  opts: { bot?: string; kind?: string; documentId?: string; userId?: string } = {},
 ): Promise<string> {
   const bot = opts.bot ?? "system";
   const kind = opts.kind ?? "chat";
@@ -97,10 +97,10 @@ export async function aiComplete(
     );
     const reply = completion.choices[0]?.message?.content?.trim() ?? "";
     const tokens = estimateTokens(systemPrompt, userContent, reply);
-    await trackUsage({ bot, kind, documentId: opts.documentId, tokensEstimate: tokens, latencyMs: Date.now() - started, status: "ok" }).catch(() => {});
+    await trackUsage({ bot, kind, documentId: opts.documentId, userId: opts.userId, tokensEstimate: tokens, latencyMs: Date.now() - started, status: "ok" }).catch(() => {});
     return reply;
   } catch (err) {
-    await trackUsage({ bot, kind, documentId: opts.documentId, tokensEstimate: estimateTokens(systemPrompt, userContent), latencyMs: Date.now() - started, status: "error" }).catch(() => {});
+    await trackUsage({ bot, kind, documentId: opts.documentId, userId: opts.userId, tokensEstimate: estimateTokens(systemPrompt, userContent), latencyMs: Date.now() - started, status: "error" }).catch(() => {});
     throw err;
   }
 }
@@ -109,7 +109,7 @@ export async function aiComplete(
 export async function aiCompleteJson<T>(
   systemPrompt: string,
   userContent: string,
-  opts: { bot?: string; kind?: string; documentId?: string } = {},
+  opts: { bot?: string; kind?: string; documentId?: string; userId?: string } = {},
 ): Promise<T[]> {
   const bot = opts.bot ?? "system";
   const kind = opts.kind ?? "json";
@@ -144,10 +144,10 @@ export async function aiCompleteJson<T>(
     const parsed = JSON.parse(cleaned);
     if (!Array.isArray(parsed)) throw new Error("AI did not return a JSON array");
     const tokens = estimateTokens(systemPrompt, userContent, raw);
-    await trackUsage({ bot, kind, documentId: opts.documentId, tokensEstimate: tokens, latencyMs: Date.now() - started, status: "ok" }).catch(() => {});
+    await trackUsage({ bot, kind, documentId: opts.documentId, userId: opts.userId, tokensEstimate: tokens, latencyMs: Date.now() - started, status: "ok" }).catch(() => {});
     return parsed as T[];
   } catch (err) {
-    await trackUsage({ bot, kind, documentId: opts.documentId, tokensEstimate: estimateTokens(systemPrompt, userContent), latencyMs: Date.now() - started, status: "error" }).catch(() => {});
+    await trackUsage({ bot, kind, documentId: opts.documentId, userId: opts.userId, tokensEstimate: estimateTokens(systemPrompt, userContent), latencyMs: Date.now() - started, status: "error" }).catch(() => {});
     throw err;
   }
 }
@@ -157,6 +157,7 @@ export async function trackUsage(p: {
   bot: string;
   kind: string;
   documentId?: string;
+  userId?: string;
   tokensEstimate: number;
   latencyMs: number;
   status: string;
@@ -166,6 +167,7 @@ export async function trackUsage(p: {
       bot: p.bot,
       kind: p.kind,
       documentId: p.documentId ?? null,
+      userId: p.userId ?? null,
       tokensEstimate: p.tokensEstimate,
       latencyMs: p.latencyMs,
       status: p.status,

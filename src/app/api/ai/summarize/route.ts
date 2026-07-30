@@ -4,6 +4,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { logActivity } from "@/lib/activity";
 import type { ParsedDoc } from "@/lib/types";
+import { ensureSession } from "@/lib/auth";
+import { verifyDocumentOwnership, checkUserQuota } from "@/lib/quota";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -30,6 +32,8 @@ interface SummarizeRequest {
  * convention; novel summaries are cached on the Document.summary field.
  */
 export async function POST(req: NextRequest) {
+  const { userId, setCookie } = ensureSession(req);
+
   const rl = checkRateLimit(req, RATE_LIMITS.ai);
   if (!rl.allowed) {
     return NextResponse.json(
@@ -47,7 +51,7 @@ export async function POST(req: NextRequest) {
   if (scope === "chapter" && (chapterIndex === undefined || chapterIndex < 0))
     return NextResponse.json({ error: "chapterIndex required for chapter scope" }, { status: 400 });
 
-  const doc = await db.document.findUnique({ where: { id: documentId } });
+  const doc = await verifyDocumentOwnership(documentId, userId);
   if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (doc.status !== "ready")
     return NextResponse.json({ error: "Document not ready" }, { status: 400 });

@@ -4,6 +4,8 @@ import { logActivity } from "@/lib/activity";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { buildExcerpt, aiComplete } from "@/lib/ai-helpers";
 import { chatSchema, validate } from "@/lib/api-schemas";
+import { ensureSession } from "@/lib/auth";
+import { verifyDocumentOwnership, checkUserQuota } from "@/lib/quota";
 import type { ParsedDoc } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -19,22 +21,34 @@ type ChatMessage = { role: "user" | "assistant"; content: string };
  * short system prompt, last-6-turn history.
  */
 export async function POST(req: NextRequest) {
+  const { userId, setCookie } = ensureSession(req);
+
   const rl = checkRateLimit(req, RATE_LIMITS.luma);
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "Luma is busy — please try again in a moment.", bot: "luma" },
-      { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSec), ...setCookie } },
+    );
+  }
+
+  // Per-user quota check.
+  const quota = await checkUserQuota(userId);
+  if (!quota.allowed) {
+    return NextResponse.json(
+      { error: `Daily AI limit reached (${quota.dailyUsed}/${quota.dailyLimit}). Try again later.`, bot: "luma" },
+      { status: 429, headers: { "Retry-After": String(quota.retryAfterSec), ...setCookie } },
     );
   }
 
   const body = await req.json();
   const v = validate(chatSchema, body);
   if (!v.success)
-    return NextResponse.json({ error: v.error }, { status: 400 });
+    return NextResponse.json({ error: v.error }, { status: 400, headers: setCookie });
   const { documentId, messages, chapterIndex } = v.data;
 
-  const doc = await db.document.findUnique({ where: { id: documentId } });
-  if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  // Enforce document ownership — user can only chat with their own documents.
+  const doc = await verifyDocumentOwnership(documentId, userId);
+  if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404, headers: setCookie });
   if (doc.status !== "ready")
     return NextResponse.json({ error: "Document not ready" }, { status: 400 });
 
@@ -80,7 +94,7 @@ ${excerpt}`;
       ? recent.map((m) => `${m.role === "user" ? "Reader" : "Luma"}: ${m.content}`).join("\n\n") + "\n\nLuma:"
       : "(The reader just opened the chat. Greet them in one sentence and offer one specific, vivid idea about what they're reading.)";
 
-  const reply = await aiComplete(system, userContent, { bot: "luma", kind: "chat", documentId });
+  const reply = await aiComplete(system, userContent, { bot: "luma", kind: "chat", documentId, userId });
 
   await logActivity({ type: "ai_luma_chat", documentId, detail: doc.title });
   return NextResponse.json({ reply, bot: "luma" });

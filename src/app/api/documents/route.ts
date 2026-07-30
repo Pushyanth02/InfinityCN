@@ -6,6 +6,7 @@ import { logActivity } from "@/lib/activity";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { validateUploadedFile } from "@/lib/security";
 import { safeErrorMessage } from "@/lib/safe-error";
+import { ensureSession } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
@@ -37,9 +38,11 @@ function rowFromDoc(d: any) {
   };
 }
 
-// GET /api/documents — list all (excludes contentJson for performance)
-export async function GET() {
+// GET /api/documents — list the current user's documents (excludes contentJson)
+export async function GET(req: NextRequest) {
+  const { userId, setCookie } = ensureSession(req);
   const docs = await db.document.findMany({
+    where: { userId },
     orderBy: { createdAt: "desc" },
     select: {
       id: true,
@@ -68,12 +71,13 @@ export async function GET() {
       // contentJson deliberately excluded — it can be megabytes per doc
     },
   });
-  return NextResponse.json({ documents: docs.map(rowFromDoc) });
+  return NextResponse.json({ documents: docs.map(rowFromDoc) }, { headers: setCookie });
 }
 
 // POST /api/documents — upload + parse a new document
 export async function POST(req: NextRequest) {
   try {
+    const { userId, setCookie } = ensureSession(req);
     // Rate limit: 5 uploads per minute per IP
     const rl = checkRateLimit(req, RATE_LIMITS.upload);
     if (!rl.allowed) {
@@ -101,6 +105,7 @@ export async function POST(req: NextRequest) {
 
     const created = await db.document.create({
       data: {
+        userId,
         title: titleGuess,
         sourceType,
         mimeType: file.type || null,

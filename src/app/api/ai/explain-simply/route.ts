@@ -5,12 +5,16 @@ import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { isValidDocumentId } from "@/lib/security";
 import { buildExcerpt, aiComplete } from "@/lib/ai-helpers";
 import type { ParsedDoc } from "@/lib/types";
+import { ensureSession } from "@/lib/auth";
+import { verifyDocumentOwnership, checkUserQuota } from "@/lib/quota";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 /** Explain Simply — restates the text in plain, easy-to-grasp language (ELI5). */
 export async function POST(req: NextRequest) {
+  const { userId, setCookie } = ensureSession(req);
+
   const rl = checkRateLimit(req, RATE_LIMITS.ai);
   if (!rl.allowed) {
     return NextResponse.json(
@@ -23,7 +27,7 @@ export async function POST(req: NextRequest) {
   if (!documentId || !isValidDocumentId(documentId))
     return NextResponse.json({ error: "Valid documentId required" }, { status: 400 });
 
-  const doc = await db.document.findUnique({ where: { id: documentId } });
+  const doc = await verifyDocumentOwnership(documentId, userId);
   if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (doc.status !== "ready")
     return NextResponse.json({ error: "Document not ready" }, { status: 400 });

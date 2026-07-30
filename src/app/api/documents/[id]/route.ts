@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { ensureSession } from "@/lib/auth";
+import { verifyDocumentOwnership } from "@/lib/quota";
 
 export const runtime = "nodejs";
 
@@ -31,9 +33,11 @@ function rowFromDoc(d: any) {
   };
 }
 
-export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
-  const doc = await db.document.findUnique({ where: { id } });
+  const { userId } = ensureSession(req);
+  // Enforce ownership — user can only access their own documents.
+  const doc = await verifyDocumentOwnership(id, userId);
   if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const row = rowFromDoc(doc);
   let content = null;
@@ -47,6 +51,11 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
+  const { userId } = ensureSession(req);
+  // Enforce ownership.
+  const owned = await verifyDocumentOwnership(id, userId);
+  if (!owned) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
   const body = await req.json();
   const data: any = {};
   if (typeof body.readingProgress === "number") data.readingProgress = body.readingProgress;
@@ -61,8 +70,12 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   return NextResponse.json({ document: rowFromDoc(updated) });
 }
 
-export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
+  const { userId } = ensureSession(req);
+  // Enforce ownership.
+  const owned = await verifyDocumentOwnership(id, userId);
+  if (!owned) return NextResponse.json({ error: "Not found" }, { status: 404 });
   await db.document.delete({ where: { id } }).catch(() => {});
   return NextResponse.json({ ok: true });
 }

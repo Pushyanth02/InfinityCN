@@ -6,6 +6,7 @@ import { logActivity } from "@/lib/activity";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { safeErrorMessage } from "@/lib/safe-error";
 import { createStorySchema, validate } from "@/lib/api-schemas";
+import { ensureSession } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -46,6 +47,7 @@ function rowFromDoc(d: any) {
  * Body: { title: string, content: string, author?: string }
  */
 export async function POST(req: NextRequest) {
+  const { userId, setCookie } = ensureSession(req);
   const rl = checkRateLimit(req, RATE_LIMITS.upload);
   if (!rl.allowed) {
     return NextResponse.json(
@@ -66,6 +68,7 @@ export async function POST(req: NextRequest) {
 
   const created = await db.document.create({
     data: {
+      userId,
       title: title.trim(),
       author: author?.trim() || "You",
       sourceType: "md",

@@ -6,6 +6,8 @@ import { isValidDocumentId } from "@/lib/security";
 import { buildExcerpt, aiComplete, estimateTokens, trackUsage } from "@/lib/ai-helpers";
 import { ankaaSchema, validate } from "@/lib/api-schemas";
 import type { ParsedDoc } from "@/lib/types";
+import { ensureSession } from "@/lib/auth";
+import { verifyDocumentOwnership, checkUserQuota } from "@/lib/quota";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -47,6 +49,8 @@ function estimateEta(wordTarget: number): number {
  * the in-memory `ankaaJobs` map. The client polls GET to check progress.
  */
 export async function POST(req: NextRequest) {
+  const { userId, setCookie } = ensureSession(req);
+
   const rl = checkRateLimit(req, RATE_LIMITS.ankaa);
   if (!rl.allowed) {
     return NextResponse.json(
@@ -66,7 +70,7 @@ export async function POST(req: NextRequest) {
   let excerpt = "";
   let scopeLabel = "an original work";
   if (documentId && isValidDocumentId(documentId)) {
-    const doc = await db.document.findUnique({ where: { id: documentId } });
+    const doc = await verifyDocumentOwnership(documentId, userId);
     if (doc && doc.status === "ready") {
       let parsed: ParsedDoc | null = null;
       try {
