@@ -1,17 +1,12 @@
-import { isValidDocumentId } from "@/lib/security";
-import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { logActivity } from "@/lib/activity";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+import { aiCompleteJson } from "@/lib/ai-helpers";
 import type { ParsedDoc } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 90;
-
-interface SceneRequest {
-  documentId: string;
-  regenerate?: boolean;
-}
 
 interface Scene {
   ordinal: number;
@@ -24,14 +19,14 @@ interface Scene {
 /**
  * POST /api/ai/scenes
  *
- * Returns AI-enhanced cinematic scenes for a document. The AI reads a sample
- * of the document and produces 5-8 dramatized scene cards with evocative
- * titles, mood, characters, and present-tense body text. Results are cached
- * as AiScene rows with mood "cinematified".
+ * Generates dramatized cinematic scenes from a document. Unlike the old
+ * version (which sampled only the first 1000 chars of 8 chapters), this
+ * builds a FULL-CONTENT excerpt: the complete body of every chapter (up to
+ * a 20000-char cap), so scenes cover the entire document.
  *
- * Body:
- *   - documentId: string
- *   - regenerate?: boolean (force re-generation, default false)
+ * The prompt elevates the narrative: dramatized prose, present-tense
+ * immediacy, and structured dialogue sequences — while preserving ALL the
+ * information and content from the source.
  */
 export async function POST(req: NextRequest) {
   const rl = checkRateLimit(req, RATE_LIMITS.ai);
@@ -41,9 +36,8 @@ export async function POST(req: NextRequest) {
       { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } },
     );
   }
-  const body: SceneRequest = await req.json();
-  const { documentId, regenerate } = body;
 
+  const { documentId, regenerate } = await req.json();
   if (!documentId)
     return NextResponse.json({ error: "documentId required" }, { status: 400 });
 
@@ -62,7 +56,7 @@ export async function POST(req: NextRequest) {
 
   const cacheMood = "cinematified";
 
-  // Return cached if present and not regenerating
+  // Return cached if present and not regenerating.
   if (!regenerate) {
     const existing = await db.aiScene.findMany({
       where: { documentId, mood: cacheMood },
@@ -81,57 +75,71 @@ export async function POST(req: NextRequest) {
       });
     }
   } else {
-    await db.aiScene.deleteMany({
-      where: { documentId, mood: cacheMood },
-    });
+    await db.aiScene.deleteMany({ where: { documentId, mood: cacheMood } });
   }
 
-  // Build a content sample for the AI
+  // Build a FULL-CONTENT excerpt: the complete body of every chapter,
+  // capped at 20000 chars total to stay within token limits. This ensures
+  // scenes cover the entire document, not just the opening.
   const sample: string[] = [];
-  for (const ch of parsed.chapters.slice(0, 8)) {
-    sample.push(`## ${ch.title}`);
-    sample.push((ch.chunks[0]?.text ?? "").slice(0, 1000));
+  let total = 0;
+  for (const ch of parsed.chapters) {
+    const body = (ch.refinedText ?? ch.chunks.map((c) => c.text).join("\n\n")).trim();
+    if (!body) continue;
+    const chunk = body.slice(0, Math.min(body.length, 4000));
+    sample.push(`## ${ch.title}\n\n${chunk}`);
+    total += chunk.length;
+    if (total >= 20000) break;
   }
-  const excerpt = sample.join("\n\n").slice(0, 10000);
+  const excerpt = sample.join("\n\n---\n\n").slice(0, 20000);
 
-  const ZAI = (await import("z-ai-web-dev-sdk")).default;
-  const zai = await ZAI.create();
-  const completion = await zai.chat.completions.create({
-    messages: [
-      {
-        role: "assistant",
-        content:
-          "You are a film adaptation scout. You turn prose into a sequence of cinematic scenes that dramatize and enhance the source material. Respond with ONLY valid JSON: an array of 5-8 scene objects. Each scene: { \"title\": string (≤8 words, evocative), \"body\": string (2-3 sentences, present tense, dramatized and vivid), \"mood\": string (one of: tense, tender, eerie, exuberant, melancholic, radiant, brooding), \"characters\": string[] (1-3 named or archetypal figures) }. No markdown fences, no commentary.",
-      },
-      { role: "user", content: `Title: ${doc.title}\n\n${excerpt}` },
-    ],
-    thinking: { type: "disabled" },
-  });
-  const raw = completion.choices[0]?.message?.content?.trim() ?? "[]";
-  let scenes: Scene[] = [];
+  const system = `You are a master dramatist and film adaptation writer. You turn a complete document into a sequence of cinematic scenes that ENHANCE the source material while preserving ALL its information and content.
+
+Your scenes must:
+- Cover the ENTIRE document — every key event, character, and turning point. Do not skip or condense major content.
+- Elevate the narrative style: vivid, immediate, present-tense prose with sensory detail and emotional depth.
+- Include STRUCTURED DIALOGUE SEQUENCES: when characters speak, format the dialogue dramatically —
+    "Character Name," she said, turning to face the light.
+    "Their reply," he answered, voice low.
+  Preserve the original dialogue's meaning but dramatize its delivery.
+- Be self-contained: each scene tells a complete beat with a beginning, tension, and resolution.
+
+Respond with ONLY a valid JSON array of 6-10 scene objects. Each scene:
+{
+  "title": "An evocative title (≤8 words)",
+  "body": "The dramatized scene — 3-6 sentences of elevated narrative prose WITH structured dialogue where characters speak. Present tense. Vivid.",
+  "mood": "one of: tense, tender, eerie, exuberant, melancholic, radiant, brooding",
+  "characters": ["Named or archetypal figures in this scene (1-4)"]
+}
+
+No markdown fences, no commentary, no preamble — only the JSON array.`;
+
+  const user = `Title: ${doc.title}\n\nFull document content (chapter-by-chapter):\n\n${excerpt}`;
+
+  let scenes: Scene[];
   try {
-    const cleaned = raw.replace(/^```json\s*/i, "").replace(/```\s*$/i, "").trim();
-    scenes = JSON.parse(cleaned);
+    const raw = await aiCompleteJson(system, user, { bot: "scenes", kind: "cinematize", documentId });
+    scenes = (raw as any[]).map((s, i) => ({
+      ordinal: i,
+      title: String(s.title || `Scene ${i + 1}`).slice(0, 120),
+      body: String(s.body || ""),
+      mood: String(s.mood || "radiant"),
+      characters: Array.isArray(s.characters) ? s.characters.map(String).slice(0, 4) : [],
+    })).slice(0, 10);
   } catch {
+    // Fallback: a single scene from the excerpt.
     scenes = [
       {
         ordinal: 0,
         title: "Opening Frame",
-        body: raw.slice(0, 280),
+        body: excerpt.slice(0, 500),
         mood: "radiant",
         characters: [],
       },
     ];
   }
-  scenes = scenes.slice(0, 8).map((s, i) => ({
-    ordinal: i,
-    title: s.title || `Scene ${i + 1}`,
-    body: s.body || "",
-    mood: s.mood || "radiant",
-    characters: Array.isArray(s.characters) ? s.characters.slice(0, 3) : [],
-  }));
 
-  // Persist as AiScene rows with mood = "cinematified"
+  // Persist as AiScene rows with mood = "cinematified".
   await db.aiScene.createMany({
     data: scenes.map((s) => ({
       documentId,
@@ -145,8 +153,5 @@ export async function POST(req: NextRequest) {
 
   await logActivity({ type: "ai_cinematize", documentId, detail: doc.title });
 
-  return NextResponse.json({
-    scenes,
-    cached: false,
-  });
+  return NextResponse.json({ scenes, cached: false });
 }

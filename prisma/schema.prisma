@@ -132,3 +132,19 @@ model UsageEvent {
   @@index([bot])
   @@index([createdAt])
 }
+
+/// Background AI analysis job for a document. Tracks the deep-analysis
+/// pipeline (denoise → summarize → themes → characters → criticism) with
+/// progress, ETA, and the sequential results.
+model AnalysisJob {
+  id          String    @id @default(cuid())
+  documentId  String    @unique
+  status      String    @default("queued") // queued | running | done | error
+  step        String?   // current step: denoise | summary | themes | characters | criticism
+  progress    Int       @default(0)  // 0..100
+  etaSeconds  Int       @default(0)
+  results     String?   // JSON: { summary, themes, characters, criticism, ... }
+  error       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}

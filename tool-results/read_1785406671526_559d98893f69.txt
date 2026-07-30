@@ -1,0 +1,1560 @@
+     1→"use client";
+     2→
+     3→import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+     4→import {
+     5→  ArrowLeft,
+     6→  ArrowRight,
+     7→  BookOpen,
+     8→  Bookmark,
+     9→  Brain,
+    10→  ChevronLeft,
+    11→  ChevronRight,
+    12→  Feather,
+    13→  Film,
+    14→  List,
+    15→  MessageSquareQuote,
+    16→  Moon,
+    17→  RefreshCw,
+    18→  Settings2,
+    19→  Sparkles,
+    20→  Sun,
+    21→  Tags,
+    22→  Type as TypeIcon,
+    23→  Users,
+    24→  Send,
+    25→  BookHeart,
+    26→  Rocket,
+    27→  Palette,
+    28→  Globe2,
+    29→  HelpCircle,
+    30→  SpellCheck2,
+    31→  ListChecks,
+    32→  Lightbulb,
+    33→  PenLine,
+    34→} from "lucide-react";
+    35→
+    36→import { useNav } from "@/lib/nav-store";
+    37→import {
+    38→  alternateEnding,
+    39→  analyzeCharacters,
+    40→  analyzeCriticism,
+    41→  analyzeThemes,
+    42→  askQuestion,
+    43→  continueStory,
+    44→  explainSimply,
+    45→  fetchScenes,
+    46→  generateChapterSummary,
+    47→  generateSummary,
+    48→  imaginePicture,
+    49→  meetCharacters,
+    50→  patchDocument,
+    51→  quizMe,
+    52→  refineChapter,
+    53→  retellForKids,
+    54→  studyGuide,
+    55→  useDocument,
+    56→  vocabulary,
+    57→  whatIf,
+    58→  worldLore,
+    59→} from "@/hooks/use-api";
+    60→import { useReaderSettings } from "@/hooks/use-reader-settings";
+    61→import {
+    62→  formatBytes,
+    63→  SOURCE_LABELS,
+    64→  timeAgo,
+    65→  type AiScene,
+    66→  type Chapter,
+    67→  type ReaderSettings,
+    68→} from "@/lib/types";
+    69→import { Button } from "@/components/ui/button";
+    70→import { Input } from "@/components/ui/input";
+    71→import { Progress } from "@/components/ui/progress";
+    72→import { Slider } from "@/components/ui/slider";
+    73→import { AiMarkdown } from "@/components/ui/ai-markdown";
+    74→import { LumaChat } from "@/components/reader/luma-chat";
+    75→import {
+    76→  Select,
+    77→  SelectContent,
+    78→  SelectItem,
+    79→  SelectTrigger,
+    80→  SelectValue,
+    81→} from "@/components/ui/select";
+    82→import {
+    83→  Sheet,
+    84→  SheetContent,
+    85→  SheetHeader,
+    86→  SheetTitle,
+    87→} from "@/components/ui/sheet";
+    88→import { Switch } from "@/components/ui/switch";
+    89→import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+    90→import { LemniscateSpinner, LoadingScreen } from "@/components/ui/brand-loader";
+    91→import { cn } from "@/lib/utils";
+    92→import { toast } from "sonner";
+    93→
+    94→/* ---------- constants ---------- */
+    95→
+    96→interface MoodColor {
+    97→  label: string;
+    98→  color: string; // oklch string (or CSS var) used for text + chip
+    99→}
+   100→
+   101→/**
+   102→ * Mood → oklch color mapping for the cinematified scene chips.
+   103→ * `narrative` is the neutral fallback used by original (structured) scenes.
+   104→ */
+   105→const MOOD_COLORS: Record<string, MoodColor> = {
+   106→  tense: { label: "Tense", color: "oklch(0.65 0.22 25)" },
+   107→  tender: { label: "Tender", color: "oklch(0.70 0.18 350)" },
+   108→  eerie: { label: "Eerie", color: "oklch(0.60 0.20 285)" },
+   109→  exuberant: { label: "Exuberant", color: "oklch(0.75 0.18 70)" },
+   110→  melancholic: { label: "Melancholic", color: "oklch(0.55 0.15 240)" },
+   111→  radiant: { label: "Radiant", color: "oklch(0.75 0.15 85)" },
+   112→  brooding: { label: "Brooding", color: "oklch(0.45 0.03 260)" },
+   113→  narrative: { label: "Narrative", color: "var(--muted-foreground)" },
+   114→};
+   115→
+   116→function moodColor(mood?: string | null): MoodColor {
+   117→  const key = (mood ?? "").toLowerCase().trim();
+   118→  return MOOD_COLORS[key] ?? MOOD_COLORS.narrative;
+   119→}
+   120→
+   121→/** Build a translucent background tint from a mood color. */
+   122→function moodChipStyle(color: string): React.CSSProperties {
+   123→  return {
+   124→    color,
+   125→    backgroundColor: `color-mix(in oklab, ${color} 14%, transparent)`,
+   126→    borderColor: `color-mix(in oklab, ${color} 38%, transparent)`,
+   127→  };
+   128→}
+   129→
+   130→const ACCENT_SWATCHES: { label: string; value: string }[] = [
+   131→  { label: "Gold", value: "#c9a84c" },
+   132→  { label: "Indigo", value: "#6366f1" },
+   133→  { label: "Rose", value: "#e11d48" },
+   134→  { label: "Emerald", value: "#10b981" },
+   135→  { label: "Amber", value: "#f59e0b" },
+   136→  { label: "Slate", value: "#64748b" },
+   137→];
+   138→
+   139→const FONT_OPTIONS: { label: string; value: ReaderSettings["fontFamily"] }[] = [
+   140→  { label: "Open Sans", value: "open-sans" },
+   141→  { label: "Literata", value: "literata" },
+   142→  { label: "Georgia", value: "georgia" },
+   143→  { label: "Verdana", value: "verdana" },
+   144→  { label: "Bookerly", value: "bookerly" },
+   145→  { label: "Garamond", value: "garamond" },
+   146→];
+   147→
+   148→const THEME_OPTIONS: {
+   149→  label: string;
+   150→  value: ReaderSettings["theme"];
+   151→  Icon: typeof Sun;
+   152→}[] = [
+   153→  { label: "Light", value: "light", Icon: Sun },
+   154→  { label: "Dark", value: "dark", Icon: Moon },
+   155→  { label: "Sepia", value: "sepia", Icon: BookOpen },
+   156→];
+   157→
+   158→const ANIM_SPEED_OPTIONS: {
+   159→  label: string;
+   160→  value: ReaderSettings["animSpeed"];
+   161→}[] = [
+   162→  { label: "Off", value: "off" },
+   163→  { label: "Normal", value: "normal" },
+   164→  { label: "Fast", value: "fast" },
+   165→  { label: "Slow", value: "slow" },
+   166→];
+   167→
+   168→const CONTRAST_OPTIONS: {
+   169→  label: string;
+   170→  value: ReaderSettings["contrast"];
+   171→}[] = [
+   172→  { label: "Normal", value: "normal" },
+   173→  { label: "High", value: "high" },
+   174→];
+   175→
+   176→interface QaItem {
+   177→  id: number;
+   178→  question: string;
+   179→  answer: string;
+   180→  citations: string[];
+   181→}
+   182→
+   183→interface CachedChapterSummary {
+   184→  summary: string;
+   185→  chapterTitle: string;
+   186→}
+   187→
+   188→type SummaryScope = "chapter" | "novel";
+   189→
+   190→type AnalysisTabKey =
+   191→  | "characters"
+   192→  | "criticism"
+   193→  | "themes";
+   194→
+   195→/** The three audience modes the AI companion adapts to. */
+   196→type AiMode = "story" | "kids" | "study";
+   197→
+   198→/** Tab keys for the creative/educational tools (markdown-rendered results). */
+   199→type ToolTabKey =
+   200→  // Story Lover
+   201→  | "continue"
+   202→  | "ending"
+   203→  | "world"
+   204→  | "scenes"
+   205→  // Story Time (kids)
+   206→  | "retell"
+   207→  | "meet"
+   208→  | "whatif"
+   209→  | "imagine"
+   210→  // Study Buddy
+   211→  | "guide"
+   212→  | "vocab"
+   213→  | "quiz"
+   214→  | "explain"
+   215→  // Shared
+   216→  | "summary"
+   217→  | "ask"
+   218→  | "characters"
+   219→  | "themes"
+   220→  | "criticism";
+   221→
+   222→interface QuizState {
+   223→  questions: { question: string; options: string[]; answerIndex: number; explanation: string }[];
+   224→  scope: string;
+   225→  picked: (number | null)[];
+   226→  revealed: boolean;
+   227→}
+   228→
+   229→/* ---------- small UI helpers ---------- */
+   230→
+   231→function SectionLabel({ children }: { children: React.ReactNode }) {
+   232→  return (
+   233→    <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+   234→      {children}
+   235→    </p>
+   236→  );
+   237→}
+   238→
+   239→function OptionRow<T extends string>({
+   240→  options,
+   241→  value,
+   242→  onChange,
+   243→  ariaLabel,
+   244→}: {
+   245→  options: { label: string; value: T }[];
+   246→  value: T;
+   247→  onChange: (v: T) => void;
+   248→  ariaLabel: string;
+   249→}) {
+   250→  return (
+   251→    <div
+   252→      role="radiogroup"
+   253→      aria-label={ariaLabel}
+   254→      className="grid grid-flow-col gap-1 rounded-md border border-border bg-muted/40 p-1"
+   255→    >
+   256→      {options.map((opt) => {
+   257→        const active = opt.value === value;
+   258→        return (
+   259→          <button
+   260→            key={opt.value}
+   261→            type="button"
+   262→            role="radio"
+   263→            aria-checked={active}
+   264→            onClick={() => onChange(opt.value)}
+   265→            className={cn(
+   266→              "rounded-sm px-2 py-1 text-xs font-medium transition-colors",
+   267→              active
+   268→                ? "bg-background text-foreground shadow-sm"
+   269→                : "text-muted-foreground hover:text-foreground",
+   270→            )}
+   271→          >
+   272→            {opt.label}
+   273→          </button>
+   274→        );
+   275→      })}
+   276→    </div>
+   277→  );
+   278→}
+   279→
+   280→function SliderRow({
+   281→  label,
+   282→  value,
+   283→  display,
+   284→  min,
+   285→  max,
+   286→  step,
+   287→  onChange,
+   288→}: {
+   289→  label: string;
+   290→  value: number;
+   291→  display: string;
+   292→  min: number;
+   293→  max: number;
+   294→  step: number;
+   295→  onChange: (v: number) => void;
+   296→}) {
+   297→  return (
+   298→    <div className="space-y-1.5">
+   299→      <div className="flex items-center justify-between">
+   300→        <SectionLabel>{label}</SectionLabel>
+   301→        <span className="text-xs tabular-nums text-foreground/80">{display}</span>
+   302→      </div>
+   303→      <Slider
+   304→        value={[value]}
+   305→        min={min}
+   306→        max={max}
+   307→        step={step}
+   308→        onValueChange={(v) => onChange(v[0])}
+   309→        aria-label={label}
+   310→      />
+   311→    </div>
+   312→  );
+   313→}
+   314→
+   315→/** Two-button segmented toggle used at the top of the Summary and Scenes tabs. */
+   316→function SegmentedToggle<T extends string>({
+   317→  options,
+   318→  value,
+   319→  onChange,
+   320→  ariaLabel,
+   321→}: {
+   322→  options: { label: string; value: T }[];
+   323→  value: T;
+   324→  onChange: (v: T) => void;
+   325→  ariaLabel: string;
+   326→}) {
+   327→  return (
+   328→    <div
+   329→      role="radiogroup"
+   330→      aria-label={ariaLabel}
+   331→      className="grid w-full grid-cols-2 gap-1 rounded-md border border-border bg-muted/40 p-1"
+   332→    >
+   333→      {options.map((opt) => {
+   334→        const active = opt.value === value;
+   335→        return (
+   336→          <button
+   337→            key={opt.value}
+   338→            type="button"
+   339→            role="radio"
+   340→            aria-checked={active}
+   341→            onClick={() => onChange(opt.value)}
+   342→            className={cn(
+   343→              "rounded-sm px-3 py-1.5 text-xs font-medium transition-colors",
+   344→              active
+   345→                ? "bg-background text-foreground shadow-sm"
+   346→                : "text-muted-foreground hover:text-foreground",
+   347→            )}
+   348→          >
+   349→            {opt.label}
+   350→          </button>
+   351→        );
+   352→      })}
+   353→    </div>
+   354→  );
+   355→}
+   356→
+   357→/**
+   358→ * Shared body for the markdown-rendered tool tabs. Shows a Generate/Regenerate
+   359→ * button, a LemniscateSpinner loading state, and the cached result rendered as
+   360→ * Markdown (fixes literal "##"/"**" display). Optional `children` slot injects
+   361→ * extra controls (e.g. chapter selector, instructions input) above the button.
+   362→ */
+   363→function AnalysisTabPanel({
+   364→  loading,
+   365→  cached,
+   366→  description,
+   367→  loadingLabel,
+   368→  onGenerate,
+   369→  children,
+   370→  generateLabel = "Generate",
+   371→  regenerateLabel = "Regenerate",
+   372→  icon,
+   373→}: {
+   374→  loading: boolean;
+   375→  cached: string | null;
+   376→  description: string;
+   377→  loadingLabel: string;
+   378→  onGenerate: () => void;
+   379→  children?: React.ReactNode;
+   380→  generateLabel?: string;
+   381→  regenerateLabel?: string;
+   382→  icon?: React.ReactNode;
+   383→}) {
+   384→  return (
+   385→    <div className="space-y-3">
+   386→      {children}
+   387→      <div className="flex items-center justify-between gap-2">
+   388→        <p className="text-xs text-muted-foreground">{description}</p>
+   389→        <Button
+   390→          size="sm"
+   391→          className="shrink-0 gap-1"
+   392→          disabled={loading}
+   393→          onClick={onGenerate}
+   394→        >
+   395→          {loading ? (
+   396→            <LemniscateSpinner size={28} />
+   397→          ) : cached ? (
+   398→            <RefreshCw className="h-3.5 w-3.5" />
+   399→          ) : (
+   400→            icon ?? <Sparkles className="h-3.5 w-3.5" />
+   401→          )}
+   402→          {cached ? regenerateLabel : generateLabel}
+   403→        </Button>
+   404→      </div>
+   405→      {loading && !cached ? (
+   406→        <div className="flex flex-col items-center gap-3 rounded-lg border border-border bg-muted/30 px-4 py-10 text-center">
+   407→          <LemniscateSpinner size={56} />
+   408→          <p className="text-xs text-muted-foreground">{loadingLabel}</p>
+   409→        </div>
+   410→      ) : cached ? (
+   411→        <div className="rounded-lg border border-border bg-card p-4">
+   412→          <AiMarkdown>{cached}</AiMarkdown>
+   413→        </div>
+   414→      ) : (
+   415→        <div className="rounded-lg border border-dashed border-border p-6 text-center">
+   416→          <p className="text-sm text-muted-foreground">
+   417→            Nothing here yet. Click <strong>{generateLabel}</strong> to begin.
+   418→          </p>
+   419→        </div>
+   420→      )}
+   421→    </div>
+   422→  );
+   423→}
+   424→
+   425→/**
+   426→ * Effective chunk count for a chapter. If the chapter has been OCR-refined,
+   427→ * we split the refined text into ~1200-char chunks at paragraph boundaries.
+   428→ * Otherwise we use the parser-produced chunks.
+   429→ */
+   430→function chapterChunkCount(ch: Chapter | undefined): number {
+   431→  if (!ch) return 0;
+   432→  if (ch.refinedText) {
+   433→    // Split refined text into chunks for focus-mode navigation
+   434→    const paras = ch.refinedText.split(/\n{2,}/).filter(Boolean);
+   435→    return Math.max(1, Math.ceil(paras.length / 3));
+   436→  }
+   437→  return ch.chunks.length;
+   438→}
+   439→
+   440→/** Split refined text into paragraph groups for rendering. */
+   441→function refinedTextGroups(text: string): string[] {
+   442→  const paras = text.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+   443→  const groups: string[] = [];
+   444→  for (let i = 0; i < paras.length; i += 3) {
+   445→    groups.push(paras.slice(i, i + 3).join("\n\n"));
+   446→  }
+   447→  return groups;
+   448→}
+   449→
+   450→/* ---------- main component ---------- */
+   451→
+   452→export default function ReaderView() {
+   453→  const documentId = useNav((s) => s.activeDocumentId);
+   454→  const go = useNav((s) => s.go);
+   455→
+   456→  const { doc, content: docContent, loading, error, setDoc, setContent, refresh } = useDocument(documentId);
+   457→  const { settings, update } = useReaderSettings();
+   458→
+   459→  const [currentChapterIndex, setCurrentChapterIndex] = useState(0);
+   460→  const [activeChunkIndex, setActiveChunkIndex] = useState(0);
+   461→
+   462→  const [chapterSheetOpen, setChapterSheetOpen] = useState(false);
+   463→  const [settingsSheetOpen, setSettingsSheetOpen] = useState(false);
+   464→  const [aiSheetOpen, setAiSheetOpen] = useState(false);
+   465→  const [scenesView, setScenesView] = useState(false);
+   466→  const [scenesData, setScenesData] = useState<AiScene[] | null>(null);
+   467→  const [scenesLoading, setScenesLoading] = useState(false);
+   468→
+   469→  const [bookmarks, setBookmarks] = useState<Set<string>>(new Set());
+   470→  const [sessionMarkedRead, setSessionMarkedRead] = useState(false);
+   471→
+   472→  // --- Per-chapter OCR refinement state ---
+   473→  const [refining, setRefining] = useState(false);
+   474→  const [refineTriggered, setRefineTriggered] = useState<Set<number>>(new Set());
+   475→  const refineAbortRef = useRef<number | null>(null);
+   476→
+   477→  const content = docContent;
+   478→  const chapters: Chapter[] = content?.chapters ?? [];
+   479→
+   480→  const totalChunks = useMemo(
+   481→    () => chapters.reduce((acc, ch) => acc + chapterChunkCount(ch), 0),
+   482→    [chapters],
+   483→  );
+   484→
+   485→  const globalChunkIndex = useMemo(() => {
+   486→    let g = 0;
+   487→    for (let i = 0; i < currentChapterIndex && i < chapters.length; i++) {
+   488→      g += chapterChunkCount(chapters[i]);
+   489→    }
+   490→    g += activeChunkIndex;
+   491→    return g;
+   492→  }, [chapters, currentChapterIndex, activeChunkIndex]);
+   493→
+   494→  const readingProgress =
+   495→    totalChunks > 0 ? Math.min(1, (globalChunkIndex + 1) / totalChunks) : 0;
+   496→  const progressPct = Math.round(readingProgress * 100);
+   497→
+   498→  const currentChapter = chapters[currentChapterIndex];
+   499→  const currentChunk = currentChapter?.chunks[activeChunkIndex];
+   500→
+   501→  const isLastChunk =
+   502→    chapters.length > 0 &&
+   503→    currentChapterIndex === chapters.length - 1 &&
+   504→    activeChunkIndex === chapterChunkCount(currentChapter) - 1;
+   505→  const isFirstChunk = currentChapterIndex === 0 && activeChunkIndex === 0;
+   506→
+   507→  const bookmarkKey = `${currentChapterIndex}:${activeChunkIndex}`;
+   508→  const isBookmarked = bookmarks.has(bookmarkKey);
+   509→
+   510→  /* ---------- initialize position from doc.lastChunkIndex ---------- */
+   511→  useEffect(() => {
+   512→    if (!doc || chapters.length === 0) return;
+   513→    const lastGlobal = Math.max(
+   514→      0,
+   515→      Math.min(doc.lastChunkIndex ?? 0, totalChunks - 1),
+   516→    );
+   517→    let chapterIdx = 0;
+   518→    let chunkIdx = 0;
+   519→    let acc = 0;
+   520→    let placed = false;
+   521→    for (let i = 0; i < chapters.length; i++) {
+   522→      const len = chapterChunkCount(chapters[i]);
+   523→      if (acc + len > lastGlobal) {
+   524→        chapterIdx = i;
+   525→        chunkIdx = lastGlobal - acc;
+   526→        placed = true;
+   527→        break;
+   528→      }
+   529→      acc += len;
+   530→    }
+   531→    if (!placed) {
+   532→      chapterIdx = chapters.length - 1;
+   533→      chunkIdx = chapterChunkCount(chapters[chapters.length - 1]) - 1;
+   534→    }
+   535→    setCurrentChapterIndex(chapterIdx);
+   536→    setActiveChunkIndex(Math.max(0, chunkIdx));
+   537→    // Only on doc open — subsequent changes come from navigation.
+   538→  }, [doc?.id]);
+   539→
+   540→  // Clear refining state when chapter changes (the previous chapter's
+   541→  // refinement job is abandoned — its result will be ignored via the abort ref)
+   542→  useEffect(() => {
+   543→    setRefining(false);
+   544→    refineAbortRef.current = null;
+   545→  }, [currentChapterIndex]);
+   546→
+   547→  /* ---------- per-chapter OCR refinement (background, non-blocking) ----------
+   548→   * When a chapter is opened, it renders instantly with raw text. Then this
+   549→   * effect triggers OCR refinement in the background. When refinement
+   550→   * completes, the chapter's `refinedText` is updated and the reader
+   551→   * re-renders with the cleaned text. The refinement is persisted server-side
+   552→   * so the chapter is never reprocessed. */
+   553→  const currentChapterRefined = currentChapter?.refinedText;
+   554→  useEffect(() => {
+   555→    if (!documentId || !content || !currentChapter) return;
+   556→    const chIdx = currentChapterIndex;
+   557→
+   558→    // Already refined? Skip.
+   559→    if (currentChapterRefined) return;
+   560→    // Already triggered for this chapter? Skip.
+   561→    if (refineTriggered.has(chIdx)) return;
+   562→
+   563→    // Mark as triggered
+   564→    setRefineTriggered((prev) => new Set(prev).add(chIdx));
+   565→    setRefining(true);
+   566→    refineAbortRef.current = chIdx;
+   567→
+   568→    let cancelled = false;
+   569→    refineChapter(documentId, chIdx, false)
+   570→      .then((result) => {
+   571→        if (cancelled || refineAbortRef.current !== chIdx) return;
+   572→        if (result.refined && result.refinedText) {
+   573→          // Update the chapter's refinedText in local state
+   574→          setContent((prev) => {
+   575→            if (!prev) return prev;
+   576→            const newChapters = prev.chapters.map((ch, i) =>
+   577→              i === chIdx ? { ...ch, refinedText: result.refinedText } : ch,
+   578→            );
+   579→            return { ...prev, chapters: newChapters };
+   580→          });
+   581→        }
+   582→      })
+   583→      .catch(() => {
+   584→        // Best-effort — silently ignore (rate limits, network errors, etc.)
+   585→      })
+   586→      .finally(() => {
+   587→        if (cancelled || refineAbortRef.current !== chIdx) return;
+   588→        setRefining(false);
+   589→      });
+   590→
+   591→    // Safety timeout — don't show the indicator for more than 60 seconds
+   592→    const safetyTimer = setTimeout(() => {
+   593→      if (!cancelled && refineAbortRef.current === chIdx) {
+   594→        setRefining(false);
+   595→      }
+   596→    }, 60_000);
+   597→
+   598→    return () => {
+   599→      cancelled = true;
+   600→      clearTimeout(safetyTimer);
+   601→    };
+   602→  }, [documentId, currentChapterIndex, currentChapterRefined, content, refineTriggered]);
+   603→
+   604→  /* ---------- scroll active chunk into view ---------- */
+   605→  const scrollRafRef = useRef<number | null>(null);
+   606→  useEffect(() => {
+   607→    if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current);
+   608→    scrollRafRef.current = requestAnimationFrame(() => {
+   609→      if (!currentChapter) return;
+   610→      const el = document.querySelector(
+   611→        `.reader-article [data-ordinal="${activeChunkIndex}"]`,
+   612→      );
+   613→      if (el) {
+   614→        el.scrollIntoView({ behavior: "smooth", block: "center" });
+   615→      }
+   616→    });
+   617→    return () => {
+   618→      if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current);
+   619→    };
+   620→  }, [currentChapterIndex, activeChunkIndex, currentChapter]);
+   621→
+   622→  /* ---------- debounced progress patch ---------- */
+   623→  // Use refs to avoid a feedback loop: patching updates `doc`, which would
+   624→  // otherwise re-fire this effect and patch again.
+   625→  const patchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+   626→  const sessionMarkedReadRef = useRef(false);
+   627→  useEffect(() => {
+   628→    sessionMarkedReadRef.current = sessionMarkedRead;
+   629→  }, [sessionMarkedRead]);
+   630→  useEffect(() => {
+   631→    if (!documentId || totalChunks === 0) return;
+   632→    if (patchTimer.current) clearTimeout(patchTimer.current);
+   633→    patchTimer.current = setTimeout(async () => {
+   634→      const patch: Partial<{
+   635→        readingProgress: number;
+   636→        lastChunkIndex: number;
+   637→        lastReadAt: string;
+   638→      }> = {
+   639→        readingProgress,
+   640→        lastChunkIndex: globalChunkIndex,
+   641→      };
+   642→      if (!sessionMarkedReadRef.current) {
+   643→        patch.lastReadAt = new Date().toISOString();
+   644→        setSessionMarkedRead(true);
+   645→      }
+   646→      try {
+   647→        const updated = await patchDocument(documentId, patch);
+   648→        setDoc((prev) => (prev ? { ...prev, ...updated } : prev));
+   649→      } catch {
+   650→        // ignore network hiccups
+   651→      }
+   652→    }, 600);
+   653→    return () => {
+   654→      if (patchTimer.current) clearTimeout(patchTimer.current);
+   655→    };
+   656→  }, [
+   657→    globalChunkIndex,
+   658→    readingProgress,
+   659→    documentId,
+   660→    totalChunks,
+   661→    setDoc,
+   662→  ]);
+   663→
+   664→  /* ---------- navigation ---------- */
+   665→  const nextChunk = useCallback(() => {
+   666→    if (!currentChapter || chapters.length === 0) return;
+   667→    if (activeChunkIndex < chapterChunkCount(currentChapter) - 1) {
+   668→      setActiveChunkIndex((i) => i + 1);
+   669→    } else if (currentChapterIndex < chapters.length - 1) {
+   670→      setCurrentChapterIndex((i) => i + 1);
+   671→      setActiveChunkIndex(0);
+   672→    }
+   673→    // At the very last chunk: no-op (Finish is an explicit button in the footer).
+   674→  }, [
+   675→    currentChapter,
+   676→    activeChunkIndex,
+   677→    currentChapterIndex,
+   678→    chapters.length,
+   679→  ]);
+   680→
+   681→  const prevChunk = useCallback(() => {
+   682→    if (isFirstChunk) return;
+   683→    if (activeChunkIndex > 0) {
+   684→      setActiveChunkIndex((i) => i - 1);
+   685→    } else if (currentChapterIndex > 0) {
+   686→      const prev = chapters[currentChapterIndex - 1];
+   687→      setCurrentChapterIndex((i) => i - 1);
+   688→      setActiveChunkIndex(Math.max(0, chapterChunkCount(prev) - 1));
+   689→    }
+   690→  }, [activeChunkIndex, currentChapterIndex, chapters, isFirstChunk]);
+   691→
+   692→  const jumpToChapter = useCallback((idx: number) => {
+   693→    setCurrentChapterIndex(idx);
+   694→    setActiveChunkIndex(0);
+   695→    setChapterSheetOpen(false);
+   696→  }, []);
+   697→
+   698→  const nextChapter = useCallback(() => {
+   699→    if (currentChapterIndex < chapters.length - 1) {
+   700→      setCurrentChapterIndex((i) => i + 1);
+   701→      setActiveChunkIndex(0);
+   702→    }
+   703→  }, [currentChapterIndex, chapters.length]);
+   704→
+   705→  const prevChapter = useCallback(() => {
+   706→    if (currentChapterIndex > 0) {
+   707→      setCurrentChapterIndex((i) => i - 1);
+   708→      setActiveChunkIndex(0);
+   709→    }
+   710→  }, [currentChapterIndex]);
+   711→
+   712→  const finish = useCallback(async () => {
+   713→    if (!documentId) return;
+   714→    try {
+   715→      const updated = await patchDocument(documentId, {
+   716→        readingProgress: 1,
+   717→        lastChunkIndex: globalChunkIndex,
+   718→        lastReadAt: new Date().toISOString(),
+   719→      });
+   720→      setDoc(updated);
+   721→      toast.success("🎉 Finished!");
+   722→    } catch {
+   723→      // ignore
+   724→    }
+   725→  }, [documentId, globalChunkIndex, setDoc]);
+   726→
+   727→  /* ---------- keyboard navigation ---------- */
+   728→  useEffect(() => {
+   729→    const onKey = (e: KeyboardEvent) => {
+   730→      const target = e.target as HTMLElement | null;
+   731→      const isTyping =
+   732→        !!target &&
+   733→        (target.tagName === "INPUT" ||
+   734→          target.tagName === "TEXTAREA" ||
+   735→          target.isContentEditable);
+   736→
+   737→      if (e.key === "ArrowRight" || (e.key === " " && !isTyping)) {
+   738→        e.preventDefault();
+   739→        nextChunk();
+   740→      } else if (e.key === "ArrowLeft") {
+   741→        e.preventDefault();
+   742→        prevChunk();
+   743→      } else if ((e.key === "f" || e.key === "F") && !isTyping) {
+   744→        e.preventDefault();
+   745→        update({ focusMode: !settings.focusMode });
+   746→      } else if (e.key === "Escape") {
+   747→        setChapterSheetOpen(false);
+   748→        setSettingsSheetOpen(false);
+   749→        setAiSheetOpen(false);
+   750→      }
+   751→    };
+   752→    window.addEventListener("keydown", onKey);
+   753→    return () => window.removeEventListener("keydown", onKey);
+   754→  }, [nextChunk, prevChunk, settings.focusMode, update]);
+   755→
+   756→  /* ---------- open Luma panel ---------- */
+   757→  const openAiPanel = useCallback(() => {
+   758→    setAiSheetOpen(true);
+   759→  }, []);
+   760→
+   761→  /* ---------- scenes overlay: fetch + toggle ---------- */
+   762→  const toggleScenesView = useCallback(async () => {
+   763→    if (!documentId) return;
+   764→    // If turning on and we have no data yet, fetch first.
+   765→    if (!scenesView && !scenesData && !scenesLoading) {
+   766→      setScenesLoading(true);
+   767→      try {
+   768→        const { scenes } = await fetchScenes(documentId, false);
+   769→        setScenesData(scenes);
+   770→      } catch {
+   771→        toast.error("Couldn't load scenes. Try asking Luma to cinematize.");
+   772→      } finally {
+   773→        setScenesLoading(false);
+   774→      }
+   775→    }
+   776→    setScenesView((v) => !v);
+   777→  }, [documentId, scenesView, scenesData, scenesLoading]);
+   778→
+   779→  const regenerateScenes = useCallback(async () => {
+   780→    if (!documentId) return;
+   781→    setScenesLoading(true);
+   782→    try {
+   783→      const { scenes } = await fetchScenes(documentId, true);
+   784→      setScenesData(scenes);
+   785→      toast.success("Scenes regenerated");
+   786→    } catch {
+   787→      toast.error("Couldn't regenerate scenes.");
+   788→    } finally {
+   789→      setScenesLoading(false);
+   790→    }
+   791→  }, [documentId]);
+   792→
+   793→  const toggleBookmark = useCallback(() => {
+   794→    if (!currentChapter) return;
+   795→    setBookmarks((prev) => {
+   796→      const next = new Set(prev);
+   797→      if (next.has(bookmarkKey)) {
+   798→        next.delete(bookmarkKey);
+   799→        toast("Bookmark removed");
+   800→      } else {
+   801→        next.add(bookmarkKey);
+   802→        toast.success("Bookmarked this chunk");
+   803→      }
+   804→      return next;
+   805→    });
+   806→  }, [bookmarkKey, currentChapter]);
+   807→
+   808→  /* ---------- early returns ---------- */
+   809→  if (!documentId) {
+   810→    return (
+   811→      <div className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-background px-6 text-center text-foreground">
+   812→        <BookOpen className="h-8 w-8 text-muted-foreground" aria-hidden />
+   813→        <p className="text-lg font-medium">No document selected</p>
+   814→        <Button onClick={() => go("library")}>Open library</Button>
+   815→      </div>
+   816→    );
+   817→  }
+   818→
+   819→  if (loading) {
+   820→    return <LoadingScreen label="Opening document" className="min-h-dvh" />;
+   821→  }
+   822→
+   823→  if (error) {
+   824→    return (
+   825→      <div className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-background px-6 text-center text-foreground">
+   826→        <div className="max-w-md rounded-lg border border-border bg-card p-6 text-left">
+   827→          <p className="text-lg font-medium">Couldn&apos;t open this document</p>
+   828→          <p className="mt-2 text-sm text-muted-foreground">{error}</p>
+   829→          <Button className="mt-4" onClick={() => go("library")}>
+   830→            Back to library
+   831→          </Button>
+   832→        </div>
+   833→      </div>
+   834→    );
+   835→  }
+   836→
+   837→  if (!doc) return null;
+   838→
+   839→  if (doc.status === "processing") {
+   840→    return (
+   841→      <div className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-background px-6 text-center text-foreground">
+   842→        <LemniscateSpinner size={72} />
+   843→        <p className="text-lg font-medium">Still processing</p>
+   844→        <p className="text-sm text-muted-foreground">
+   845→          Check back in a moment — we&apos;re parsing this file.
+   846→        </p>
+   847→        <Button variant="outline" onClick={() => go("library")}>
+   848→          Back to library
+   849→        </Button>
+   850→      </div>
+   851→    );
+   852→  }
+   853→
+   854→  if (doc.status === "error" || chapters.length === 0) {
+   855→    return (
+   856→      <div className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-background px-6 text-center text-foreground">
+   857→        <div className="max-w-md rounded-lg border border-border bg-card p-6 text-left">
+   858→          <p className="text-lg font-medium">
+   859→            {doc.status === "error"
+   860→              ? "This document failed to parse"
+   861→              : "No readable content yet"}
+   862→          </p>
+   863→          <p className="mt-2 text-sm text-muted-foreground">
+   864→            {doc.error ?? "Try re-uploading the file."}
+   865→          </p>
+   866→          <Button className="mt-4" onClick={() => go("library")}>
+   867→            Back to library
+   868→          </Button>
+   869→        </div>
+   870→      </div>
+   871→    );
+   872→  }
+   873→
+   874→  /* ---------- main render ---------- */
+   875→
+   876→  const sourceLabel = SOURCE_LABELS[doc.sourceType] ?? "DOC";
+   877→
+   878→  // Resolve the currently-relevant summary view-model.
+   879→
+   880→  return (
+   881→    <div className="min-h-dvh bg-background text-foreground">
+   882→      {/* ---- ReaderHeader ---- */}
+   883→      <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
+   884→        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-2.5 sm:px-6">
+   885→          {/* Left: back */}
+   886→          <div className="flex min-w-0 items-center gap-2">
+   887→            <Button
+   888→              variant="ghost"
+   889→              size="sm"
+   890→              className="gap-1 text-muted-foreground hover:text-foreground"
+   891→              onClick={() => go("library")}
+   892→            >
+   893→              <ChevronLeft className="h-4 w-4" />
+   894→              <span className="hidden sm:inline">Library</span>
+   895→            </Button>
+   896→          </div>
+   897→
+   898→          {/* Center: title + meta */}
+   899→          <div className="flex min-w-0 flex-1 flex-col items-center gap-0.5 px-2 text-center">
+   900→            <p className="line-clamp-1 max-w-md text-sm font-medium text-foreground">
+   901→              {doc.title}
+   902→            </p>
+   903→            <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+   904→              <span className="rounded-full border border-border px-1.5 py-px text-[10px] uppercase tracking-wider">
+   905→                {sourceLabel}
+   906→              </span>
+   907→              {doc.author ? (
+   908→                <span className="line-clamp-1">{doc.author}</span>
+   909→              ) : null}
+   910→              {doc.author && doc.lastReadAt ? (
+   911→                <span aria-hidden className="text-border">
+   912→                  ·
+   913→                </span>
+   914→              ) : null}
+   915→              {doc.lastReadAt ? (
+   916→                <span className="line-clamp-1">read {timeAgo(doc.lastReadAt)}</span>
+   917→              ) : null}
+   918→            </span>
+   919→          </div>
+   920→
+   921→          {/* Right: actions — 4 icon buttons (5 total with back) */}
+   922→          <div className="flex items-center gap-0.5">
+   923→            <Button
+   924→              variant="ghost"
+   925→              size="icon"
+   926→              className="h-9 w-9"
+   927→              aria-label="Chapter index"
+   928→              onClick={() => setChapterSheetOpen(true)}
+   929→            >
+   930→              <List className="h-4 w-4" />
+   931→            </Button>
+   932→            <Button
+   933→              variant="ghost"
+   934→              size="icon"
+   935→              className={cn("h-9 w-9", scenesView && "text-foreground")}
+   936→              aria-label={scenesView ? "Hide scenes" : "View as scenes"}
+   937→              aria-pressed={scenesView}
+   938→              onClick={toggleScenesView}
+   939→            >
+   940→              {scenesLoading ? <LemniscateSpinner size={20} /> : <Film className="h-4 w-4" />}
+   941→            </Button>
+   942→            <Button
+   943→              variant="ghost"
+   944→              size="icon"
+   945→              className="h-9 w-9"
+   946→              aria-label="Open Luma"
+   947→              onClick={openAiPanel}
+   948→            >
+   949→              <Sparkles className="h-4 w-4" />
+   950→            </Button>
+   951→            <Button
+   952→              variant="ghost"
+   953→              size="icon"
+   954→              className="h-9 w-9"
+   955→              aria-label="Reader settings"
+   956→              onClick={() => setSettingsSheetOpen(true)}
+   957→            >
+   958→              <Settings2 className="h-4 w-4" />
+   959→            </Button>
+   960→            <Button
+   961→              variant="ghost"
+   962→              size="icon"
+   963→              className={cn("h-9 w-9", isBookmarked && "text-foreground")}
+   964→              aria-label={
+   965→                isBookmarked ? "Remove bookmark" : "Bookmark this chunk"
+   966→              }
+   967→              aria-pressed={isBookmarked}
+   968→              onClick={toggleBookmark}
+   969→            >
+   970→              <Bookmark
+   971→                className={cn("h-4 w-4", isBookmarked && "fill-current")}
+   972→              />
+   973→            </Button>
+   974→          </div>
+   975→        </div>
+   976→      </header>
+   977→
+   978→      {/* ---- ReaderProgress ---- */}
+   979→      <div
+   980→        className="sticky top-[calc(2.5rem+1px)] z-20 h-0.5 w-full bg-border/40"
+   981→        aria-hidden
+   982→      >
+   983→        <div
+   984→          className="h-full bg-gradient-to-r from-amber-500/40 via-amber-400 to-amber-600/80 transition-[width] duration-300"
+   985→          style={{ width: `${progressPct}%` }}
+   986→        />
+   987→      </div>
+   988→
+   989→      {/* ---- OCR refinement indicator (subtle, non-blocking) ---- */}
+   990→      {refining && (
+   991→        <div className="fixed bottom-4 right-4 z-30 flex items-center gap-2 rounded-full border border-border bg-card/90 px-3 py-1.5 text-xs text-muted-foreground shadow-md backdrop-blur">
+   992→          <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-amber-500" />
+   993→          Refining OCR…
+   994→        </div>
+   995→      )}
+   996→
+   997→      {/* ---- Main reading column ---- */}
+   998→      <main className="mx-auto max-w-3xl px-6 py-10">
+   999→        {/* ChapterNav */}
+  1000→        <section className="mb-8" aria-label="Chapter navigation">
+  1001→          <div className="flex items-center justify-between gap-3">
+  1002→            <Button
+  1003→              variant="ghost"
+  1004→              size="sm"
+  1005→              className="gap-1 text-muted-foreground hover:text-foreground"
+  1006→              disabled={currentChapterIndex === 0}
+  1007→              onClick={prevChapter}
+  1008→            >
+  1009→              <ChevronLeft className="h-4 w-4" />
+  1010→              <span className="hidden sm:inline">Prev chapter</span>
+  1011→            </Button>
+  1012→            <div className="flex min-w-0 flex-col items-center gap-0.5 text-center">
+  1013→              <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+  1014→                Chapter {(currentChapter?.ordinal ?? currentChapterIndex) + 1} of{" "}
+  1015→                {chapters.length}
+  1016→              </p>
+  1017→              <p className="line-clamp-1 max-w-[18rem] text-xs text-foreground/70 sm:max-w-sm">
+  1018→                {currentChapter?.title ?? "Untitled"}
+  1019→              </p>
+  1020→            </div>
+  1021→            <Button
+  1022→              variant="ghost"
+  1023→              size="sm"
+  1024→              className="gap-1 text-muted-foreground hover:text-foreground"
+  1025→              disabled={currentChapterIndex === chapters.length - 1}
+  1026→              onClick={nextChapter}
+  1027→            >
+  1028→              <span className="hidden sm:inline">Next chapter</span>
+  1029→              <ChevronRight className="h-4 w-4" />
+  1030→            </Button>
+  1031→          </div>
+  1032→          <h1
+  1033→            key={currentChapterIndex}
+  1034→            className="reader-chapter-heading mt-4 text-left font-display text-2xl leading-tight text-foreground sm:text-3xl"
+  1035→          >
+  1036→            {currentChapter?.title ?? "Untitled"}
+  1037→          </h1>
+  1038→          <div
+  1039→            className="mt-2 h-px w-full bg-gradient-to-r from-border via-border/40 to-transparent"
+  1040→            aria-hidden
+  1041→          />
+  1042→        </section>
+  1043→
+  1044→        {/* Scenes overlay OR Article */}
+  1045→        {scenesView ? (
+  1046→          <div className="mx-auto max-w-2xl space-y-4">
+  1047→            <div className="flex items-center justify-between">
+  1048→              <div>
+  1049→                <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+  1050→                  Cinematic scenes
+  1051→                </p>
+  1052→                <h2 className="font-display text-xl text-foreground">{doc.title}</h2>
+  1053→              </div>
+  1054→              <Button
+  1055→                size="sm"
+  1056→                variant="outline"
+  1057→                className="gap-1"
+  1058→                disabled={scenesLoading}
+  1059→                onClick={regenerateScenes}
+  1060→              >
+  1061→                {scenesLoading ? <LemniscateSpinner size={24} /> : <RefreshCw className="h-3.5 w-3.5" />}
+  1062→                Regenerate
+  1063→              </Button>
+  1064→            </div>
+  1065→            {scenesLoading && (!scenesData || scenesData.length === 0) ? (
+  1066→              <div className="flex flex-col items-center gap-3 rounded-lg border border-border bg-muted/30 px-4 py-16 text-center">
+  1067→                <LemniscateSpinner size={56} />
+  1068→                <p className="text-xs text-muted-foreground">Cinematizing the story…</p>
+  1069→              </div>
+  1070→            ) : scenesData && scenesData.length > 0 ? (
+  1071→              <ol className="space-y-4">
+  1072→                {scenesData.map((sc) => {
+  1073→                  const mood = moodColor(sc.mood);
+  1074→                  const chars = sc.characters ?? [];
+  1075→                  return (
+  1076→                    <li key={sc.id ?? sc.ordinal} className="rounded-xl border border-border bg-card p-5">
+  1077→                      <div className="flex items-start gap-3">
+  1078→                        <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-foreground text-xs font-bold tabular-nums text-background">
+  1079→                          {sc.ordinal + 1}
+  1080→                        </span>
+  1081→                        <div className="min-w-0 flex-1">
+  1082→                          <h3 className="font-display text-lg leading-tight text-foreground">{sc.title}</h3>
+  1083→                          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+  1084→                            {sc.mood && (
+  1085→                              <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium" style={moodChipStyle(mood.color)}>
+  1086→                                {mood.label}
+  1087→                              </span>
+  1088→                            )}
+  1089→                            {chars.map((c, j) => (
+  1090→                              <span key={j} className="inline-flex items-center rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[11px] text-muted-foreground">
+  1091→                                {c}
+  1092→                              </span>
+  1093→                            ))}
+  1094→                          </div>
+  1095→                          <div className="mt-3">
+  1096→                            <AiMarkdown>{sc.body}</AiMarkdown>
+  1097→                          </div>
+  1098→                        </div>
+  1099→                      </div>
+  1100→                    </li>
+  1101→                  );
+  1102→                })}
+  1103→              </ol>
+  1104→            ) : (
+  1105→              <div className="rounded-lg border border-dashed border-border p-8 text-center">
+  1106→                <p className="text-sm text-muted-foreground">
+  1107→                  No scenes yet. Open <strong>Luma</strong> and tap{" "}
+  1108→                  <strong>Cinematize scenes</strong> to turn this story into scene cards.
+  1109→                </p>
+  1110→              </div>
+  1111→            )}
+  1112→          </div>
+  1113→        ) : currentChapter &&
+  1114→        (currentChapter.refinedText || currentChapter.chunks.length > 0) ? (
+  1115→          <article
+  1116→            className="reader-article mx-auto space-y-6 text-foreground"
+  1117→            data-focus={settings.focusMode ? "true" : "false"}
+  1118→            data-reading-width
+  1119→          >
+  1120→            {currentChapter.refinedText
+  1121→              ? (() => {
+  1122→                  const groups = refinedTextGroups(currentChapter.refinedText);
+  1123→                  const groupCount = groups.length;
+  1124→                  return groups.map((text, i) => {
+  1125→                    const isActive = i === activeChunkIndex;
+  1126→                    const paragraphs = text
+  1127→                      .split(/\n{2,}/)
+  1128→                      .map((p) => p.trim())
+  1129→                      .filter(Boolean);
+  1130→                    return (
+  1131→                      <div
+  1132→                        key={`rf-${i}`}
+  1133→                        data-ordinal={i}
+  1134→                        data-active={isActive ? "true" : "false"}
+  1135→                        className={cn(
+  1136→                          "reader-chunk cursor-pointer rounded-lg py-1",
+  1137→                          !settings.focusMode && isActive && "bg-muted/20",
+  1138→                        )}
+  1139→                        onClick={() => setActiveChunkIndex(i)}
+  1140→                        role="article"
+  1141→                        aria-label={`Section ${i + 1} of ${groupCount}`}
+  1142→                      >
+  1143→                        {paragraphs.map((p, j) => (
+  1144→                          <p
+  1145→                            key={j}
+  1146→                            className={cn(
+  1147→                              "whitespace-pre-wrap leading-[var(--pref-line-height)]",
+  1148→                              j < paragraphs.length - 1 && "mb-5",
+  1149→                            )}
+  1150→                            style={{
+  1151→                              textIndent: j > 0 ? "1.5em" : undefined,
+  1152→                            }}
+  1153→                          >
+  1154→                            {p}
+  1155→                          </p>
+  1156→                        ))}
+  1157→                      </div>
+  1158→                    );
+  1159→                  });
+  1160→                })()
+  1161→              : currentChapter.chunks.map((chunk, i) => {
+  1162→                const paragraphs = chunk.text
+  1163→                  .split(/\n{2,}/)
+  1164→                  .map((p) => p.trim())
+  1165→                  .filter(Boolean);
+  1166→                const isActive = i === activeChunkIndex;
+  1167→                return (
+  1168→                  <div
+  1169→                    key={chunk.index ?? i}
+  1170→                    data-ordinal={i}
+  1171→                    data-active={isActive ? "true" : "false"}
+  1172→                    className={cn(
+  1173→                      "reader-chunk cursor-pointer rounded-lg py-1",
+  1174→                      !settings.focusMode && isActive && "bg-muted/20",
+  1175→                    )}
+  1176→                    onClick={() => setActiveChunkIndex(i)}
+  1177→                    role="article"
+  1178→                    aria-label={`Section ${i + 1} of ${currentChapter.chunks.length}`}
+  1179→                  >
+  1180→                    {paragraphs.length > 1 ? (
+  1181→                      paragraphs.map((p, j) => (
+  1182→                        <p
+  1183→                          key={j}
+  1184→                          className={cn(
+  1185→                            "whitespace-pre-wrap leading-[var(--pref-line-height)]",
+  1186→                            j < paragraphs.length - 1 && "mb-5",
+  1187→                          )}
+  1188→                          style={{
+  1189→                            textIndent: j > 0 ? "1.5em" : undefined,
+  1190→                          }}
+  1191→                        >
+  1192→                          {p}
+  1193→                        </p>
+  1194→                      ))
+  1195→                    ) : (
+  1196→                      <p className="whitespace-pre-wrap leading-[var(--pref-line-height)]">
+  1197→                        {paragraphs[0] ?? ""}
+  1198→                      </p>
+  1199→                    )}
+  1200→                  </div>
+  1201→                );
+  1202→              })}
+  1203→          </article>
+  1204→        ) : (
+  1205→          <p className="mx-auto max-w-prose text-center text-sm text-muted-foreground">
+  1206→            This chapter has no readable content.
+  1207→          </p>
+  1208→        )}
+  1209→
+  1210→        {/* FooterNav */}
+  1211→        <footer
+  1212→          className="mt-12 flex flex-col gap-4 border-t border-border pt-6"
+  1213→          aria-label="Chunk navigation"
+  1214→        >
+  1215→          <div className="flex items-center justify-between gap-3">
+  1216→            <Button
+  1217→              variant="outline"
+  1218→              size="sm"
+  1219→              className="gap-1"
+  1220→              disabled={isFirstChunk}
+  1221→              onClick={prevChunk}
+  1222→            >
+  1223→              <ArrowLeft className="h-4 w-4" />
+  1224→              <span className="hidden sm:inline">Prev</span>
+  1225→            </Button>
+  1226→
+  1227→            <p className="text-center text-xs text-muted-foreground">
+  1228→              {totalChunks > 0 ? (
+  1229→                <>
+  1230→                  Section{" "}
+  1231→                  <span className="tabular-nums">{globalChunkIndex + 1}</span> of{" "}
+  1232→                  <span className="tabular-nums">{totalChunks}</span>
+  1233→                  <span className="mx-2 text-border">·</span>
+  1234→                  <span className="tabular-nums">{progressPct}%</span> read
+  1235→                </>
+  1236→              ) : null}
+  1237→            </p>
+  1238→
+  1239→            {isLastChunk ? (
+  1240→              <Button size="sm" className="gap-1" onClick={finish}>
+  1241→                Finish
+  1242→              </Button>
+  1243→            ) : (
+  1244→              <Button
+  1245→                variant="outline"
+  1246→                size="sm"
+  1247→                className="gap-1"
+  1248→                onClick={nextChunk}
+  1249→              >
+  1250→                <span className="hidden sm:inline">Next</span>
+  1251→                <ArrowRight className="h-4 w-4" />
+  1252→              </Button>
+  1253→            )}
+  1254→          </div>
+  1255→          <Progress value={progressPct} className="h-1" />
+  1256→        </footer>
+  1257→      </main>
+  1258→
+  1259→      {/* ---- Side panels ---- */}
+  1260→
+  1261→      {/* Chapter index sheet */}
+  1262→      <Sheet open={chapterSheetOpen} onOpenChange={setChapterSheetOpen}>
+  1263→        <SheetContent
+  1264→          side="right"
+  1265→          className="w-full sm:max-w-sm"
+  1266→          aria-describedby={undefined}
+  1267→        >
+  1268→          <SheetHeader>
+  1269→            <SheetTitle className="flex items-center gap-2 font-display text-xl">
+  1270→              <List className="h-4 w-4" />
+  1271→              Chapters
+  1272→            </SheetTitle>
+  1273→            <p className="text-xs text-muted-foreground">
+  1274→              {chapters.length} chapter{chapters.length === 1 ? "" : "s"} ·{" "}
+  1275→              {totalChunks} chunks
+  1276→            </p>
+  1277→          </SheetHeader>
+  1278→          <div className="max-h-[calc(100dvh-7rem)] overflow-y-auto px-2 pb-6">
+  1279→            <ol className="space-y-1">
+  1280→              {chapters.map((ch, i) => {
+  1281→                const active = i === currentChapterIndex;
+  1282→                return (
+  1283→                  <li key={ch.id ?? i}>
+  1284→                    <button
+  1285→                      type="button"
+  1286→                      onClick={() => jumpToChapter(i)}
+  1287→                      className={cn(
+  1288→                        "group flex w-full items-start gap-3 rounded-md border px-3 py-2.5 text-left transition-colors",
+  1289→                        active
+  1290→                          ? "border-foreground/20 bg-muted/60"
+  1291→                          : "border-transparent hover:bg-muted/40",
+  1292→                      )}
+  1293→                    >
+  1294→                      <span
+  1295→                        className={cn(
+  1296→                          "mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-medium tabular-nums",
+  1297→                          active
+  1298→                            ? "bg-foreground text-background"
+  1299→                            : "bg-muted text-muted-foreground",
+  1300→                        )}
+  1301→                      >
+  1302→                        {(ch.ordinal ?? i) + 1}
+  1303→                      </span>
+  1304→                      <span className="min-w-0 flex-1">
+  1305→                        <span
+  1306→                          className={cn(
+  1307→                            "line-clamp-2 block text-sm font-medium",
+  1308→                            active ? "text-foreground" : "text-foreground/90",
+  1309→                          )}
+  1310→                        >
+  1311→                          {ch.title}
+  1312→                        </span>
+  1313→                        <span className="mt-0.5 block text-[11px] text-muted-foreground">
+  1314→                          {chapterChunkCount(ch)} chunk
+  1315→                          {chapterChunkCount(ch) === 1 ? "" : "s"}
+  1316→                        </span>
+  1317→                      </span>
+  1318→                    </button>
+  1319→                  </li>
+  1320→                );
+  1321→              })}
+  1322→            </ol>
+  1323→          </div>
+  1324→        </SheetContent>
+  1325→      </Sheet>
+  1326→
+  1327→      {/* Settings sheet */}
+  1328→      <Sheet open={settingsSheetOpen} onOpenChange={setSettingsSheetOpen}>
+  1329→        <SheetContent
+  1330→          side="right"
+  1331→          className="w-full overflow-y-auto sm:max-w-sm"
+  1332→          aria-describedby={undefined}
+  1333→        >
+  1334→          <SheetHeader>
+  1335→            <SheetTitle className="flex items-center gap-2 font-display text-xl">
+  1336→              <Settings2 className="h-4 w-4" />
+  1337→              Reader settings
+  1338→            </SheetTitle>
+  1339→            <p className="text-xs text-muted-foreground">
+  1340→              Adjust typography, theme, and reading width.
+  1341→            </p>
+  1342→          </SheetHeader>
+  1343→
+  1344→          <div className="space-y-6 px-4 pb-10">
+  1345→            {/* Typography */}
+  1346→            <section className="space-y-4">
+  1347→              <SectionLabel>Typography</SectionLabel>
+  1348→
+  1349→              <div className="space-y-1.5">
+  1350→                <SectionLabel>Font family</SectionLabel>
+  1351→                <OptionRow
+  1352→                  options={FONT_OPTIONS}
+  1353→                  value={settings.fontFamily}
+  1354→                  onChange={(v) => update({ fontFamily: v })}
+  1355→                  ariaLabel="Font family"
+  1356→                />
+  1357→              </div>
+  1358→
+  1359→              <SliderRow
+  1360→                label="Font size"
+  1361→                value={settings.fontSize}
+  1362→                display={`${settings.fontSize}px`}
+  1363→                min={14}
+  1364→                max={28}
+  1365→                step={1}
+  1366→                onChange={(v) => update({ fontSize: v })}
+  1367→              />
+  1368→
+  1369→              <SliderRow
+  1370→                label="Line height"
+  1371→                value={settings.lineHeight}
+  1372→                display={settings.lineHeight.toFixed(1)}
+  1373→                min={1.3}
+  1374→                max={2}
+  1375→                step={0.1}
+  1376→                onChange={(v) => update({ lineHeight: v })}
+  1377→              />
+  1378→
+  1379→              <SliderRow
+  1380→                label="Letter spacing"
+  1381→                value={settings.letterSpacing}
+  1382→                display={`${settings.letterSpacing.toFixed(2)}em`}
+  1383→                min={-0.02}
+  1384→                max={0.05}
+  1385→                step={0.01}
+  1386→                onChange={(v) => update({ letterSpacing: v })}
+  1387→              />
+  1388→
+  1389→              <SliderRow
+  1390→                label="Reading width"
+  1391→                value={settings.readingWidth}
+  1392→                display={`${settings.readingWidth}ch`}
+  1393→                min={50}
+  1394→                max={90}
+  1395→                step={1}
+  1396→                onChange={(v) => update({ readingWidth: v })}
+  1397→              />
+  1398→            </section>
+  1399→
+  1400→            {/* Theme */}
+  1401→            <section className="space-y-3">
+  1402→              <SectionLabel>Theme</SectionLabel>
+  1403→              <div className="grid grid-cols-3 gap-2">
+  1404→                {THEME_OPTIONS.map((opt) => {
+  1405→                  const active = settings.theme === opt.value;
+  1406→                  return (
+  1407→                    <button
+  1408→                      key={opt.value}
+  1409→                      type="button"
+  1410→                      onClick={() => update({ theme: opt.value })}
+  1411→                      aria-pressed={active}
+  1412→                      className={cn(
+  1413→                        "flex flex-col items-center gap-1 rounded-md border px-2 py-3 text-xs font-medium transition-colors",
+  1414→                        active
+  1415→                          ? "border-foreground/30 bg-muted/60 text-foreground"
+  1416→                          : "border-border text-muted-foreground hover:text-foreground",
+  1417→                      )}
+  1418→                    >
+  1419→                      <opt.Icon className="h-4 w-4" />
+  1420→                      {opt.label}
+  1421→                    </button>
+  1422→                  );
+  1423→                })}
+  1424→              </div>
+  1425→            </section>
+  1426→
+  1427→            {/* Accent */}
+  1428→            <section className="space-y-3">
+  1429→              <SectionLabel>Accent color</SectionLabel>
+  1430→              <div className="flex flex-wrap gap-2">
+  1431→                {ACCENT_SWATCHES.map((sw) => {
+  1432→                  const active =
+  1433→                    settings.accent.toLowerCase() === sw.value.toLowerCase();
+  1434→                  return (
+  1435→                    <button
+  1436→                      key={sw.value}
+  1437→                      type="button"
+  1438→                      onClick={() => update({ accent: sw.value })}
+  1439→                      aria-label={`Accent: ${sw.label}`}
+  1440→                      aria-pressed={active}
+  1441→                      className={cn(
+  1442→                        "relative h-8 w-8 rounded-full border-2 transition-transform hover:scale-110",
+  1443→                        active
+  1444→                          ? "border-foreground"
+  1445→                          : "border-transparent",
+  1446→                      )}
+  1447→                      style={{ backgroundColor: sw.value }}
+  1448→                    >
+  1449→                      {active ? (
+  1450→                        <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white mix-blend-difference">
+  1451→                          ✓
+  1452→                        </span>
+  1453→                      ) : null}
+  1454→                    </button>
+  1455→                  );
+  1456→                })}
+  1457→              </div>
+  1458→            </section>
+  1459→
+  1460→            {/* Reading behavior — focus mode lives here now */}
+  1461→            <section className="space-y-3">
+  1462→              <SectionLabel>Reading behavior</SectionLabel>
+  1463→              <label className="flex items-center justify-between gap-3 rounded-md border border-border bg-muted/30 px-3 py-2.5">
+  1464→                <span className="flex items-center gap-2 text-sm">
+  1465→                  <TypeIcon className="h-4 w-4 text-muted-foreground" />
+  1466→                  Focus mode
+  1467→                </span>
+  1468→                <Switch
+  1469→                  checked={settings.focusMode}
+  1470→                  onCheckedChange={(v) => update({ focusMode: v })}
+  1471→                  aria-label="Toggle focus mode"
+  1472→                />
+  1473→              </label>
+  1474→              <p className="text-[11px] text-muted-foreground">
+  1475→                Dims surrounding paragraphs so you can read one chunk at a time.
+  1476→                Press <kbd className="rounded border border-border px-1">F</kbd>{" "}
+  1477→                to toggle.
+  1478→              </p>
+  1479→            </section>
+  1480→
+  1481→            {/* Motion & contrast */}
+  1482→            <section className="space-y-4">
+  1483→              <SectionLabel>Motion &amp; contrast</SectionLabel>
+  1484→              <div className="space-y-1.5">
+  1485→                <SectionLabel>Animation speed</SectionLabel>
+  1486→                <OptionRow
+  1487→                  options={ANIM_SPEED_OPTIONS}
+  1488→                  value={settings.animSpeed}
+  1489→                  onChange={(v) => update({ animSpeed: v })}
+  1490→                  ariaLabel="Animation speed"
+  1491→                />
+  1492→              </div>
+  1493→              <div className="space-y-1.5">
+  1494→                <SectionLabel>Contrast</SectionLabel>
+  1495→                <OptionRow
+  1496→                  options={CONTRAST_OPTIONS}
+  1497→                  value={settings.contrast}
+  1498→                  onChange={(v) => update({ contrast: v })}
+  1499→                  ariaLabel="Contrast"
+  1500→                />
+  1501→              </div>
+  1502→            </section>
+  1503→
+  1504→            {/* Keyboard hints */}
+  1505→            <section className="space-y-3">
+  1506→              <SectionLabel>Keyboard</SectionLabel>
+  1507→              <label className="flex items-center justify-between gap-3 rounded-md border border-border bg-muted/30 px-3 py-2.5">
+  1508→                <span className="text-sm">Show keyboard hints</span>
+  1509→                <Switch
+  1510→                  checked={settings.kbdHints}
+  1511→                  onCheckedChange={(v) => update({ kbdHints: v })}
+  1512→                  aria-label="Toggle keyboard hints"
+  1513→                />
+  1514→              </label>
+  1515→              <ul className="space-y-1 text-[11px] text-muted-foreground">
+  1516→                <li>
+  1517→                  <kbd className="rounded border border-border px-1">→</kbd>{" "}
+  1518→                  / <kbd className="rounded border border-border px-1">Space</kbd>{" "}
+  1519→                  — next chunk
+  1520→                </li>
+  1521→                <li>
+  1522→                  <kbd className="rounded border border-border px-1">←</kbd> —
+  1523→                  previous chunk
+  1524→                </li>
+  1525→                <li>
+  1526→                  <kbd className="rounded border border-border px-1">F</kbd> —
+  1527→                  toggle focus mode
+  1528→                </li>
+  1529→                <li>
+  1530→                  <kbd className="rounded border border-border px-1">Esc</kbd> —
+  1531→                  close panels
+  1532→                </li>
+  1533→              </ul>
+  1534→            </section>
+  1535→          </div>
+  1536→        </SheetContent>
+  1537→      </Sheet>
+  1538→
+  1539→      {/* Luma — the AI companion chat */}
+  1540→      <Sheet open={aiSheetOpen} onOpenChange={setAiSheetOpen}>
+  1541→        <SheetContent
+  1542→          side="right"
+  1543→          className="flex w-full flex-col p-0 sm:max-w-md"
+  1544→          aria-describedby={undefined}
+  1545→        >
+  1546→          <SheetHeader className="sr-only">
+  1547→            <SheetTitle>Luma</SheetTitle>
+  1548→          </SheetHeader>
+  1549→          <LumaChat
+  1550→            documentId={documentId}
+  1551→            docTitle={doc.title}
+  1552→            chapters={chapters}
+  1553→            currentChapterIndex={currentChapterIndex}
+  1554→          />
+  1555→        </SheetContent>
+  1556→      </Sheet>
+  1557→    </div>
+  1558→  );
+  1559→}
+  1560→

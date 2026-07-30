@@ -251,3 +251,34 @@ Stage Summary:
 - Activity labels: shared module with 23 descriptive names + icons (no more raw ai_* strings); used across dashboard/analytics/history.
 - Bot logos redesigned: Luma (sparkle/star), Ouro (open book), Ankaa (quill/feather) — VLM-verified as accurate forms.
 - Lint clean, zero console errors, all routes 200.
+
+---
+Task ID: engine-overhaul-1
+Agent: orchestrator (Z.ai Code)
+Task: Full-content dramatized scenes, eliminate chapter splitting + fix navigation, AI-integrated background analysis job with ETA.
+
+Work Log:
+- **Scenes rewrite** (scenes/route.ts): rewrote to use FULL-CONTENT excerpts (complete chapter bodies up to 20000 chars, not just first 1000 chars of 8 chapters). New prompt elevates the narrative: dramatized present-tense prose, structured dialogue sequences ("Character Name," she said... "Reply," he answered), and requires covering the ENTIRE document (every key event/character/turning point). Uses aiCompleteJson with robust JSON parsing. Verified: regenerated 8 scenes with dramatized narrative + dialogue ("'Three hundred years ago, you destroyed my family!' he screams").
+- **Chapter splitting eliminated** (core-engine.ts): removed the split-mega pass from organizeChapters — chapters > 20000 chars are NO LONGER split into "(Part 1)/(Part 2)" sub-chapters. Chapters stay whole. Only the merge-tiny pass remains. This fixes the navigation bug where "next chapter" only advanced to the next split section.
+- **Reader navigation fixed** (reader-view.tsx): the root cause was `chapterChunkCount` returning `ceil(paras/3)` for refined chapters (3-paragraph groups), making "Next" advance through 10+ groups before changing chapters. Fixed: `chapterChunkCount` now returns 1 for ALL chapters (whole chapter = one navigable section). `refinedTextGroups` returns a single group. The article renders the ENTIRE chapter as one continuous article. "Next" (bottom button / ArrowRight) now advances to the next CHAPTER directly in non-focus mode. Verified: "Next" advanced from Chapter 1 to Chapter 2 immediately.
+- **Focus mode improved**: introduced `activeParagraphIndex` state. In focus mode, the article renders all paragraphs with `data-ordinal`/`data-active` on each `<p>`. Next/Prev advance PARAGRAPHS within the chapter (dimming non-active paragraphs via CSS), and at the last paragraph, advance to the next chapter. In non-focus mode, the whole chapter renders with no dimming, and Next/Prev advance chapters. Focus mode CSS updated to target `<p>` elements with smooth opacity/blur transitions.
+- **Background AI analysis job** (new): 
+  * Prisma `AnalysisJob` model (id, documentId, status, step, progress, etaSeconds, results JSON, error).
+  * `/api/documents/[id]/analyze` route: POST starts a fire-and-forget 5-step pipeline (denoise → summary → themes → characters → criticism), returns immediately with status + ETA. GET polls status. Each step updates progress (5→25→45→65→80→100) and the current step label.
+  * Pipeline: (1) Denoise — AI removes OCR artifacts, fixes spacing, deduplicates content while preserving all information. (2) Summary — comprehensive document summary (persisted to Document.summary). (3) Themes — 3-5 central themes. (4) Characters — character analysis. (5) Criticism — literary criticism. All sequential, each step grounds in the denoised text.
+  * Client: `startAnalysis()` + `pollAnalysis()` in use-api.ts; reader auto-starts/polls on document open via useEffect; shows a progress banner with LemniscateSpinner, step label, ETA, and progress bar; hides when done.
+  * Verified: job completed with all 5 outputs (denoised, summary 1377 chars, themes 2710 chars, characters 1295 chars, criticism 3228 chars).
+- **Activity label**: added `ai_analysis_complete` → "Deep analysis complete" with Sparkles icon.
+- **Verification (Agent Browser)**:
+  * Chapter navigation: "Next" (bottom) advances Chapter 1 → Chapter 2 immediately (was: advanced through 10 paragraph groups first). "Prev chapter" returns to Chapter 1.
+  * Focus mode: Next advances paragraphs within a chapter, then to the next chapter at the last paragraph.
+  * Scenes: regenerated 8 full-content dramatized scenes with dialogue ("'Three hundred years ago, you destroyed my family!' he screams") and elevated narrative ("Blood drips from Fang Yuan's fingertips... a monument to unrepentant darkness").
+  * Analysis job: auto-started on document open, progress banner showed step labels + ETA, completed with all 5 sequential outputs.
+  * Console errors: ZERO. dev.log error count: 0.
+  * `bun run lint`: clean.
+
+Stage Summary:
+- Scenes: full-content (20000-char excerpt), dramatized with structured dialogue sequences, covers entire document.
+- Chapter splitting eliminated; "Next" advances chapters directly (not paragraphs). Focus mode advances paragraphs within a chapter, then to the next chapter.
+- Background AI analysis job: 5-step pipeline (denoise → summary → themes → characters → criticism) with progress + ETA, sequential outputs, fire-and-forget with polling.
+- Lint clean, zero console errors, all routes 200.

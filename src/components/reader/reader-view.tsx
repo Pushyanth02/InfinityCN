@@ -48,14 +48,17 @@ import {
   imaginePicture,
   meetCharacters,
   patchDocument,
+  pollAnalysis,
   quizMe,
   refineChapter,
   retellForKids,
+  startAnalysis,
   studyGuide,
   useDocument,
   vocabulary,
   whatIf,
   worldLore,
+  type AnalysisJobStatus,
 } from "@/hooks/use-api";
 import { useReaderSettings } from "@/hooks/use-reader-settings";
 import {
@@ -423,28 +426,27 @@ function AnalysisTabPanel({
 }
 
 /**
- * Effective chunk count for a chapter. If the chapter has been OCR-refined,
- * we split the refined text into ~1200-char chunks at paragraph boundaries.
- * Otherwise we use the parser-produced chunks.
+ * Effective chunk count for a chapter. A chapter is treated as a SINGLE
+ * navigable section — "Next" advances to the next chapter, not the next
+ * paragraph within the same chapter. This eliminates the subdivision bug
+ * where refined text was split into 3-paragraph groups.
+ *
+ * If a chapter has many chunks (long chapter), they still render as one
+ * continuous article; the reader scrolls within a chapter and presses
+ * "Next" to move to the next chapter.
  */
 function chapterChunkCount(ch: Chapter | undefined): number {
   if (!ch) return 0;
-  if (ch.refinedText) {
-    // Split refined text into chunks for focus-mode navigation
-    const paras = ch.refinedText.split(/\n{2,}/).filter(Boolean);
-    return Math.max(1, Math.ceil(paras.length / 3));
-  }
-  return ch.chunks.length;
+  return 1;
 }
 
-/** Split refined text into paragraph groups for rendering. */
+/**
+ * Split refined text into groups for rendering. Returns a SINGLE group
+ * containing the entire refined text — the chapter renders as one
+ * continuous article, keeping navigation chapter-level.
+ */
 function refinedTextGroups(text: string): string[] {
-  const paras = text.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
-  const groups: string[] = [];
-  for (let i = 0; i < paras.length; i += 3) {
-    groups.push(paras.slice(i, i + 3).join("\n\n"));
-  }
-  return groups;
+  return [text];
 }
 
 /* ---------- main component ---------- */
@@ -458,6 +460,7 @@ export default function ReaderView() {
 
   const [currentChapterIndex, setCurrentChapterIndex] = useState(0);
   const [activeChunkIndex, setActiveChunkIndex] = useState(0);
+  const [activeParagraphIndex, setActiveParagraphIndex] = useState(0);
 
   const [chapterSheetOpen, setChapterSheetOpen] = useState(false);
   const [settingsSheetOpen, setSettingsSheetOpen] = useState(false);
@@ -465,6 +468,8 @@ export default function ReaderView() {
   const [scenesView, setScenesView] = useState(false);
   const [scenesData, setScenesData] = useState<AiScene[] | null>(null);
   const [scenesLoading, setScenesLoading] = useState(false);
+  const [analysis, setAnalysis] = useState<AnalysisJobStatus | null>(null);
+  const analysisPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [bookmarks, setBookmarks] = useState<Set<string>>(new Set());
   const [sessionMarkedRead, setSessionMarkedRead] = useState(false);
@@ -537,11 +542,49 @@ export default function ReaderView() {
     // Only on doc open — subsequent changes come from navigation.
   }, [doc?.id]);
 
+  /* ---------- background deep-analysis job ---------- */
+  // When a document opens, start (or resume polling) the deep-analysis
+  // pipeline. Shows a progress banner with ETA; results appear when done.
+  useEffect(() => {
+    if (!documentId) return;
+    let active = true;
+    const poll = async () => {
+      if (!active) return;
+      try {
+        const status = await pollAnalysis(documentId);
+        if (!active) return;
+        setAnalysis(status);
+        if (status.status === "running" || status.status === "queued") {
+          analysisPollRef.current = setTimeout(poll, 3000);
+        }
+      } catch {
+        // If no job exists yet, start one.
+        try {
+          const status = await startAnalysis(documentId);
+          if (!active) return;
+          setAnalysis(status);
+          if (status.status === "running" || status.status === "queued") {
+            analysisPollRef.current = setTimeout(poll, 3000);
+          }
+        } catch {
+          // ignore — analysis is best-effort
+        }
+      }
+    };
+    // First, try to poll an existing job; if none, the catch starts one.
+    poll();
+    return () => {
+      active = false;
+      if (analysisPollRef.current) clearTimeout(analysisPollRef.current);
+    };
+  }, [documentId]);
+
   // Clear refining state when chapter changes (the previous chapter's
   // refinement job is abandoned — its result will be ignored via the abort ref)
   useEffect(() => {
     setRefining(false);
     refineAbortRef.current = null;
+    setActiveParagraphIndex(0);
   }, [currentChapterIndex]);
 
   /* ---------- per-chapter OCR refinement (background, non-blocking) ----------
@@ -662,36 +705,56 @@ export default function ReaderView() {
   ]);
 
   /* ---------- navigation ---------- */
+  // Count paragraphs in the current chapter (for focus-mode paragraph navigation).
+  const currentChapterParagraphs = useMemo(() => {
+    if (!currentChapter) return 0;
+    const body = currentChapter.refinedText ??
+      currentChapter.chunks.map((c) => c.text).join("\n\n");
+    return body.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean).length;
+  }, [currentChapter]);
+
+  /**
+   * Next: in focus mode, advance to the next paragraph; at the last paragraph,
+   * advance to the next chapter. In non-focus mode, always advance to the next
+   * chapter (the whole chapter is one continuous article).
+   */
   const nextChunk = useCallback(() => {
     if (!currentChapter || chapters.length === 0) return;
-    if (activeChunkIndex < chapterChunkCount(currentChapter) - 1) {
-      setActiveChunkIndex((i) => i + 1);
+    if (settings.focusMode && activeParagraphIndex < currentChapterParagraphs - 1) {
+      setActiveParagraphIndex((i) => i + 1);
     } else if (currentChapterIndex < chapters.length - 1) {
       setCurrentChapterIndex((i) => i + 1);
       setActiveChunkIndex(0);
+      setActiveParagraphIndex(0);
     }
-    // At the very last chunk: no-op (Finish is an explicit button in the footer).
   }, [
     currentChapter,
-    activeChunkIndex,
+    settings.focusMode,
+    activeParagraphIndex,
+    currentChapterParagraphs,
     currentChapterIndex,
     chapters.length,
   ]);
 
   const prevChunk = useCallback(() => {
     if (isFirstChunk) return;
-    if (activeChunkIndex > 0) {
-      setActiveChunkIndex((i) => i - 1);
+    if (settings.focusMode && activeParagraphIndex > 0) {
+      setActiveParagraphIndex((i) => i - 1);
     } else if (currentChapterIndex > 0) {
-      const prev = chapters[currentChapterIndex - 1];
       setCurrentChapterIndex((i) => i - 1);
-      setActiveChunkIndex(Math.max(0, chapterChunkCount(prev) - 1));
+      setActiveChunkIndex(0);
+      // Jump to the last paragraph of the previous chapter in focus mode.
+      const prev = chapters[currentChapterIndex - 1];
+      const prevBody = prev.refinedText ?? prev.chunks.map((c) => c.text).join("\n\n");
+      const prevParas = prevBody.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+      setActiveParagraphIndex(settings.focusMode ? Math.max(0, prevParas.length - 1) : 0);
     }
-  }, [activeChunkIndex, currentChapterIndex, chapters, isFirstChunk]);
+  }, [settings.focusMode, activeParagraphIndex, currentChapterIndex, chapters, isFirstChunk]);
 
   const jumpToChapter = useCallback((idx: number) => {
     setCurrentChapterIndex(idx);
     setActiveChunkIndex(0);
+    setActiveParagraphIndex(0);
     setChapterSheetOpen(false);
   }, []);
 
@@ -699,6 +762,7 @@ export default function ReaderView() {
     if (currentChapterIndex < chapters.length - 1) {
       setCurrentChapterIndex((i) => i + 1);
       setActiveChunkIndex(0);
+      setActiveParagraphIndex(0);
     }
   }, [currentChapterIndex, chapters.length]);
 
@@ -706,6 +770,7 @@ export default function ReaderView() {
     if (currentChapterIndex > 0) {
       setCurrentChapterIndex((i) => i - 1);
       setActiveChunkIndex(0);
+      setActiveParagraphIndex(0);
     }
   }, [currentChapterIndex]);
 
@@ -996,6 +1061,37 @@ export default function ReaderView() {
 
       {/* ---- Main reading column ---- */}
       <main className="mx-auto max-w-3xl px-6 py-10">
+        {/* Background deep-analysis banner */}
+        {analysis && analysis.status !== "done" && (
+          <div className="mb-6 rounded-lg border border-border bg-muted/30 p-4" role="status" aria-live="polite">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <LemniscateSpinner size={28} />
+                <div>
+                  <p className="text-sm font-medium text-foreground">
+                    {analysis.status === "error" ? "Analysis failed" : analysis.stepLabel ?? "Starting deep analysis…"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {analysis.status === "error"
+                      ? analysis.error ?? "Please try again later."
+                      : `Lemniscate is reading every chapter — est. ${analysis.etaSeconds}s`}
+                  </p>
+                </div>
+              </div>
+              <span className="shrink-0 text-xs font-medium tabular-nums text-muted-foreground">
+                {analysis.progress}%
+              </span>
+            </div>
+            {analysis.status !== "error" && (
+              <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-foreground/70 transition-all duration-700"
+                  style={{ width: `${analysis.progress}%` }}
+                />
+              </div>
+            )}
+          </div>
+        )}
         {/* ChapterNav */}
         <section className="mb-8" aria-label="Chapter navigation">
           <div className="flex items-center justify-between gap-3">
@@ -1113,93 +1209,43 @@ export default function ReaderView() {
         ) : currentChapter &&
         (currentChapter.refinedText || currentChapter.chunks.length > 0) ? (
           <article
-            className="reader-article mx-auto space-y-6 text-foreground"
+            className="reader-article mx-auto space-y-4 text-foreground"
             data-focus={settings.focusMode ? "true" : "false"}
             data-reading-width
           >
-            {currentChapter.refinedText
-              ? (() => {
-                  const groups = refinedTextGroups(currentChapter.refinedText);
-                  const groupCount = groups.length;
-                  return groups.map((text, i) => {
-                    const isActive = i === activeChunkIndex;
-                    const paragraphs = text
-                      .split(/\n{2,}/)
-                      .map((p) => p.trim())
-                      .filter(Boolean);
-                    return (
-                      <div
-                        key={`rf-${i}`}
-                        data-ordinal={i}
-                        data-active={isActive ? "true" : "false"}
-                        className={cn(
-                          "reader-chunk cursor-pointer rounded-lg py-1",
-                          !settings.focusMode && isActive && "bg-muted/20",
-                        )}
-                        onClick={() => setActiveChunkIndex(i)}
-                        role="article"
-                        aria-label={`Section ${i + 1} of ${groupCount}`}
-                      >
-                        {paragraphs.map((p, j) => (
-                          <p
-                            key={j}
-                            className={cn(
-                              "whitespace-pre-wrap leading-[var(--pref-line-height)]",
-                              j < paragraphs.length - 1 && "mb-5",
-                            )}
-                            style={{
-                              textIndent: j > 0 ? "1.5em" : undefined,
-                            }}
-                          >
-                            {p}
-                          </p>
-                        ))}
-                      </div>
-                    );
-                  });
-                })()
-              : currentChapter.chunks.map((chunk, i) => {
-                const paragraphs = chunk.text
-                  .split(/\n{2,}/)
-                  .map((p) => p.trim())
-                  .filter(Boolean);
-                const isActive = i === activeChunkIndex;
+            {(() => {
+              // Render the ENTIRE chapter as one continuous article.
+              // In focus mode, each paragraph is a focusable "section" with
+              // data-active on the currently-focused paragraph. Navigation
+              // (Next/Prev) advances paragraphs in focus mode, chapters otherwise.
+              const body = currentChapter.refinedText ??
+                currentChapter.chunks.map((c) => c.text).join("\n\n");
+              const paragraphs = body
+                .split(/\n{2,}/)
+                .map((p) => p.trim())
+                .filter(Boolean);
+              return paragraphs.map((p, j) => {
+                const isActive = settings.focusMode && j === activeParagraphIndex;
                 return (
-                  <div
-                    key={chunk.index ?? i}
-                    data-ordinal={i}
+                  <p
+                    key={j}
+                    data-ordinal={j}
                     data-active={isActive ? "true" : "false"}
                     className={cn(
-                      "reader-chunk cursor-pointer rounded-lg py-1",
-                      !settings.focusMode && isActive && "bg-muted/20",
+                      "reader-chunk whitespace-pre-wrap leading-[var(--pref-line-height)]",
+                      j < paragraphs.length - 1 && "mb-5",
+                      !settings.focusMode && "cursor-text",
                     )}
-                    onClick={() => setActiveChunkIndex(i)}
-                    role="article"
-                    aria-label={`Section ${i + 1} of ${currentChapter.chunks.length}`}
+                    style={{
+                      textIndent: j > 0 ? "1.5em" : undefined,
+                    }}
+                    onClick={() => settings.focusMode && setActiveParagraphIndex(j)}
                   >
-                    {paragraphs.length > 1 ? (
-                      paragraphs.map((p, j) => (
-                        <p
-                          key={j}
-                          className={cn(
-                            "whitespace-pre-wrap leading-[var(--pref-line-height)]",
-                            j < paragraphs.length - 1 && "mb-5",
-                          )}
-                          style={{
-                            textIndent: j > 0 ? "1.5em" : undefined,
-                          }}
-                        >
-                          {p}
-                        </p>
-                      ))
-                    ) : (
-                      <p className="whitespace-pre-wrap leading-[var(--pref-line-height)]">
-                        {paragraphs[0] ?? ""}
-                      </p>
-                    )}
-                  </div>
+                    {p}
+                  </p>
                 );
-              })}
+              });
+            })()}
           </article>
         ) : (
           <p className="mx-auto max-w-prose text-center text-sm text-muted-foreground">

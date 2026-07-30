@@ -66,6 +66,9 @@ export const ACTIVITY_META: Record<string, ActivityMeta> = {
 
   // Ankaa (Agent)
   ai_ankaa_complete: { label: "Ankaa finished a story", color: "#fb7185", icon: Rocket },
+
+  // Background analysis job
+  ai_analysis_complete: { label: "Deep analysis complete", color: "#a78bfa", icon: Sparkles },
 };
 
 const FALLBACK: ActivityMeta = {

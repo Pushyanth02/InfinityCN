@@ -669,6 +669,47 @@ export async function lumaCreateContinue(
   );
 }
 
+// ── Background deep-analysis job ─────────────────────────────────────────────
+
+export interface AnalysisResults {
+  denoised?: string;
+  summary?: string;
+  themes?: string;
+  characters?: string;
+  criticism?: string;
+}
+
+export interface AnalysisJobStatus {
+  jobId: string;
+  status: "queued" | "running" | "done" | "error";
+  step: string | null;
+  stepLabel: string | null;
+  progress: number;
+  etaSeconds: number;
+  results: AnalysisResults | null;
+  error: string | null;
+}
+
+/** Start (or poll) the background deep-analysis job for a document. */
+export async function startAnalysis(documentId: string): Promise<AnalysisJobStatus> {
+  return json(
+    await fetch(`/api/documents/${documentId}/analyze`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ documentId }),
+    }),
+  );
+}
+
+/** Poll the analysis job status. */
+export async function pollAnalysis(documentId: string): Promise<AnalysisJobStatus> {
+  return json(
+    await fetch(`/api/documents/${documentId}/analyze?documentId=${documentId}`, {
+      cache: "no-store",
+    }),
+  );
+}
+
 // ── Create a story ──────────────────────────────────────────────────────────
 
 /** Create a new library document from raw authored text. */

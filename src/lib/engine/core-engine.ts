@@ -180,9 +180,12 @@ function rechunk(chapter: Chapter, body: string): Chapter {
 
 /**
  * Merge chapters with < MIN_CHAPTER_CHARS of body text into the previous
- * chapter, and split chapters with > MAX_CHAPTER_CHARS at the paragraph
- * boundary nearest the midpoint. Returns a new chapter array with fresh
- * ordinals.
+ * chapter. Chapters are NO LONGER split into sub-chapters — a long chapter
+ * stays as one whole chapter (the reader renders it as a single continuous
+ * article). This eliminates the navigation bug where "next chapter" only
+ * advanced to the next split section.
+ *
+ * Returns a new chapter array with fresh ordinals.
  */
 export function organizeChapters(chapters: Chapter[]): Chapter[] {
   if (chapters.length === 0) return chapters;
@@ -201,24 +204,8 @@ export function organizeChapters(chapters: Chapter[]): Chapter[] {
     }
   }
 
-  // --- Pass 2: split mega-chapters at a paragraph boundary near the midpoint ---
-  const split: Chapter[] = [];
-  for (const ch of merged) {
-    const body = chapterBody(ch);
-    if (body.length <= MAX_CHAPTER_CHARS) {
-      split.push(ch);
-      continue;
-    }
-    const halves = splitAtMidpoint(body);
-    split.push(rechunk({ ...ch, title: `${ch.title} (Part 1)` }, halves[0]));
-    split.push({
-      ...rechunk({ ...ch, id: uid() } as Chapter, halves[1]),
-      title: `${ch.title} (Part 2)`,
-    });
-  }
-
-  // Reassign ordinals.
-  return split.map((ch, i) => ({ ...ch, ordinal: i }));
+  // Reassign ordinals. (No splitting pass — chapters stay whole.)
+  return merged.map((ch, i) => ({ ...ch, ordinal: i }));
 }
 
 /**
