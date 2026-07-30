@@ -3,9 +3,7 @@
 import { useEffect } from "react";
 import { useNav } from "@/lib/nav-store";
 import { useReaderSettings } from "@/hooks/use-reader-settings";
-import { CommandPalette } from "@/components/nav/command-palette";
 import { PageTransition } from "@/components/transition/page-transition";
-import { KeyboardShortcutsDialog } from "@/components/ui/keyboard-shortcuts-dialog";
 import LandingPage from "@/components/landing/landing-page";
 import DashboardView from "@/components/dashboard/dashboard-view";
 import LibraryView from "@/components/library/library-view";
@@ -65,8 +63,6 @@ export default function Home() {
   return (
     <>
       <PageTransition trigger={view} />
-      <CommandPalette />
-      <KeyboardShortcutsDialog />
       {view === "landing" && <LandingPage />}
       {view === "dashboard" && <DashboardView />}
       {view === "library" && <LibraryView />}

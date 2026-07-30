@@ -9,7 +9,6 @@ import {
   Sparkles,
   Upload,
   BookOpen,
-  Keyboard,
   BookHeart,
   GraduationCap,
 } from "lucide-react";
@@ -22,12 +21,6 @@ import { Reveal, ScrollProgress } from "@/components/ui/reveal";
 import { ParticleField } from "@/components/ui/particle-field";
 import { AnimatedCounter } from "@/components/ui/animated-counter";
 import { MagneticButton } from "@/components/ui/magnetic-button";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
 import type { ViewName } from "@/lib/types";
 
 /* -------------------------------------------------------------------------- */
@@ -61,53 +54,43 @@ function scrollToAnchor(e: React.MouseEvent, href: string) {
 /* -------------------------------------------------------------------------- */
 
 const NAV_LINKS = [
+  { label: "Bots", href: "#bots" },
   { label: "Features", href: "#features" },
   { label: "Demo", href: "#demo" },
-  { label: "FAQ", href: "#faq" },
 ] as const;
 
 const FILE_TYPES = ["PDF", "EPUB", "DOCX", "MD", "TXT", "HTML"] as const;
-
-const ORGS = [
-  "Plain Text Press",
-  "Nightowl Books",
-  "The Marginalia Society",
-  "Ink & Antenna",
-  "Long Form Co",
-  "Vellum & Vapor",
-  "The Slow Reader",
-] as const;
 
 const FEATURES = [
   {
     icon: Upload,
     title: "Upload anything",
-    desc: "PDF, EPUB, DOCX, Markdown, TXT, HTML. Parsed into chapters on the server, stored in a persistent library.",
+    desc: "PDF, EPUB, DOCX, Markdown, TXT, HTML. Parsed into chapters on the server and stored in a persistent library.",
   },
   {
     icon: BookHeart,
-    title: "Three AI minds",
-    desc: "Luma for fast vivid chat, Ouro for NotebookLM-style study, and Ankaa for long-form creative writing.",
+    title: "Three AI companions",
+    desc: "Luma for fast chat, Ouro for literary study, and Ankaa for long-form creative writing — all grounded in what you're reading.",
   },
   {
     icon: GraduationCap,
-    title: "Study like a pro",
-    desc: "Ouro builds study guides, flashcards, and quizzes from any passage — grounded, structured, ready to learn.",
+    title: "Study tools",
+    desc: "Ouro builds study guides, flashcards, and quizzes from any passage, grounded in the text.",
   },
   {
     icon: Sparkles,
-    title: "Long-form agent",
-    desc: "Ankaa weaves full chapters and stories in the background, with a live ETA and progress bar.",
+    title: "Long-form writing",
+    desc: "Ankaa writes full chapters and stories in the background, with a live ETA and progress bar.",
   },
   {
     icon: MessageSquareQuote,
     title: "Ask the text",
-    desc: "Question the document. Get answers grounded in the actual excerpts, with citations to the source chapters.",
+    desc: "Question the document and get answers grounded in the actual excerpts, with citations to source chapters.",
   },
   {
     icon: Film,
-    title: "Cinematize",
-    desc: "Turn prose into a sequence of cinematic scene cards — each with a title, mood, and cast of characters.",
+    title: "Scene view",
+    desc: "Toggle a cinematic scene-card overlay on the reader screen — each with a title, mood, and cast.",
   },
   {
     icon: Focus,
@@ -154,64 +137,13 @@ const COMPARISON_SCENES: SceneCard[] = [
   },
 ];
 
-const TESTIMONIALS = [
-  {
-    quote: "I finally finished Moby-Dick. The focus mode is a meditation.",
-    name: "Ana R.",
-    role: "Reader",
-  },
-  {
-    quote:
-      "Cinematize turned my dry research PDFs into something I actually want to read.",
-    name: "Dev P.",
-    role: "Researcher",
-  },
-  {
-    quote: "It's the first e-reader that respects typography.",
-    name: "Marguerite L.",
-    role: "Editor",
-  },
-] as const;
-
-const FAQS = [
-  {
-    q: "Is my data sent to a server?",
-    a: "Your library is stored in a local database. Only when you explicitly request an AI feature is the relevant text sent to the model for that single request — and the results are cached so you rarely need to ask twice.",
-  },
-  {
-    q: "What file types are supported?",
-    a: "PDF, EPUB, DOCX, Markdown, TXT, and HTML. DOCX and EPUB are extracted from their zip containers; PDF uses a best-effort text extraction. Markdown and plain text are fully supported.",
-  },
-  {
-    q: "What are the three AI bots?",
-    a: "Luma is your fast, everyday chatbot — vivid storytelling plus quick study help. Ouro is a NotebookLM-style study assistant that builds study guides, quizzes, and flashcards. Ankaa is a creative-writing agent that weaves long-form chapters and stories in the background, with a live ETA.",
-  },
-  {
-    q: "How does Ankaa's background writing work?",
-    a: "Give Ankaa a brief — \"write the next chapter\", \"an alternate ending\", \"expand this scene\" — and it starts a background job. You'll see an estimated completion time and a live progress bar. When it's done, the full work appears in the chat ready to read.",
-  },
-  {
-    q: "Can it really write the next chapter?",
-    a: "Yes. Ankaa reads the document closely — absorbing its voice, rhythm, and tone — then writes a rich, detailed passage in the author's style. For long works it runs as a background agent with an ETA.",
-  },
-  {
-    q: "Does it help with studying?",
-    a: "Ouro generates structured study guides, creates multiple-choice quizzes you can take and score, builds flip-card flashcards, and explains any passage in plain language — all grounded in the text you're reading.",
-  },
-  {
-    q: "Do I need an account?",
-    a: "No. Lemniscate works as a local guest. Your library persists in the project database without any sign-in.",
-  },
-  { q: "Is it free?", a: "Yes. Lemniscate is free to use." },
-] as const;
-
 const FOOTER_COLUMNS = [
   {
     title: "Product",
     links: [
+      { label: "Bots", href: "#bots" },
       { label: "Features", href: "#features" },
       { label: "Demo", href: "#demo" },
-      { label: "FAQ", href: "#faq" },
     ],
   },
   {
@@ -219,15 +151,16 @@ const FOOTER_COLUMNS = [
     links: [
       { label: "Dashboard", view: "dashboard" as ViewName },
       { label: "Import", view: "upload" as ViewName },
+      { label: "Create a story", view: "create" as ViewName },
       { label: "Settings", view: "settings" as ViewName },
     ],
   },
   {
-    title: "Company",
+    title: "About",
     links: [
-      { label: "About", href: "#" },
-      { label: "Privacy", href: "#" },
-      { label: "Docs", href: "#" },
+      { label: "About Lemniscate", view: "settings" as ViewName },
+      { label: "Privacy", view: "settings" as ViewName },
+      { label: "Documentation", view: "settings" as ViewName },
     ],
   },
 ] as const;
@@ -343,17 +276,11 @@ function Nav({ go }: { go: GoFn }) {
         </nav>
 
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => go("dashboard")}
-            className="ld-btn-ghost rounded-full px-4 py-2 text-sm font-medium focus-ring"
-          >
-            Sign in
-          </button>
           <MagneticButton
             onClick={() => go("dashboard")}
             className="ld-btn-primary shine-on-hover rounded-full px-5 py-2 text-sm font-semibold focus-ring"
           >
-            Get started
+            Open the reading room
           </MagneticButton>
         </div>
       </div>
@@ -452,10 +379,11 @@ function Hero({ go }: { go: GoFn }) {
             className="mx-auto mt-6 max-w-2xl text-base text-balance sm:text-lg"
             style={{ color: "var(--ld-ink-dim)" }}
           >
-            Upload a PDF, EPUB, DOCX, or Markdown file — or write your own.
-            Luma adapts to the reader you are: a Story Lover expanding a novel,
-            a gentle voice retelling for children, or a patient tutor building
-            study guides and quizzes. Chat freely, or tap a suggestion.
+            Lemniscate is a local-first reading room that turns any document
+            into an interactive experience. Upload a PDF, EPUB, or Markdown
+            file — or write your own story — and three AI companions meet you
+            on the page: Luma for fast chat, Ouro for literary study, and Ankaa
+            for long-form creative writing.
           </p>
         </Reveal>
 
@@ -541,63 +469,54 @@ function StatsBand() {
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Logo strip — marquee                                                       */
+/*  About Lemniscate — what it is, in detail                                    */
 /* -------------------------------------------------------------------------- */
 
-function LogoStrip() {
-  const items = [...ORGS, ...ORGS]; // duplicate for seamless loop
+function AboutLemniscate() {
   return (
-    <section
-      className="overflow-hidden border-y py-8"
-      style={{
-        borderColor: "var(--ld-border)",
-        background: "rgba(10, 11, 15, 0.4)",
-      }}
-    >
-      <div className="mx-auto max-w-6xl px-6">
-        <p
-          className="mb-5 text-center text-xs uppercase tracking-[0.18em]"
-          style={{ color: "var(--ld-ink-mute)" }}
-        >
-          Trusted by readers at
-        </p>
-      </div>
-      <div className="relative">
-        {/* Edge fade masks */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-y-0 left-0 z-10 w-24"
-          style={{
-            background:
-              "linear-gradient(90deg, var(--ld-bg), transparent)",
-          }}
+    <section className="py-20 sm:py-28">
+      <div className="mx-auto max-w-3xl px-6">
+        <SectionHeading
+          eyebrow="What is Lemniscate"
+          title="A reading room that thinks with you"
         />
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-y-0 right-0 z-10 w-24"
-          style={{
-            background:
-              "linear-gradient(270deg, var(--ld-bg), transparent)",
-          }}
-        />
-        <div className="ld-marquee gap-12 px-6">
-          {items.map((org, i) => (
-            <span
-              key={`${org}-${i}`}
-              className="whitespace-nowrap font-display text-lg transition-colors"
-              style={{ color: "var(--ld-ink-mute)" }}
-            >
-              {org}
-            </span>
-          ))}
-        </div>
+        <Reveal delay={80} className="mt-8 space-y-5 text-base leading-relaxed" >
+          <p style={{ color: "var(--ld-ink-dim)" }}>
+            Lemniscate is a local-first reading application. You bring a
+            document — a PDF, an EPUB, a Markdown file, a Word document, plain
+            text, or HTML — and Lemniscate parses it into chapters, indexes it
+            for search, and stores it in a persistent library that lives on
+            this device. No account is required, and your library stays yours.
+          </p>
+          <p style={{ color: "var(--ld-ink-dim)" }}>
+            The reader is built for long sessions. Focus mode dims the
+            paragraphs around the one you're reading. Adaptive typography lets
+            you choose the font, size, line height, and reading width that suit
+            you. A scene-card overlay can reframe the prose as a sequence of
+            cinematic beats, each with a title, a mood, and a cast.
+          </p>
+          <p style={{ color: "var(--ld-ink-dim)" }}>
+            Three AI companions live inside the reader. <strong style={{ color: "var(--ld-purple-bright)" }}>Luma</strong> is the
+            everyday chatbot — fast, vivid, and happy to retell a scene, explain
+            a line, or imagine what comes next. <strong style={{ color: "#5eead4" }}>Ouro</strong> is a literary study
+            companion that builds study guides, quizzes, and flashcards grounded
+            in the text you're reading. <strong style={{ color: "#fb7185" }}>Ankaa</strong> is a creative-writing agent
+            that weaves long-form chapters and stories in the background, with a
+            live ETA so you know when the work will be ready.
+          </p>
+          <p style={{ color: "var(--ld-ink-dim)" }}>
+            You can also write your own. The Create view hands the page to
+            Ankaa — give it a brief and it will draft a complete story from its
+            true beginning to its natural end, which you can then edit, save,
+            and read in the library alongside everything else.
+          </p>
+        </Reveal>
       </div>
     </section>
   );
 }
 
 /* -------------------------------------------------------------------------- */
-/*  InteractiveDemo — before / after                                           */
 /* -------------------------------------------------------------------------- */
 
 function InteractiveDemo() {
@@ -723,7 +642,7 @@ const BOTS_LANDING = [
   {
     name: "Ouro",
     tag: "Study Buddy",
-    desc: "A NotebookLM-style study assistant. Ouro builds structured study guides, generates quizzes you can take and score, and creates flip-cards — all grounded in the text you're reading.",
+    desc: "A literary study companion. Ouro builds study guides, generates quizzes you can take and score, and creates flip-cards — all grounded in the text you're reading.",
     accent: "#5eead4",
     Logo: OuroMark,
   },
@@ -945,112 +864,6 @@ function OriginalVsCinematized() {
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Testimonials                                                               */
-/* -------------------------------------------------------------------------- */
-
-function Testimonials() {
-  return (
-    <section className="py-20 sm:py-28">
-      <div className="mx-auto max-w-6xl px-6">
-        <SectionHeading
-          eyebrow="Loved by readers"
-          title="Quiet praise"
-          sub="Notes from people who picked Lemniscate back up after dinner."
-        />
-
-        <div className="mt-12 grid gap-6 md:grid-cols-3">
-          {TESTIMONIALS.map((t, i) => {
-            const initials = t.name
-              .split(" ")
-              .map((p) => p[0])
-              .join("");
-            return (
-              <Reveal key={t.name} delay={i * 80}>
-                <figure className="ld-card ld-card-hover h-full p-6">
-                  <blockquote
-                    className="text-lg italic leading-relaxed"
-                    style={{
-                      fontFamily: "var(--font-display)",
-                      color: "var(--ld-ink)",
-                    }}
-                  >
-                    “{t.quote}”
-                  </blockquote>
-                  <figcaption className="mt-5 flex items-center gap-3">
-                    <span
-                      className="flex size-9 items-center justify-center rounded-full text-xs font-semibold"
-                      style={{
-                        background:
-                          "linear-gradient(135deg, oklch(0.72 0.22 290), oklch(0.60 0.26 310))",
-                        color: "#0a0a14",
-                      }}
-                      aria-hidden
-                    >
-                      {initials}
-                    </span>
-                    <div>
-                      <p className="text-sm font-medium">{t.name}</p>
-                      <p
-                        className="text-xs"
-                        style={{ color: "var(--ld-ink-mute)" }}
-                      >
-                        {t.role}
-                      </p>
-                    </div>
-                  </figcaption>
-                </figure>
-              </Reveal>
-            );
-          })}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/*  FAQ                                                                        */
-/* -------------------------------------------------------------------------- */
-
-function FAQ() {
-  return (
-    <section id="faq" className="py-20 sm:py-28">
-      <div className="mx-auto max-w-3xl px-6">
-        <SectionHeading eyebrow="Questions" title="Frequently asked" />
-
-        <Reveal delay={80} className="mt-8">
-          <Accordion type="single" collapsible className="w-full">
-            {FAQS.map((faq, i) => (
-              <AccordionItem
-                key={faq.q}
-                value={`item-${i}`}
-                style={{ borderColor: "var(--ld-border)" }}
-              >
-                <AccordionTrigger className="px-1 text-left text-base font-medium">
-                  <span
-                    style={{ fontFamily: "var(--font-display)" }}
-                    className="text-lg"
-                  >
-                    {faq.q}
-                  </span>
-                </AccordionTrigger>
-                <AccordionContent
-                  className="px-1 text-sm leading-relaxed"
-                  style={{ color: "var(--ld-ink-dim)" }}
-                >
-                  {faq.a}
-                </AccordionContent>
-              </AccordionItem>
-            ))}
-          </Accordion>
-        </Reveal>
-      </div>
-    </section>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/*  Final CTA                                                                  */
 /* -------------------------------------------------------------------------- */
 
 function FinalCTA({ go }: { go: GoFn }) {
@@ -1189,7 +1002,7 @@ function Footer({ go }: { go: GoFn }) {
           style={{ borderColor: "var(--ld-border)" }}
         >
           <p className="text-xs" style={{ color: "var(--ld-ink-mute)" }}>
-            © 2025 Lemniscate. Made for readers.
+            © 2026 Lemniscate. Made for readers.
           </p>
           <div className="flex items-center gap-3">
             <button
@@ -1199,10 +1012,6 @@ function Footer({ go }: { go: GoFn }) {
             >
               <BookOpen className="inline size-3.5" /> Library
             </button>
-            <span style={{ color: "var(--ld-ink-faint)" }}>·</span>
-            <span className="text-xs" style={{ color: "var(--ld-ink-faint)" }}>
-              <Keyboard className="inline size-3.5" /> Press ? for shortcuts
-            </span>
             <FanLemniscateMark size={20} />
           </div>
         </div>
@@ -1232,13 +1041,11 @@ export default function LandingPage() {
       <main id="main-content">
         <Hero go={go} />
         <StatsBand />
-        <LogoStrip />
+        <AboutLemniscate />
         <InteractiveDemo />
         <MeetTheBots go={go} />
         <Features />
         <OriginalVsCinematized />
-        <Testimonials />
-        <FAQ />
         <FinalCTA go={go} />
       </main>
       <Footer go={go} />

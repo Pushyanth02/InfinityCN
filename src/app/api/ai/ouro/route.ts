@@ -12,8 +12,9 @@ export const maxDuration = 60;
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
 /**
- * Ouro — the Study Buddy (NotebookLM-style).
- * One route, three tools via the `tool` param:
+ * Ouro — the Study Buddy.
+ * A literary study companion grounded in the reader's text. One route, four
+ * tools via the `tool` param:
  *   - tool=chat       → conversational tutoring grounded in the doc
  *   - tool=quiz        → 6 multiple-choice questions (JSON)
  *   - tool=flashcards  → 8-12 Q/A flashcards (JSON)
@@ -60,7 +61,7 @@ export async function POST(req: NextRequest) {
 
   /* ── tool=chat — conversational tutoring ── */
   if (tool === "chat") {
-    const system = `You are Ouro, an advanced study assistant (think NotebookLM for literature). You're precise, structured, and endlessly patient. You help students genuinely understand a text.
+    const system = `You are Ouro, a literary study companion. You're precise, structured, and endlessly patient. You help readers genuinely understand a text — its language, its ideas, and its craft.
 
 You can:
 - Explain passages in plain language

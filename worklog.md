@@ -179,3 +179,44 @@ Stage Summary:
 - Ankaa runs as a true background process: POST returns immediately with jobId+ETA, client polls GET, fire-and-forget async generation, live progress bar.
 - All 3 bots tested with real tasks: Luma chat, Ouro quiz+flashcards, Ankaa long-form — all functional.
 - Lint clean, zero console errors, all routes 200.
+
+---
+Task ID: luma-refine-1
+Agent: orchestrator (Z.ai Code)
+Task: Create→Ankaa branding, fix bot-switching collision, well-structured Ankaa stories, remove NotebookLM marketing, revise landing page (detailed description, truthful tiles, remove FAQ/testimonials/praise, update footer/header/About/Privacy/Docs to 2026, remove shortcuts).
+
+Work Log:
+- **Bot-switching collision fixed** (luma-chat.tsx): added a `sessionRef` (incrementing counter) + `switchBot()` helper. Every async operation (greeting, handleSend, startAnkaaJob, runOuroGuide/Quiz/Flash, runCinematize) captures `const mySession = sessionRef.current` at start and checks `if (sessionRef.current !== mySession) return;` before any `setMessages`/`setLoading`/`pushBot` write. Ankaa's polling loop also checks the session before each poll iteration, so it stops polling when the bot switches. This prevents stale responses from the previous bot bleeding into the new bot's conversation. Verified: rapid Luma→Ouro→Ankaa→Luma switching produces clean per-bot greetings with zero cross-contamination.
+- **Ankaa prompt revised for well-structured stories** (ankaa/route.ts): added a "CRITICAL — narrative structure" block to the system prompt enforcing: begin at the TRUE START (grounded in a moment/place/sensation, never mid-scene), progress through a clear arc (opening → rising tension → turning point → resolution), end at a natural close (no mid-sentence stops), and vary openings (don't always start with weather/waking). For continuations, pick up seamlessly then build to own beginning–middle–end. Verified: generated lighthouse story starts with the letter's content then transitions to Elias reading it — a proper narrative opening.
+- **Ankaa route: documentId now optional** (ankaa/route.ts): the route no longer requires a valid documentId. If absent/invalid, Ankaa writes purely from the brief ("This is an original work — build the world from the brief alone"). This enables the Create view's blank-canvas writing. Fixed the activity-log foreign-key violation (only log documentId if it's a valid CUID).
+- **Create view rebranded to Ankaa** (create-view.tsx): replaced Luma co-writer with Ankaa branding + background-job pattern. Now shows AnkaaMark logo, "Writing with Ankaa" label, "Creative brief for Ankaa" input, "Ask Ankaa to write" button. On submit: starts an ankaaStart background job, shows a live progress bar (ETA + elapsed seconds), polls until complete, then shows "Read the work" + "Add to my story" buttons. 6 story starters remain. Verified: POST /api/ai/ankaa returns immediately (70ms), progress ticks, result appears after ~25s.
+- **NotebookLM scrubbed** from all files: luma-chat.tsx (Ouro blurb → "A literary study companion"), landing-page.tsx (FEATURES + BOTS_LANDING Ouro desc), ouro/route.ts (JSDoc + system prompt). Ouro is now consistently described as "a literary study companion" aligned with Lemniscate's reading concept, not a notebook tool.
+- **Landing page revised**:
+  * New "About Lemniscate" section (AboutLemniscate function) with a detailed 4-paragraph description: what Lemniscate is (local-first reading app), the reader features (focus mode, typography, scene overlay), the three AI companions (Luma/Ouro/Ankaa with colored names), and the Create view.
+  * Removed FAQ section entirely (FAQS array + FAQ function + render + #faq nav link + Accordion imports).
+  * Removed Testimonials section (TESTIMONIALS array + Testimonials function + render — fabricated praise).
+  * Removed LogoStrip ("Trusted by readers at" + fabricated ORGS array).
+  * FEATURES array rewritten to be truthful (no fabricated claims): Upload anything, Three AI companions, Study tools, Long-form writing, Ask the text, Scene view, Focus mode & typography.
+  * NAV_LINKS updated: Bots / Features / Demo (removed FAQ, added Bots).
+  * FOOTER_COLUMNS updated: Product (Bots/Features/Demo), Library (Dashboard/Import/Create a story/Settings), About (About Lemniscate/Privacy/Documentation — all navigate to settings).
+  * Footer: removed "Press ? for shortcuts" span + Keyboard import; copyright updated to © 2026.
+  * Nav: removed fabricated "Sign in" button; primary CTA is now "Open the reading room".
+  * Hero subheadline rewritten with a detailed Lemniscate description.
+- **Keyboard shortcuts removed**: deleted keyboard-shortcuts-dialog.tsx + command-palette.tsx files; removed their imports/renders from page.tsx; removed Keyboard import from landing-page.tsx and app-header.tsx; removed ⌘K hints from app-header search button + dropdown; openSearch now navigates to the search view instead of dispatching a command-palette event.
+- **Settings aligned to 3-bot taxonomy**: AI_FEATURES rewritten to Luma/Ouro/Ankaa with their bot logos (LumaMark/OuroMark/AnkaaMark) instead of the old Story Lover/Story Time/Study Buddy cards. AiSection description updated. About section copy rewritten to 2026 (Version 2.0 · 2026, 3-bot description, © 2026). Privacy and Docs buttons now show real 2026 info instead of "Coming soon".
+- **Verification (Agent Browser)**:
+  * Landing: "What is Lemniscate" section present with detailed description; FAQ/Testimonials/LogoStrip all removed; footer shows © 2026, no shortcuts text; nav has Bots/Features/Demo.
+  * Bot switching: rapid Luma→Ouro→Ankaa→Luma produces clean per-bot greetings, zero cross-contamination (session guard working). Ouro→Luma switch shows only Luma's greeting, no Ouro bleed.
+  * Create→Ankaa: Ankaa branding throughout; background job starts immediately (70ms), progress bar ticks ("3s elapsed · est. 25s"), completes after ~25s with "Read the work" + "Add to my story" buttons; generated story is well-structured (starts at the true beginning, not mid-paragraph).
+  * Settings: AI section shows 3 bot cards with logos (Luma/Ouro/Ankaa); About section shows 2026 version + 3-bot description; Privacy/Docs buttons show real info.
+  * Console errors: ZERO throughout. dev.log error count: 0.
+  * `bun run lint`: clean.
+
+Stage Summary:
+- Bot-switching collision resolved via session-guard pattern (all async writes check sessionRef before mutating state).
+- Ankaa prompt enforces well-structured beginning-to-end narratives with varied openings; verified with real generation.
+- Create view fully rebranded to Ankaa with background-job pattern (ETA + progress bar + read/add-to-story).
+- NotebookLM scrubbed everywhere; Ouro is now "a literary study companion" aligned with Lemniscate's concept.
+- Landing page revised: detailed Lemniscate description, truthful feature tiles, FAQ/Testimonials/fabricated-praise removed, footer/header nav updated, About/Privacy/Docs reflect 2026, all keyboard shortcuts removed.
+- Settings aligned to Luma/Ouro/Ankaa taxonomy with bot logos + 2026 info.
+- Lint clean, zero console errors, all routes 200.

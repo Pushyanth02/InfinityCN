@@ -1,14 +1,14 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { ArrowLeft, Send, Sparkles, BookOpen, Loader2 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ArrowLeft, BookOpen, Loader2, Send } from "lucide-react";
 import { useNav } from "@/lib/nav-store";
-import { createStory, lumaCreateContinue } from "@/hooks/use-api";
+import { ankaaPoll, ankaaStart, createStory } from "@/hooks/use-api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { AiMarkdown } from "@/components/ui/ai-markdown";
-import { LemniscateSpinner } from "@/components/ui/brand-loader";
+import { AnkaaMark } from "@/components/ui/bot-logos";
 import { toast } from "sonner";
 
 const STARTERS = [
@@ -20,32 +20,92 @@ const STARTERS = [
   "When the moon went missing, only the clockmaker noticed.",
 ];
 
+const ANKAA_GREETING =
+  "I'm **Ankaa**, your creative agent for long-form storytelling. Give me a brief below — a premise, a mood, a first line — and I'll weave a complete story from its true beginning to its natural end. I work in the background, so you'll see an ETA while I write.";
+
 export default function CreateView() {
   const go = useNav((s) => s.go);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
-  const [lumaPrompt, setLumaPrompt] = useState("");
-  const [lumaBusy, setLumaBusy] = useState(false);
+  const [ankaaPrompt, setAnkaaPrompt] = useState("");
+  const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const handleContinue = useCallback(async () => {
-    const prompt = lumaPrompt.trim() || "Continue the story naturally.";
-    if (!body.trim()) {
-      toast.error("Write a few lines first — Luma needs something to continue from.");
-      return;
-    }
-    setLumaBusy(true);
+  // Ankaa background job state.
+  const [jobEta, setJobEta] = useState<number | null>(null);
+  const [jobElapsed, setJobElapsed] = useState(0);
+  const [jobResult, setJobResult] = useState<string | null>(null);
+  const [jobError, setJobError] = useState<string | null>(null);
+  const [revealed, setRevealed] = useState(false);
+  const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => { if (pollTimer.current) clearTimeout(pollTimer.current); };
+  }, []);
+
+  const handleAnkaaWrite = useCallback(async () => {
+    const prompt = ankaaPrompt.trim() || "Write an original short story with a strong opening and a satisfying ending.";
+    setBusy(true);
+    setJobResult(null);
+    setJobError(null);
+    setRevealed(false);
+    setJobElapsed(0);
     try {
-      const { continuation } = await lumaCreateContinue(body, prompt);
-      setBody((b) => (b.trim() ? `${b.trim()}\n\n${continuation}` : continuation));
-      setLumaPrompt("");
-      toast.success("Luma wrote the next passage");
+      // Ankaa needs a document context. We create a temporary throwaway
+      // document from the current draft (if any) so the agent is grounded.
+      // For a blank canvas, we pass an empty brief and let Ankaa imagine freely.
+      const draftDoc = body.trim()
+        ? await createStory(title || "Untitled draft", body)
+        : null;
+      const documentId = draftDoc?.document?.id;
+      if (body.trim() && !documentId) {
+        toast.error("Couldn't ground Ankaa on your draft. Try again.");
+        setBusy(false);
+        return;
+      }
+      const start = await ankaaStart(
+        documentId ?? "blank",
+        prompt,
+        { wordTarget: 600 },
+      );
+      setJobEta(start.etaSeconds);
+      // Poll loop.
+      const startedAt = Date.now();
+      const tick = setInterval(() => setJobElapsed(Math.floor((Date.now() - startedAt) / 1000)), 1000);
+      const poll = async () => {
+        try {
+          const status = await ankaaPoll(start.jobId);
+          if (status.status === "complete" && status.result) {
+            clearInterval(tick);
+            setJobResult(status.result);
+            setBusy(false);
+            toast.success("Ankaa finished writing");
+          } else if (status.status === "error") {
+            clearInterval(tick);
+            setJobError(status.error ?? "Ankaa couldn't finish.");
+            setBusy(false);
+          } else {
+            pollTimer.current = setTimeout(poll, 3000);
+          }
+        } catch {
+          pollTimer.current = setTimeout(poll, 3000);
+        }
+      };
+      pollTimer.current = setTimeout(poll, 3000);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Luma couldn't continue");
-    } finally {
-      setLumaBusy(false);
+      toast.error(e instanceof Error ? e.message : "Ankaa couldn't start");
+      setBusy(false);
     }
-  }, [body, lumaPrompt]);
+  }, [ankaaPrompt, body, title]);
+
+  const handleAccept = useCallback(() => {
+    if (!jobResult) return;
+    setBody((b) => (b.trim() ? `${b.trim()}\n\n${jobResult}` : jobResult));
+    setJobResult(null);
+    setJobEta(null);
+    setRevealed(false);
+    toast.success("Added Ankaa's work to your story");
+  }, [jobResult]);
 
   const handleSave = useCallback(async () => {
     if (!title.trim()) {
@@ -73,6 +133,7 @@ export default function CreateView() {
   }, [title, body, go]);
 
   const wordCount = body.trim() ? body.trim().split(/\s+/).length : 0;
+  const pct = jobEta ? Math.min(100, Math.round((jobElapsed / jobEta) * 100)) : 0;
 
   return (
     <div className="luma-cosmic relative min-h-dvh overflow-hidden">
@@ -91,8 +152,8 @@ export default function CreateView() {
         </button>
         <div className="flex items-center gap-2">
           <span className="hidden items-center gap-1.5 text-xs sm:flex" style={{ color: "var(--luma-ink-mute)" }}>
-            <Sparkles className="h-3.5 w-3.5" style={{ color: "var(--luma-gold)" }} />
-            Co-writing with Luma
+            <AnkaaMark size={16} />
+            Writing with Ankaa
           </span>
           <Button
             type="button"
@@ -120,53 +181,104 @@ export default function CreateView() {
           <Textarea
             value={body}
             onChange={(e) => setBody(e.target.value)}
-            placeholder="Begin your story here… Write freely, or tap a starter on the right."
+            placeholder="Begin your story here… Write freely, or ask Ankaa to write for you."
             className="min-h-[50vh] flex-1 resize-none border-0 bg-transparent text-base leading-relaxed outline-none focus-visible:ring-0"
             style={{ color: "var(--luma-ink-dim)" }}
             aria-label="Story body"
           />
           <div className="mt-3 flex items-center justify-between text-xs" style={{ color: "var(--luma-ink-faint)" }}>
             <span>{wordCount} words</span>
-            <span>Auto-saves to your library when you press Save</span>
+            <span>Saves to your library when you press Save</span>
           </div>
         </section>
 
-        {/* Luma co-writer sidebar */}
+        {/* Ankaa sidebar */}
         <aside className="luma-glass-strong flex flex-col rounded-2xl p-5">
           <div className="mb-4 flex items-center gap-2.5">
-            <span className="luma-orb h-7 w-7 rounded-full" aria-hidden />
+            <AnkaaMark size={32} />
             <div className="leading-tight">
-              <p className="font-display text-base font-semibold" style={{ color: "var(--luma-ink)" }}>Luma</p>
-              <p className="text-[11px]" style={{ color: "var(--luma-ink-mute)" }}>Your co-writer</p>
+              <p className="font-display text-base font-semibold" style={{ color: "var(--luma-ink)" }}>Ankaa</p>
+              <p className="text-[11px]" style={{ color: "var(--luma-ink-mute)" }}>Creative agent · long-form</p>
             </div>
           </div>
 
+          <div className="mb-3 rounded-lg border p-3 text-xs leading-relaxed" style={{ borderColor: "var(--luma-border)", background: "rgba(251,113,133,0.06)", color: "var(--luma-ink-dim)" }}>
+            <AiMarkdown>{ANKAA_GREETING}</AiMarkdown>
+          </div>
+
           <p className="mb-2 text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--luma-ink-mute)" }}>
-            Ask Luma to write next
+            Creative brief
           </p>
           <Input
-            value={lumaPrompt}
-            onChange={(e) => setLumaPrompt(e.target.value)}
+            value={ankaaPrompt}
+            onChange={(e) => setAnkaaPrompt(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
-                handleContinue();
+                handleAnkaaWrite();
               }
             }}
-            placeholder="e.g., introduce a mysterious stranger"
-            disabled={lumaBusy}
+            placeholder="e.g., a quiet ghost story set in a coastal town"
+            disabled={busy}
             className="luma-input mb-2 h-10 rounded-lg text-sm"
-            aria-label="Instruction for Luma"
+            aria-label="Creative brief for Ankaa"
           />
           <Button
             type="button"
-            onClick={handleContinue}
-            disabled={lumaBusy}
-            className="luma-btn-gold flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-semibold disabled:opacity-50"
+            onClick={handleAnkaaWrite}
+            disabled={busy}
+            className="flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-semibold disabled:opacity-50"
+            style={{ background: "linear-gradient(180deg, #fb7185, #c026d3)", color: "#1a0a14" }}
           >
-            {lumaBusy ? <LemniscateSpinner size={26} /> : <Send className="h-4 w-4" />}
-            {lumaBusy ? "Luma is writing…" : "Continue the story"}
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            {busy ? "Ankaa is writing…" : "Ask Ankaa to write"}
           </Button>
+
+          {/* Ankaa background job progress */}
+          {busy && jobEta !== null && (
+            <div className="mt-4 rounded-lg border p-3" style={{ borderColor: "var(--luma-border)", background: "rgba(10,10,24,0.4)" }}>
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-xs font-medium" style={{ color: "#fb7185" }}>Ankaa is writing…</p>
+                <p className="text-[11px]" style={{ color: "var(--luma-ink-mute)" }}>~{Math.max(0, jobEta - jobElapsed)}s left</p>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full" style={{ background: "rgba(251,113,133,0.12)" }}>
+                <div className="h-full rounded-full transition-all duration-1000" style={{ width: `${pct}%`, background: "linear-gradient(90deg, #fb7185, #c026d3)" }} />
+              </div>
+              <p className="mt-2 text-[11px]" style={{ color: "var(--luma-ink-faint)" }}>
+                {jobElapsed}s elapsed · est. {jobEta}s
+              </p>
+            </div>
+          )}
+
+          {/* Ankaa result */}
+          {jobResult && (
+            <div className="mt-4 rounded-lg border p-3" style={{ borderColor: "var(--luma-border)", background: "rgba(10,10,24,0.4)" }}>
+              <p className="mb-2 text-[11px] font-medium uppercase tracking-wider" style={{ color: "#fb7185" }}>
+                Ankaa finished · {jobResult.split(/\s+/).length} words
+              </p>
+              {revealed ? (
+                <AiMarkdown>{jobResult}</AiMarkdown>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setRevealed(true)}
+                  className="luma-chip rounded-full px-3 py-1.5 text-xs font-medium"
+                >
+                  Read the work
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleAccept}
+                className="luma-btn-gold mt-3 w-full rounded-lg py-2 text-xs font-semibold"
+              >
+                Add to my story
+              </button>
+            </div>
+          )}
+          {jobError && (
+            <p className="mt-4 text-sm" style={{ color: "#fb7185" }}>{jobError}</p>
+          )}
 
           <div className="my-4 h-px" style={{ background: "var(--luma-border)" }} />
 
@@ -183,7 +295,7 @@ export default function CreateView() {
                     const firstWords = s.split(" ").slice(0, 4).join(" ").replace(/[.,].*$/, "");
                     setTitle(firstWords.charAt(0).toUpperCase() + firstWords.slice(1));
                   }
-                  setBody((b) => (b.trim() ? `${b.trim()}\n\n${s}` : s));
+                  setAnkaaPrompt(s);
                 }}
                 className="luma-chip rounded-lg px-3 py-2 text-left text-xs"
               >

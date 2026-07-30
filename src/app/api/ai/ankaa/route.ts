@@ -55,35 +55,34 @@ export async function POST(req: NextRequest) {
   }
 
   const { documentId, prompt, chapterIndex, wordTarget } = await req.json();
-  if (!documentId || !isValidDocumentId(documentId))
-    return NextResponse.json({ error: "Valid documentId required" }, { status: 400 });
   if (!prompt || typeof prompt !== "string" || prompt.trim().length < 3)
     return NextResponse.json({ error: "A prompt is required" }, { status: 400 });
 
-  const doc = await db.document.findUnique({ where: { id: documentId } });
-  if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (doc.status !== "ready")
-    return NextResponse.json({ error: "Document not ready" }, { status: 400 });
-
-  let parsed: ParsedDoc | null = null;
-  try {
-    parsed = doc.contentJson ? JSON.parse(doc.contentJson) : null;
-  } catch {
-    // ignore
-  }
-  if (!parsed) return NextResponse.json({ error: "No content" }, { status: 400 });
-
-  // Build a rich context excerpt so Ankaa can write a detailed, grounded narrative.
-  const idx = typeof chapterIndex === "number" ? chapterIndex : 0;
-  let excerpt: string;
-  let scopeLabel: string;
-  if (typeof chapterIndex === "number" && parsed.chapters[chapterIndex]) {
-    const ch = parsed.chapters[chapterIndex];
-    excerpt = (ch.refinedText ?? ch.chunks.map((c) => c.text).join("\n\n")).slice(0, 8000);
-    scopeLabel = `Chapter ${(ch.ordinal ?? idx) + 1}: ${ch.title}`;
-  } else {
-    excerpt = buildExcerpt(parsed, 8, 1200, 8000);
-    scopeLabel = doc.title;
+  // documentId is optional — Ankaa can write from the brief alone (blank canvas),
+  // or ground itself in an existing document if one is provided.
+  let excerpt = "";
+  let scopeLabel = "an original work";
+  if (documentId && isValidDocumentId(documentId)) {
+    const doc = await db.document.findUnique({ where: { id: documentId } });
+    if (doc && doc.status === "ready") {
+      let parsed: ParsedDoc | null = null;
+      try {
+        parsed = doc.contentJson ? JSON.parse(doc.contentJson) : null;
+      } catch {
+        // ignore
+      }
+      if (parsed) {
+        const idx = typeof chapterIndex === "number" ? chapterIndex : 0;
+        if (typeof chapterIndex === "number" && parsed.chapters[chapterIndex]) {
+          const ch = parsed.chapters[chapterIndex];
+          excerpt = (ch.refinedText ?? ch.chunks.map((c) => c.text).join("\n\n")).slice(0, 8000);
+          scopeLabel = `Chapter ${(ch.ordinal ?? idx) + 1}: ${ch.title} of ${doc.title}`;
+        } else {
+          excerpt = buildExcerpt(parsed, 8, 1200, 8000);
+          scopeLabel = doc.title;
+        }
+      }
+    }
   }
 
   const words = Math.min(2000, Math.max(300, typeof wordTarget === "number" ? wordTarget : 800));
@@ -92,8 +91,8 @@ export async function POST(req: NextRequest) {
 
   const job: AnkaaJob = {
     jobId,
-    documentId,
-    docTitle: doc.title,
+    documentId: documentId ?? null,
+    docTitle: scopeLabel,
     prompt: prompt.trim(),
     status: "running",
     result: null,
@@ -108,17 +107,26 @@ export async function POST(req: NextRequest) {
   (async () => {
     const started = Date.now();
     try {
-      const system = `You are Ankaa, a masterful creative-writing agent specializing in rich, long-form storytelling. You write with vivid sensory detail, layered characters, and a strong narrative voice. You draw on the supplied source material for tone, setting, and characters, but you're free to imagine deeply.
+      const sourceBlock = excerpt
+        ? `Source material for tone and context — ${scopeLabel}:\n\n${excerpt}`
+        : `This is an original work (no source document). Build the world, characters, and voice from the brief alone.`;
 
-Write approximately ${words} words. Use paragraph breaks. You may use *italics* for emphasis. Do not use headings unless the work is explicitly episodic. Do not include preamble, notes, or "here is your story" — begin the narrative directly and sustain it.
+      const system = `You are Ankaa, a masterful creative-writing agent specializing in rich, long-form storytelling. You write with vivid sensory detail, layered characters, and a strong narrative voice. ${excerpt ? "You draw on the supplied source material for tone, setting, and characters, but you're free to imagine deeply." : "You invent freely from the brief."}
 
-Source material for tone and context — ${doc.title} (${scopeLabel}):
+CRITICAL — narrative structure:
+- Begin at the TRUE START of the story or chapter — an opening that grounds the reader in a moment, a place, a sensation. Never start mid-scene or mid-paragraph.
+- Progress through a clear arc: opening → rising tension → turning point → resolution (or a deliberate, satisfying open end). Each paragraph should advance the narrative forward, not circle or repeat.
+- End at a natural close — a completed beat, a resonant image, or a cliffhanger that earns its weight. Do not stop mid-sentence or mid-thought.
+- If the brief asks for "the next chapter" or a continuation, pick up seamlessly from where the source leaves off, then build to your own beginning–middle–end.
+- Vary your openings: don't always begin with weather or a character waking. Vary point of view, tense, and imagery across different requests.
 
-${excerpt}`;
+Write approximately ${words} words. Use paragraph breaks to signal scene or beat changes. You may use *italics* for emphasis. Do not use headings unless the work is explicitly episodic. Do not include preamble, notes, or "here is your story" — begin the narrative directly and sustain it to a real ending.
+
+${sourceBlock}`;
 
       const user = `Creative brief: ${prompt.trim()}
 
-Begin the long-form work now.`;
+Write the complete work now, from its true beginning to its natural end.`;
 
       const result = await aiComplete(system, user, { bot: "ankaa", kind: "longform", documentId });
       const stored = ankaaJobs.get(jobId);
@@ -127,7 +135,7 @@ Begin the long-form work now.`;
         stored.result = result;
         stored.completedAt = Date.now();
       }
-      await logActivity({ type: "ai_ankaa_complete", documentId, detail: `${doc.title} (${words}w)` });
+      await logActivity({ type: "ai_ankaa_complete", documentId: (documentId && isValidDocumentId(documentId)) ? documentId : undefined, detail: `${scopeLabel} (${words}w)` });
     } catch (err: any) {
       const stored = ankaaJobs.get(jobId);
       if (stored) {

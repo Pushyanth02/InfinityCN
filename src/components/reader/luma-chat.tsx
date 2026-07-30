@@ -65,7 +65,7 @@ const BOTS: BotMeta[] = [
     id: "ouro",
     name: "Ouro",
     tagline: "Study Buddy",
-    blurb: "NotebookLM-style study — quizzes, flashcards, and study guides.",
+    blurb: "A literary study companion — study guides, quizzes, and flashcards grounded in what you're reading.",
     Logo: OuroMark,
     accent: "#5eead4",
   },
@@ -98,6 +98,20 @@ export function LumaChat({
   const msgIdRef = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const greetedRef = useRef<BotId | null>(null);
+  // Session guard: increments on every bot switch so in-flight async writes
+  // from the previous bot can detect they're stale and bail out — preventing
+  // the "bot collision" where an old bot's response lands in the new bot's chat.
+  const sessionRef = useRef(0);
+
+  // Switch bot: bump session (invalidates all in-flight ops), clear messages,
+  // reset loading, and allow the new bot to greet.
+  const switchBot = useCallback((id: BotId) => {
+    sessionRef.current++;
+    setBotId(id);
+    setMessages([]);
+    setLoading(false);
+    greetedRef.current = null;
+  }, []);
 
   useEffect(() => setChapterIndex(currentChapterIndex), [currentChapterIndex]);
 
@@ -108,17 +122,21 @@ export function LumaChat({
   useEffect(() => {
     if (greetedRef.current === botId) return;
     greetedRef.current = botId;
+    const mySession = sessionRef.current;
     (async () => {
       setLoading(true);
       try {
         if (botId === "luma") {
           const { reply } = await lumaChat(documentId, [], chapterIndex);
+          if (sessionRef.current !== mySession) return; // stale — bot switched
           setMessages((m) => [...m, { id: ++msgIdRef.current, role: "bot", bot: "luma", content: reply, kind: "text" }]);
         } else if (botId === "ouro") {
           const { reply } = await ouroChat(documentId, [], chapterIndex);
+          if (sessionRef.current !== mySession) return;
           setMessages((m) => [...m, { id: ++msgIdRef.current, role: "bot", bot: "ouro", content: reply, kind: "text" }]);
         } else {
           // Ankaa greets without an API call.
+          if (sessionRef.current !== mySession) return;
           setMessages((m) => [...m, {
             id: ++msgIdRef.current,
             role: "bot",
@@ -128,6 +146,7 @@ export function LumaChat({
           }]);
         }
       } catch {
+        if (sessionRef.current !== mySession) return;
         setMessages((m) => [...m, {
           id: ++msgIdRef.current,
           role: "bot",
@@ -136,7 +155,7 @@ export function LumaChat({
           content: "Hello — I'm here. Ask me anything about what you're reading.",
         }]);
       } finally {
-        setLoading(false);
+        if (sessionRef.current === mySession) setLoading(false);
       }
     })();
   }, [botId, documentId, chapterIndex]);
@@ -150,37 +169,13 @@ export function LumaChat({
     setMessages((m) => [...m, { id: ++msgIdRef.current, role: "bot", ...msg }]);
   }, []);
 
-  const handleSend = useCallback(async () => {
-    const text = input.trim();
-    if (!text || loading) return;
-    setInput("");
-    const userMsg: ChatMessage = { id: ++msgIdRef.current, role: "user", content: text, kind: "text" };
-    const history = [...messages, userMsg];
-    setMessages(history);
-    setLoading(true);
-    try {
-      if (botId === "luma") {
-        const { reply } = await lumaChat(documentId, history.map((m) => ({ role: m.role === "user" ? "user" : "assistant", content: m.content })), chapterIndex);
-        pushBot({ bot: "luma", content: reply, kind: "text" });
-      } else if (botId === "ouro") {
-        const { reply } = await ouroChat(documentId, history.map((m) => ({ role: m.role === "user" ? "user" : "assistant", content: m.content })), chapterIndex);
-        pushBot({ bot: "ouro", content: reply, kind: "text" });
-      } else {
-        // Ankaa: start a background long-form job.
-        await startAnkaaJob(text);
-      }
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : `${bot.name} couldn't reply`);
-    } finally {
-      setLoading(false);
-    }
-  }, [input, loading, messages, botId, bot, documentId, chapterIndex, pushBot]);
-
-  /* ── Ankaa background job with ETA + polling ── */
+  /* ── Ankaa background job with ETA + polling (session-guarded) ── */
   const startAnkaaJob = useCallback(async (prompt: string) => {
+    const mySession = sessionRef.current;
     pushBot({ bot: "ankaa", content: `Starting a long-form work: *${prompt}*`, kind: "text" });
     try {
       const start = await ankaaStart(documentId, prompt, { chapterIndex });
+      if (sessionRef.current !== mySession) return; // bot switched — abandon
       const jobMsgId = ++msgIdRef.current;
       setMessages((m) => [...m, {
         id: jobMsgId,
@@ -189,10 +184,12 @@ export function LumaChat({
         kind: "longform",
         content: `__ankaa_job__${start.jobId}__eta__${start.etaSeconds}`,
       }]);
-      // Poll until complete.
+      // Poll until complete (or session changes).
       const poll = async () => {
+        if (sessionRef.current !== mySession) return; // stop polling on switch
         try {
           const status = await ankaaPoll(start.jobId);
+          if (sessionRef.current !== mySession) return;
           if (status.status === "complete" && status.result) {
             setMessages((m) => m.map((msg) => msg.id === jobMsgId
               ? { ...msg, kind: "text", content: status.result! }
@@ -208,52 +205,93 @@ export function LumaChat({
             setTimeout(poll, 3000);
           }
         } catch {
+          if (sessionRef.current !== mySession) return;
           setTimeout(poll, 3000);
         }
       };
       setTimeout(poll, 3000);
     } catch (e) {
+      if (sessionRef.current !== mySession) return;
       toast.error(e instanceof Error ? e.message : "Ankaa couldn't start");
     }
   }, [documentId, chapterIndex, pushBot]);
 
-  /* ── Ouro tool chips ── */
+  const handleSend = useCallback(async () => {
+    const text = input.trim();
+    if (!text || loading) return;
+    setInput("");
+    const userMsg: ChatMessage = { id: ++msgIdRef.current, role: "user", content: text, kind: "text" };
+    const history = [...messages, userMsg];
+    setMessages(history);
+    setLoading(true);
+    const mySession = sessionRef.current;
+    try {
+      if (botId === "luma") {
+        const { reply } = await lumaChat(documentId, history.map((m) => ({ role: m.role === "user" ? "user" : "assistant", content: m.content })), chapterIndex);
+        if (sessionRef.current !== mySession) return; // stale
+        pushBot({ bot: "luma", content: reply, kind: "text" });
+      } else if (botId === "ouro") {
+        const { reply } = await ouroChat(documentId, history.map((m) => ({ role: m.role === "user" ? "user" : "assistant", content: m.content })), chapterIndex);
+        if (sessionRef.current !== mySession) return;
+        pushBot({ bot: "ouro", content: reply, kind: "text" });
+      } else {
+        // Ankaa: start a background long-form job.
+        await startAnkaaJob(text);
+      }
+    } catch (e) {
+      if (sessionRef.current !== mySession) return;
+      toast.error(e instanceof Error ? e.message : `${bot.name} couldn't reply`);
+    } finally {
+      if (sessionRef.current === mySession) setLoading(false);
+    }
+  }, [input, loading, messages, botId, bot, documentId, chapterIndex, pushBot, startAnkaaJob]);
+
+  /* ── Ouro tool chips (session-guarded) ── */
   const runOuroGuide = useCallback(async () => {
     setMessages((m) => [...m, { id: ++msgIdRef.current, role: "user", content: "Build me a study guide", kind: "text" }]);
     setLoading(true);
+    const mySession = sessionRef.current;
     try {
       const { guide } = await ouroGuide(documentId, chapterIndex);
+      if (sessionRef.current !== mySession) return;
       pushBot({ bot: "ouro", content: guide, kind: "guide" });
     } catch (e) {
+      if (sessionRef.current !== mySession) return;
       toast.error(e instanceof Error ? e.message : "Ouro couldn't build the guide");
     } finally {
-      setLoading(false);
+      if (sessionRef.current === mySession) setLoading(false);
     }
   }, [documentId, chapterIndex, pushBot]);
 
   const runOuroQuiz = useCallback(async () => {
     setMessages((m) => [...m, { id: ++msgIdRef.current, role: "user", content: "Quiz me", kind: "text" }]);
     setLoading(true);
+    const mySession = sessionRef.current;
     try {
       const { questions } = await ouroQuiz(documentId, chapterIndex);
+      if (sessionRef.current !== mySession) return;
       pushBot({ bot: "ouro", content: `Here's a ${questions.length}-question quiz. Tap an answer, then reveal.`, kind: "quiz", quiz: questions });
     } catch (e) {
+      if (sessionRef.current !== mySession) return;
       toast.error(e instanceof Error ? e.message : "Ouro couldn't build the quiz");
     } finally {
-      setLoading(false);
+      if (sessionRef.current === mySession) setLoading(false);
     }
   }, [documentId, chapterIndex, pushBot]);
 
   const runOuroFlash = useCallback(async () => {
     setMessages((m) => [...m, { id: ++msgIdRef.current, role: "user", content: "Make flashcards", kind: "text" }]);
     setLoading(true);
+    const mySession = sessionRef.current;
     try {
       const { flashcards } = await ouroFlashcards(documentId, chapterIndex);
+      if (sessionRef.current !== mySession) return;
       pushBot({ bot: "ouro", content: `${flashcards.length} flashcards. Click a card to flip it.`, kind: "flashcards", flashcards });
     } catch (e) {
+      if (sessionRef.current !== mySession) return;
       toast.error(e instanceof Error ? e.message : "Ouro couldn't make flashcards");
     } finally {
-      setLoading(false);
+      if (sessionRef.current === mySession) setLoading(false);
     }
   }, [documentId, chapterIndex, pushBot]);
 
@@ -306,7 +344,7 @@ export function LumaChat({
               <button
                 key={b.id}
                 type="button"
-                onClick={() => { setBotId(b.id); setMessages([]); }}
+                onClick={() => switchBot(b.id)}
                 aria-pressed={active}
                 className={cn(
                   "flex flex-1 flex-col items-center gap-1 rounded-lg px-2 py-1.5 transition-all",

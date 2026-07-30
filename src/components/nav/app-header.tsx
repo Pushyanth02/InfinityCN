@@ -6,7 +6,6 @@ import { LemniscateMark } from "@/components/ui/brand-loader";
 import { cn } from "@/lib/utils";
 import {
   HardDrive,
-  Keyboard,
   LifeBuoy,
   LogOut,
   Menu,
@@ -49,7 +48,7 @@ const PRIMARY_NAV: NavItem[] = [
 
 function openSearch() {
   if (typeof window !== "undefined") {
-    window.dispatchEvent(new CustomEvent("lem:command-open"));
+    useNav.getState().go("search");
   }
 }
 
@@ -144,14 +143,10 @@ export function AppHeader({
                 ? "border-[#262626] text-[var(--noir-ink-mute)] hover:text-[var(--noir-ink)]"
                 : "border-border text-muted-foreground hover:text-foreground",
             )}
-            aria-label="Search (⌘K)"
+            aria-label="Search"
           >
             <Search className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Search</span>
-            <kbd className="hidden items-center gap-0.5 sm:inline-flex">
-              <span className="opacity-70">⌘</span>
-              <span className="opacity-70">K</span>
-            </kbd>
           </button>
 
           {/* Profile dropdown */}
@@ -185,7 +180,6 @@ export function AppHeader({
               </DropdownMenuItem>
               <DropdownMenuItem onClick={openSearch}>
                 <Search className="mr-2 h-4 w-4" /> Search
-                <span className="ml-auto text-xs opacity-60">⌘K</span>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => reset()}>

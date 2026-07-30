@@ -20,9 +20,6 @@ import {
   BookMarked,
   RotateCcw,
   ExternalLink,
-  BookHeart,
-  Baby,
-  GraduationCap,
 } from "lucide-react";
 
 import { AppHeader } from "@/components/nav/app-header";
@@ -42,6 +39,7 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { LemniscateMark } from "@/components/ui/brand-loader";
+import { LumaMark, OuroMark, AnkaaMark } from "@/components/ui/bot-logos";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -129,24 +127,24 @@ const ANIM_OPTS: { value: ReaderSettings["animSpeed"]; label: string }[] = [
 ];
 
 const AI_FEATURES: {
-  icon: typeof Sparkles;
+  Logo: typeof LumaMark;
   title: string;
   body: string;
 }[] = [
   {
-    icon: BookHeart,
-    title: "Story Lover",
-    body: "For novel readers — summarize and analyze, then continue the story, reimagine the ending, and expand the world.",
+    Logo: LumaMark,
+    title: "Luma — Normal Chatbot",
+    body: "Fast, vivid chat that blends storytelling with quick study help. Your everyday reading companion for retelling, explaining, and imagining.",
   },
   {
-    icon: Baby,
-    title: "Story Time",
-    body: "For children — cozy retellings, friendly character intros, playful what-ifs, and vivid scenes to draw.",
+    Logo: OuroMark,
+    title: "Ouro — Study Buddy",
+    body: "A literary study companion. Builds study guides, quizzes, and flashcards grounded in the text you're reading.",
   },
   {
-    icon: GraduationCap,
-    title: "Study Buddy",
-    body: "For students — study guides, vocabulary lists, comprehension quizzes, and plain-language explanations.",
+    Logo: AnkaaMark,
+    title: "Ankaa — Agent Mode",
+    body: "A creative-writing agent for long-form work. Writes full chapters and stories in the background, with a live ETA and progress bar.",
   },
 ];
 
@@ -667,12 +665,12 @@ function AiSection() {
               </h3>
             </div>
             <p className="max-w-prose text-sm text-muted-foreground">
-              Lemniscate&apos;s AI companion runs on the built-in Z.ai model,
-              server-side, with no API key required. It adapts to three kinds
-              of reader: <strong>Story Lover</strong> for novel readers,{" "}
-              <strong>Story Time</strong> for children, and{" "}
-              <strong>Study Buddy</strong> for students. Open any document in
-              the reader and switch modes at the top of the AI panel.
+              Lemniscate&apos;s AI companions run on the built-in Z.ai model,
+              server-side, with no API key required. Three bots share the
+              reader panel: <strong>Luma</strong> for fast chat,{" "}
+              <strong>Ouro</strong> for literary study, and{" "}
+              <strong>Ankaa</strong> for long-form creative writing. Open any
+              document and switch bots at the top of the panel.
             </p>
           </div>
           <Button
@@ -688,11 +686,11 @@ function AiSection() {
 
       <div className="grid gap-4 sm:grid-cols-3">
         {AI_FEATURES.map((f) => {
-          const Icon = f.icon;
+          const Logo = f.Logo;
           return (
             <div key={f.title} className="noir-card p-5">
               <div className="mb-3 inline-flex size-9 items-center justify-center rounded-lg border border-[var(--noir-border)] bg-white/[0.03]">
-                <Icon className="size-4 text-[var(--noir-gold)]" />
+                <Logo size={20} />
               </div>
               <h4 className="text-sm font-semibold text-foreground">
                 {f.title}
@@ -894,10 +892,10 @@ function AboutSection() {
         <div className="space-y-1">
           <h3 className="noir-display text-3xl text-foreground">Lemniscate</h3>
           <p className="text-xs uppercase tracking-wider text-muted-foreground">
-            Version 1.0.0
+            Version 2.0 · 2026
           </p>
           <p className="text-sm text-[var(--noir-gold-soft)]">
-            Turn any document into an interactive story.
+            A reading room with three AI companions.
           </p>
         </div>
       </div>
@@ -905,13 +903,13 @@ function AboutSection() {
       <Separator className="my-6 bg-border/60" />
 
       <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
-        Lemniscate is a local-first, AI-guided reading companion. Upload a PDF,
-        EPUB, DOCX, Markdown, text, or HTML file; Lemniscate parses it into
-        chapters, lets you read with focus mode and adaptive typography, and
-        offers an AI companion with three modes — Story Lover for novel readers,
-        Story Time for children, and Study Buddy for students. Continue the
-        story, retell it warmly for a child, or turn it into study guides and
-        quizzes.
+        Lemniscate is a local-first reading application. Upload a PDF, EPUB,
+        DOCX, Markdown, text, or HTML file — or write your own story — and
+        Lemniscate parses it into chapters you can read with focus mode and
+        adaptive typography. Three AI companions share the reader panel: Luma
+        for fast chat, Ouro for literary study (study guides, quizzes,
+        flashcards), and Ankaa for long-form creative writing that runs in the
+        background with a live ETA.
       </p>
 
       <div className="mt-6 flex flex-wrap gap-2">
@@ -919,7 +917,11 @@ function AboutSection() {
           type="button"
           variant="outline"
           className="noir-btn-ghost"
-          onClick={() => toast.info("Coming soon")}
+          onClick={() =>
+            toast.info(
+              "Privacy (2026): Your library is stored locally on this device. AI requests send only the relevant excerpt to the model for that single request — nothing is retained server-side.",
+            )
+          }
         >
           <Shield className="size-4" />
           Privacy
@@ -928,7 +930,11 @@ function AboutSection() {
           type="button"
           variant="outline"
           className="noir-btn-ghost"
-          onClick={() => toast.info("Coming soon")}
+          onClick={() =>
+            toast.info(
+              "Docs (2026): Upload a document, open it in the reader, and tap the Sparkles icon to meet Luma, Ouro, and Ankaa. Switch bots at the top of the panel.",
+            )
+          }
         >
           <FileText className="size-4" />
           Docs
@@ -947,7 +953,7 @@ function AboutSection() {
 
       <div className="mt-8 flex items-center gap-3 text-xs text-muted-foreground">
         <CalendarDays className="size-3.5" />
-        <span>Built for readers · © 2025 Lemniscate.</span>
+        <span>Built for readers · © 2026 Lemniscate.</span>
       </div>
     </div>
   );
