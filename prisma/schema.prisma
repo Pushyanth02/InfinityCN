@@ -1,0 +1,118 @@
+// Lemniscate — Prisma schema
+// Persistent server-side storage replacing the original IndexedDB-only model.
+//
+// ── Database Provider ──────────────────────────────────────────────────────
+// Default: SQLite (for local development and Render's disk storage).
+// For Vercel/Supabase/Postgres deployments, change `provider` to "postgresql":
+//
+//   datasource db {
+//     provider = "postgresql"
+//     url      = env("DATABASE_URL")
+//   }
+//
+// Then run `bun run db:push` to create the schema on the new database.
+// The schema is identical for both providers — only the provider line changes.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Document {
+  id             String   @id @default(cuid())
+  title          String
+  author         String?
+  sourceType     String
+  mimeType       String?
+  byteSize       Int      @default(0)
+  status         String   @default("ready") // ready | processing | error
+  error          String?
+  warnings       String?  // JSON array of parse warnings from the Core Engine
+  summary        String?  
+  language       String?
+  coverGradient  String?
+  // Parsed content stored as JSON: chapters → chunks
+  contentJson    String?  
+  chapterCount   Int      @default(0)
+  wordCount      Int      @default(0)
+  charCount      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  lastReadAt     DateTime?
+  readingProgress Float   @default(0) // 0..1
+  lastChunkIndex Int      @default(0)
+  favorite       Boolean  @default(false)
+  tags           String   @default("[]") // JSON array of strings
+  collection     String?
+
+  bookmarks      Bookmark[]
+  annotations    Annotation[]
+  activityEvents ActivityEvent[]
+  aiScenes       AiScene[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([lastReadAt])
+}
+
+model Bookmark {
+  id         String   @id @default(cuid())
+  documentId String
+  chunkIndex Int
+  label      String?
+  note       String?
+  createdAt  DateTime @default(now())
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+}
+
+model Annotation {
+  id         String   @id @default(cuid())
+  documentId String
+  chunkIndex Int
+  start      Int
+  end        Int
+  text       String
+  note       String?
+  color      String   @default("brand")
+  createdAt  DateTime @default(now())
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+}
+
+model ActivityEvent {
+  id         String   @id @default(cuid())
+  documentId String?
+  type       String   // upload | read | bookmark | annotate | ai_summarize | ai_cinematize
+  detail     String?
+  createdAt  DateTime @default(now())
+  document   Document? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([documentId])
+}
+
+model AiScene {
+  id         String   @id @default(cuid())
+  documentId String
+  ordinal    Int
+  title      String
+  body       String   
+  mood       String?
+  characters String?  // JSON array
+  createdAt  DateTime @default(now())
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+}
+
+model Preference {
+  id    String @id
+  value String 
+}

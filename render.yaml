@@ -1,0 +1,23 @@
+# Render deployment configuration
+# https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: lemniscate
+    runtime: node
+    plan: starter
+    buildCommand: bun install && bun run db:generate && bun run build
+    startCommand: bun run start
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: lemniscate-db
+          property: connectionString
+      - key: NODE_ENV
+        value: production
+    healthCheckPath: /api/health
+    autoDeploy: true
+
+databases:
+  - name: lemniscate-db
+    plan: starter
+    ipAllowList: []
