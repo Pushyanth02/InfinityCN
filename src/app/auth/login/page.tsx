@@ -1,15 +1,16 @@
 "use client"
 
-import { createClient } from "@/lib/supabase/client"
 import { useState } from "react"
 
 export default function LoginPage() {
-  const supabase = createClient()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
+    // Lazy import so build-time static generation never touches Supabase client
+    const { createClient } = await import("@/lib/supabase/client")
+    const supabase = createClient()
     await supabase.auth.signInWithPassword({ email, password })
   }
 
