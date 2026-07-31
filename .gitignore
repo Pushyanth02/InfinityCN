@@ -35,3 +35,11 @@ next-env.d.ts
 .idea/
 .vscode/
 *.pem
+
+# Agent / skills artifacts (local only)
+.agents/
+.claude/
+agent/
+skills-lock.json
+# Package-lock may appear when using npm; repo primary is bun.lock
+package-lock.json
