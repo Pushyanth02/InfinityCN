@@ -1,29 +1,72 @@
-<?xml version="1.0" encoding="utf-8"?>
-<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
-	 viewBox="0 0 30 30" style="enable-background:new 0 0 30 30;" xml:space="preserve">
-<defs>
-  <style type="text/css">
-    .st194{fill:#2D2D2D;stroke:#FFFFFF;stroke-width:0.6317;stroke-miterlimit:10;}
-    .st23{fill:#FFFFFF;}
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 90" width="460" height="90">
+  <defs>
+    <!-- Multi-stop luxury metallic gold gradient -->
+    <linearGradient id="logoGold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fae19c" />
+      <stop offset="35%" stop-color="#e6c270" />
+      <stop offset="70%" stop-color="#d9ad52" />
+      <stop offset="100%" stop-color="#946d2e" />
+    </linearGradient>
 
-    .z-breathe {
-      animation: breathe 2.5s ease-in-out infinite;
-    }
+    <!-- Warm Amber Glow Halo -->
+    <radialGradient id="logoGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#d9ad52" stop-opacity="0.3" />
+      <stop offset="50%" stop-color="#d9ad52" stop-opacity="0.08" />
+      <stop offset="100%" stop-color="#08070a" stop-opacity="0" />
+    </radialGradient>
 
-    @keyframes breathe {
-      0%, 100% { opacity: 0.7; }
-      50% { opacity: 1; }
-    }
-  </style>
-</defs>
+    <style>
+      .brand-title {
+        font-family: 'Space Grotesk', system-ui, -apple-system, sans-serif;
+        font-size: 26px;
+        font-weight: 700;
+        letter-spacing: 0.24em;
+        text-transform: uppercase;
+        fill: #f5f1ea;
+      }
+      .brand-tagline {
+        font-family: 'Space Grotesk', system-ui, -apple-system, sans-serif;
+        font-size: 10px;
+        font-weight: 500;
+        letter-spacing: 0.28em;
+        text-transform: uppercase;
+        fill: #d9ad52;
+        opacity: 0.85;
+      }
+      .trace-anim {
+        stroke-dasharray: 340;
+        stroke-dashoffset: 0;
+        animation: logoTrace 8s linear infinite;
+      }
+      @keyframes logoTrace {
+        0% { stroke-dashoffset: 340; }
+        100% { stroke-dashoffset: 0; }
+      }
+    </style>
+  </defs>
 
-<g>
-  <path class="st194" d="M24.51,28.51H5.49c-2.21,0-4-1.79-4-4V5.49c0-2.21,1.79-4,4-4h19.03c2.21,0,4,1.79,4,4v19.03
-    C28.51,26.72,26.72,28.51,24.51,28.51z"/>
-  <g class="z-breathe">
-    <path class="st23" d="M15.47,7.1l-1.3,1.85c-0.2,0.29-0.54,0.47-0.9,0.47h-7.1V7.09C6.16,7.1,15.47,7.1,15.47,7.1z"/>
-    <polygon class="st23" points="24.3,7.1 13.14,22.91 5.7,22.91 16.86,7.1"/>
-    <path class="st23" d="M14.53,22.91l1.31-1.86c0.2-0.29,0.54-0.47,0.9-0.47h7.09v2.33H14.53z"/>
+  <!-- Emblem Squircle Badge Container on left -->
+  <g transform="translate(10, 11)">
+    <!-- Base squircle -->
+    <rect width="68" height="68" rx="18" fill="#0d0c10" stroke="#d9ad52" stroke-opacity="0.25" stroke-width="1.5" />
+    <!-- Radial aura -->
+    <circle cx="34" cy="34" r="28" fill="url(#logoGlow)" />
+    
+    <!-- Precision gold lemniscate inside badge -->
+    <path
+      d="M 34 34 C 39.5 26 47.5 23 53.5 26.5 C 59.5 30 60 37.5 54 41.5 C 48 45.5 39.5 41.5 34 34 C 28.5 26.5 20 22.5 14 26.5 C 8 30.5 8.5 38 14.5 41.5 C 20.5 45 28.5 42 34 34 Z"
+      fill="none"
+      stroke="url(#logoGold)"
+      stroke-width="3.8"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      class="trace-anim"
+    />
   </g>
-</g>
+
+  <!-- Typography Lockup -->
+  <g transform="translate(98, 43)">
+    <text x="0" y="0" class="brand-title">LEMNISCATE</text>
+    <text x="2" y="22" class="brand-tagline">LOCAL-FIRST AI READING ROOM</text>
+  </g>
 </svg>

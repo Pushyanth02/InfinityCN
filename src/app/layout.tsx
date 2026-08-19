@@ -15,9 +15,11 @@ const openSans = Open_Sans({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://lemniscate.app"),
   title: "Lemniscate — Open the reading room",
   description:
     "A local-first AI reading room where documents become living, interactive experiences.",
+  applicationName: "Lemniscate",
   keywords: [
     "Lemniscate",
     "reading room",
@@ -25,20 +27,43 @@ export const metadata: Metadata = {
     "local-first",
     "PDF reader",
     "EPUB reader",
+    "literary assistant",
+    "OpenRouter",
+    "IndexedDB",
   ],
   authors: [{ name: "Lemniscate" }],
   icons: {
     icon: [
-      {
-        url: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2308070a'/%3E%3Cpath d='M14 32c0-7 8-12 14-6l8 8c6 6 14 1 14-6s-8-12-14-6l-8 8c-6 6-14 1-14-6z' fill='none' stroke='%23d9ad52' stroke-width='3.5' stroke-linecap='round'/%3E%3C/svg%3E",
-      },
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/icon.svg", type: "image/svg+xml", sizes: "512x512" },
+    ],
+    shortcut: "/favicon.svg",
+    apple: [
+      { url: "/apple-touch-icon.svg", sizes: "180x180", type: "image/svg+xml" },
     ],
   },
   openGraph: {
     title: "Lemniscate — Open the reading room",
     description:
       "A local-first AI reading room where documents become living, interactive experiences.",
+    url: "https://lemniscate.app",
+    siteName: "Lemniscate",
+    images: [
+      {
+        url: "/logo.svg",
+        width: 460,
+        height: 90,
+        alt: "Lemniscate — Local-first AI reading room",
+      },
+    ],
     type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Lemniscate — Open the reading room",
+    description:
+      "A local-first AI reading room where documents become living, interactive experiences.",
+    images: ["/logo.svg"],
   },
 };
 

@@ -1,167 +1,285 @@
-# Lemniscate
+<div align="center">
 
-> A local-first AI reading room where documents become living, interactive experiences.
+<img src="./public/logo.svg" alt="Lemniscate Logo" width="420" />
 
-Books, papers, documents and stories become chapter-aware, readable experiences with three companions in the margins — **Luma** (conversation), **Ouro** (study), and **Ankaa** (long-form writing). Everything runs on your device; a key only ever sharpens the companions.
+### A local-first AI reading room where documents become living, interactive experiences.
+
+[![TypeScript Strict](https://img.shields.io/badge/TypeScript-Strict%20Mode-3178c6?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
+[![Next.js 16](https://img.shields.io/badge/Next.js-16.x-000000?style=flat-square&logo=next.js)](https://nextjs.org/)
+[![Tailwind CSS v4](https://img.shields.io/badge/Tailwind-v4%20%40theme-38bdf8?style=flat-square&logo=tailwindcss)](https://tailwindcss.com/)
+[![Local First](https://img.shields.io/badge/Persistence-IndexedDB-d9ad52?style=flat-square)](https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API)
+[![Zero Proxy](https://img.shields.io/badge/AI%20Architecture-Direct%20BYOK-6d84e8?style=flat-square)](https://openrouter.ai/)
+[![License](https://img.shields.io/badge/License-Private-4a4843?style=flat-square)](#license)
+
+</div>
 
 ---
 
-## Quick start
+## ✦ Table of Contents
+
+- [Overview](#-overview)
+- [Core Architecture & Philosophy](#-core-architecture--philosophy)
+- [System Pipeline](#-system-pipeline)
+- [The Three Companions](#-the-three-companions)
+- [Cinematic Reader & Typography](#-cinematic-reader--typography)
+- [Document Ingestion & Magic Bytes](#-document-ingestion--magic-bytes)
+- [Zero-Proxy AI & Security Model](#-zero-proxy-ai--security-model)
+- [Design System ("Vellum & Ember")](#-design-system-vellum--ember)
+- [Keyboard Shortcuts](#-keyboard-shortcuts)
+- [Quick Start](#-quick-start)
+- [Scripts & Tooling](#-scripts--tooling)
+- [Deployment](#-deployment)
+- [License](#-license)
+
+---
+
+## ✦ Overview
+
+**Lemniscate** transforms static books, papers, slides, and stories into chapter-aware, interactive reading rooms. Built from first principles as a **local-first** engine, your library, reading positions, highlights, and study sets live strictly within your browser's IndexedDB storage.
+
+When connected to an API key, three dedicated AI companions operate directly in the margins — answering questions, crafting seminar-grade study sets, and generating long-form writing desks. When offline or without an API key, the built-in **Anchor** engine executes extractive NLP entirely on-device, ensuring uninterrupted reading flow.
+
+---
+
+## ✦ Core Architecture & Philosophy
+
+```
+  ┌─────────────────────────────────────────────────────────────┐
+  │                    LOCAL-FIRST BROWSER RUNTIME              │
+  ├───────────────┬───────────────────────────────┬─────────────┤
+  │ Ingestion     │ Client-Side Parsers (pdf.js,  │ Magic Byte  │
+  │ Engine        │ JSZip for EPUB/DOCX/PPTX)     │ Validation  │
+  ├───────────────┼───────────────────────────────┼─────────────┤
+  │ Persistence   │ IndexedDB (lemniscate-db)     │ Zero Cloud  │
+  │ Vault         │ Anonymous Identity Partition  │ Databases   │
+  ├───────────────┼───────────────────────────────┼─────────────┤
+  │ Orchestration │ Meridian (Free Model Router)  │ Anchor (100%│
+  │ Layer         │ Direct Browser → OpenRouter   │ Offline NLP)│
+  ├───────────────┼───────────────────────────────┼─────────────┤
+  │ Reader        │ 8 Editorial Font Stacks       │ Scene View, │
+  │ Runtime       │ 3 Lighting Scopes, Bookmarks  │ Virtualized │
+  └───────────────┴───────────────────────────────┴─────────────┘
+```
+
+1. **Local-First & Sovereign**: Everything runs on the client device. Documents never leave the browser unless an explicit AI request is dispatched by the user.
+2. **Zero-Proxy BYOK**: No backend server proxies or middleman servers. The browser communicates directly with `https://openrouter.ai` using a session-scoped in-memory API key.
+3. **Graceful Offline Degradation**: If network drops or no key is provided, the **Anchor** engine seamlessly fulfills companion interactions via extractive algorithms.
+4. **Clean Layered Separation**:
+   $$\text{Input} \longrightarrow \text{Ingestion Pipeline} \longrightarrow \text{Structured Data} \longrightarrow \text{Runtime Engine} \longrightarrow \text{UI}$$
+
+---
+
+## ✦ System Pipeline
+
+```mermaid
+graph TD
+    A[File Input: PDF / EPUB / DOCX / PPTX / MD / HTML / TXT] --> B[Magic Byte & Header Verifier]
+    B --> C{Format Adapter}
+    C -->|PDF| D1[pdf.js Font-Heuristic Parser]
+    C -->|EPUB / DOCX / PPTX| D2[JSZip Container & XML Extractor]
+    C -->|MD / HTML / TXT| D3[DOM & Gutenberg Sanitizer]
+    D1 & D2 & D3 --> E[Chapter Segmenter & Scoring Engine]
+    E --> F[(IndexedDB Storage Vault)]
+    
+    F --> G[Reader Runtime Engine]
+    G --> H[8 Typography Stacks & Scoped Lighting]
+    G --> I[Global ⌘K Spotlight & Scene Mode]
+    
+    F --> J{AI Orchestrator}
+    J -->|Online BYOK| K[Meridian Dynamic Model Router]
+    J -->|Offline / No Key| L[Anchor Extractive NLP Engine]
+    
+    K & L --> M1[Luma: Conversational Margin Stream]
+    K & L --> M2[Ouro: Zod-Validated Seminar Sets]
+    K & L --> M3[Ankaa: Async Long-Form Writing Queue]
+```
+
+---
+
+## ✦ The Three Companions
+
+Lemniscate introduces three specialized companions operating alongside your reading flow:
+
+| Companion | Archetype | Capabilities | Offline Mode (Anchor) |
+|:---|:---|:---|:---|
+| **Luma** | *Marginalia Conversationalist* | Token-by-token SSE streaming, contextual chapter citations, quote extraction, conversational depth, markdown-lite rendering. | Extractive text search with heuristic sentence scoring and quotation ranking. |
+| **Ouro** | *Seminar & Study Architect* | Generates comprehensive study sets: Executive summaries, thematic breakdowns, character rosters, vocabulary, sourced quizzes, flashcards, and essay prompts. Validated with strict **Zod schemas** and cached 7 days per document hash. | Deterministic extraction of key vocabulary, structural summaries, and passage-level flashcards. |
+| **Ankaa** | *Writing & Synthesis Desk* | Drafts long-form essays, critiques, and creative extensions (~2,500 words online / ~1,800 words offline). Managed via an **asynchronous background job queue** with live word counts, step trackers, and crash recovery. | Multi-pass heuristic expansion synthesizing chapter segments into structured drafts. |
+
+---
+
+## ✦ Cinematic Reader & Typography
+
+The reader interface is designed to disappear, leaving only the narrative.
+
+### Typography Stacks
+Research-backed typography engineered specifically for sustained long-form reading:
+- **Literata**: Modern digital book face designed for Google Play Books.
+- **EB Garamond**: Classic Renaissance elegance with true book proportions.
+- **Spectral**: Crisp, contemporary editorial serif created for screen legibility.
+- **Source Serif 4**: Adobe's open-source editorial workhorse.
+- **Georgia**: High-contrast, robust system serif.
+- **Bookerly**: Amazon Kindle's purpose-built reading face.
+- **Baskerville**: High-contrast transitional serif with classical weight.
+- **Palatino**: Hermann Zapf's humanist Renaissance masterpiece.
+
+### Lighting & Contrast Scopes
+- **Obsidian Dark**: Warm near-black backgrounds (`#08070a` to `#15131b`) with amber undertones.
+- **Vellum Light**: Soft, low-glare parchment surface (`#f7f4ed`) tailored for daylight.
+- **Parchment Sepia**: Warm nostalgic paper tone (`#f0e3c9`) with earthen contrast.
+- **High-Contrast Toggle**: Intensifies text contrast across all three lighting scopes.
+
+### Reading Controls
+- **Cinematic Scene Mode (`s`)**: Isolates dialogue and action into focused theatrical beats.
+- **In-Document Search (`/`)**: Instant client-side fuzzy search across all chapters.
+- **Text Controls**: Granular adjustments for font size, line height, paragraph spacing, measure width, and decorative drop-caps.
+- **Bookmarks & Annotations (`b`)**: Multi-colored highlights, margin notes, and instant review trays.
+
+---
+
+## ✦ Document Ingestion & Magic Bytes
+
+To ensure safety and reliability, Lemniscate validates all uploaded files using **magic bytes** rather than trusting client-reported MIME types:
+
+| Format | Magic Bytes / Header | Ingestion Adapter | Output Structure |
+|:---|:---|:---|:---|
+| **PDF** | `%PDF-` (`0x25 0x50 0x44 0x46 0x2D`) | `pdfjs-dist` (Worker-isolated) | Font-size heuristic chapters & structural sections |
+| **EPUB** | `PK\x03\x04` (`mimetype: application/epub+zip`) | `JSZip` Container & OPF Spine Walk | Ordered spine items transformed into native chapters |
+| **DOCX** | `PK\x03\x04` (`word/document.xml`) | `JSZip` XML Parser | Heading-style mapped chapters and paragraph preservation |
+| **PPTX** | `PK\x03\x04` (`ppt/presentation.xml`) | `JSZip` XML Slide Extractor | Individual slides formatted as discrete readable chapters |
+| **Markdown** | Text UTF-8 Validation | Native Regex Parser | ATX (`#`) and Setext (`===`) heading hierarchies |
+| **HTML** | `<!DOCTYPE html` or `<html>` | DOMParser + Readability Sanitizer | Stripped boilerplate, extracted main prose chapters |
+| **Plain Text** | UTF-8 / ASCII Byte Validation | Boilerplate Stripper | Project Gutenberg header/footer sanitization, chapter splits |
+
+---
+
+## ✦ Zero-Proxy AI & Security Model
+
+```
+  ┌─────────────────┐        Direct HTTPS (Bearer Key)        ┌─────────────────┐
+  │  User Browser   │ ──────────────────────────────────────> │  OpenRouter AI  │
+  │  (Lemniscate)   │ <────────────────────────────────────── │  (Catalog/LLM)  │
+  └─────────────────┘             SSE Stream Tokens           └─────────────────┘
+           │
+           │ Key in Memory Only (Evaporates on Tab Close)
+           ▼
+  ┌─────────────────┐
+  │  No Proxy API   │
+  │  No Telemetry   │
+  │  No Remote DB   │
+  └─────────────────┘
+```
+
+- **Session-Scoped Memory Keys**: API keys are stored in runtime JavaScript memory only. They are never written to `localStorage`, `IndexedDB`, or server logs. Closing the browser tab destroys the key instantly.
+- **Zero Middleman Proxy**: There are no intermediary `/api/ai` endpoints. Requests flow directly between your browser and OpenRouter over TLS.
+- **Delimiter-Fenced Prompts**: Document excerpts are wrapped in strict `<<<document_content>>>` boundary fences with system-prompt grounding to prevent prompt-injection attacks.
+- **Anonymous Identity**: All local IndexedDB records are stamped with an on-device anonymous session UUID.
+
+---
+
+## ✦ Design System ("Vellum & Ember")
+
+Lemniscate is styled using Tailwind CSS v4's `@theme` directive, utilizing warm obsidian darks and amber accents:
+
+```css
+/* Palette Tokens */
+--color-ink-950: #08070a;      /* Obsidian canvas */
+--color-ink-900: #0d0c10;      /* Elevated dark surface */
+--color-mist-100: #f5f1ea;     /* Primary parchment text */
+--color-gold-500: #d9ad52;     /* Core amber accent */
+
+/* Companion Accent Tokens */
+--color-ouro-500: #6d84e8;     /* Study indigo */
+--color-ankaa-500: #db814c;    /* Writing ember */
+--color-ok-500: #67ba7c;       /* Reading moss */
+```
+
+Dynamic accent switching (`data-accent="ouro | ankaa | ok"`) dynamically recalculates the entire application's focus rings, badges, progress bars, and glows through centralized CSS custom properties.
+
+---
+
+## ✦ Keyboard Shortcuts
+
+| Shortcut | Scope | Action |
+|:---|:---|:---|
+| <kbd>⌘</kbd> + <kbd>K</kbd> / <kbd>Ctrl</kbd> + <kbd>K</kbd> | Global | Open Universal Spotlight Search |
+| <kbd>Alt</kbd> + <kbd>→</kbd> | Reader | Advance to Next Chapter |
+| <kbd>Alt</kbd> + <kbd>←</kbd> | Reader | Return to Previous Chapter |
+| <kbd>/</kbd> | Reader | Open In-Document Search |
+| <kbd>L</kbd> | Reader | Toggle Luma & Ouro Margin Drawer |
+| <kbd>T</kbd> | Reader | Toggle Table of Contents Drawer |
+| <kbd>B</kbd> | Reader | Add Bookmark / View Annotations |
+| <kbd>S</kbd> | Reader | Toggle Cinematic Scene Mode |
+| <kbd>Esc</kbd> | Overlays | Dismiss Modal / Close Active Drawer |
+
+---
+
+## ✦ Quick Start
+
+### Prerequisites
+- **Runtime**: [Bun](https://bun.sh) `>= 1.1` (or Node.js `>= 20`)
+- **Package Manager**: Bun (recommended) or npm/pnpm/yarn
+
+### 1. Clone & Install
+```bash
+git clone https://github.com/Pushyanth02/Lemniscate.git
+cd Lemniscate
+bun install
+```
+
+### 2. Launch Local Dev Server
+```bash
+bun run dev
+```
+Open **[http://localhost:3000](http://localhost:3000)**. Two classic texts are seeded into your local library immediately on first launch.
+
+---
+
+## ✦ Scripts & Tooling
 
 ```bash
-bun install
-bun run dev        # http://localhost:3000
+# Start local development server on port 3000
+bun run dev
+
+# Run TypeScript strict type-checking
+bun run typecheck
+
+# Run ESLint validation (0 errors, 0 warnings)
+bun run lint
+
+# Compile production static export to out/
+bun run build
+
+# Clean build artifacts and caches
+bun run clean
+
+# Run complete CI verification suite (lint + typecheck + build)
+bun run ci
 ```
 
-That's it — no database, no API keys, no server configuration. The app is fully functional on first launch with two sample texts seeded into your local library.
+---
 
-## Scripts
+## ✦ Deployment
 
-| Command | Description |
-| --- | --- |
-| `bun run dev` | Start the dev server on port 3000 |
-| `bun run build` | Production build (static export to `out/`) |
-| `bun run lint` | ESLint (0 errors, 0 warnings expected) |
-| `bun run typecheck` | TypeScript strict type-check |
-| `bun run deploy` | Deploy to Vercel (`vercel --prod`) |
-
-## Requirements
-
-- **Runtime**: [Bun](https://bun.sh) `>= 1.1` (or Node.js `>= 20`)
-- **Next.js**: `16.x`
-- **React**: `19.x`
-- **Browser**: Any evergreen browser with IndexedDB + Web Workers support
-
-## Architecture
-
-Lemniscate is a **local-first** single-page application. The "server" responsibilities of a traditional reading platform — parsing, persistence, security isolation, quotas — run on-device against IndexedDB. Your texts never leave the browser.
-
+### Vercel (Recommended)
+Lemniscate is configured for static export deployment on [Vercel](https://vercel.com).
+```bash
+bunx vercel --prod
 ```
-src/
-  app/                    Next.js App Router (layout, page, globals.css)
-    layout.tsx            Root layout: fonts, metadata, viewport
-    page.tsx              Client-only dynamic import of <App/>
-    globals.css           "Vellum & Ember" design system (Tailwind v4 @theme)
-  App.tsx                 Root client component: nav, routing, ambient, toasts
-  lib/
-    types.ts              Shared domain types (no `any`)
-    db.ts                 IndexedDB layer + anonymous session identity
-    data.ts               Ownership-filtered queries/mutations + reactive hooks
-    engine.ts             Ingestion: detect → parse → clean → chapters → score
-    engine-adapters.ts    Code-split PDF (pdf.js) / EPUB + DOCX + PPTX (JSZip) adapters
-    openrouter.ts          Direct browser → OpenRouter client (no server proxy)
-    ai.ts                 Meridian model orchestrator + Anchor offline engine:
-                          SSE streaming, retries, fallbacks, rate-limit queue,
-                          daily quota, usage ledger, extractive NLP fallback
-    cache.ts              TTL response cache in IndexedDB
-    jobs.ts               Background job runner: queue, concurrency, ETA, crash recovery
-    store.ts              Zustand: navigation, preferences (persisted), toasts
-    seed.ts               First-run sample texts
-    utils.ts              Cover gradients, formatters, helpers
-  components/
-    ui.tsx                Primitives: Button, Dialog, Sheet, Menu, Tabs, Toast, Reveal…
-    brand.tsx             Lemniscate mark, particle field, ambient glows
-    bits.tsx              Cover art, activity lines, stat tiles
-    header.tsx            App header + ⌘K search overlay + job tray
-  views/
-    Landing / Dashboard / Library / Upload / Reader (+ReaderPanels) /
-    Create (Ankaa desk) / Insights (analytics+history) / Settings / Account
+Since Lemniscate is client-rendered with IndexedDB storage, no backend server environment variables or serverless functions are required.
+
+### Any Static Host
+Build the static distribution:
+```bash
+bun run build
+```
+Deploy the generated `out/` directory to GitHub Pages, Cloudflare Pages, Netlify, or serve locally:
+```bash
+bunx serve out
 ```
 
-### Persistence
+---
 
-All records live in IndexedDB (`lemniscate` database) stamped with a locally generated anonymous identity; every read filters by that identity. Export everything or clear it from **Settings → Import & storage**. Deleting a document cascades to its bookmarks, annotations, scenes and jobs.
+## ✦ License
 
-### Import pipeline
-
-`validateFile` checks extension → size → MIME → **magic bytes** (never trusts the client MIME alone). Parsers: PDF via pdf.js text layers (font-size heading heuristics), EPUB via container→OPF→spine walk, DOCX via `word/document.xml` heading styles, PPTX via `ppt/slides/slideN.xml` text extraction (each slide becomes a chapter), Markdown headings, HTML via readable-content extraction, TXT with Project Gutenberg boilerplate stripping.
-
-### Reader
-
-Chapter navigation (Alt+←/→), debounced progress persistence with resume, bookmarks (`b`), select-to-annotate with color + note, focus mode, cinematic scene view (`s`), in-document search (`/`), Luma/Ouro drawer (`l`), index (`t`), and persisted typography: eight faces, size/line-height/spacing/measure, Light/Dark/Sepia themes.
-
-### Companions
-
-- **Luma** streams answers token-by-token (SSE) with a stop button, regenerate, and markdown-lite rendering. Offline mode answers from the document via extractive retrieval.
-- **Ouro** builds seminar-grade study sets — objectives, summary, guide, themes, characters, vocabulary, a sourced quiz, flashcards, essay prompts — validated with Zod and cached 7 days per document revision.
-- **Ankaa** writes long-form (~2,500 words online, ~1,800 offline) as a **background job**: queued, concurrent-limited, with live steps, word count and ETA.
-
-## AI configuration (BYOK)
-
-Lemniscate is local-first. Online AI is BYOK: users bring their own OpenRouter key, and the browser talks directly to OpenRouter. Anchor keeps the core reading workflow alive without AI.
-
-**No server-side environment variables are required.** There is no `/api/ai` or `/api/models` proxy. The browser calls `https://openrouter.ai` directly.
-
-To enable online AI:
-1. Open **Settings → AI companions**
-2. Paste your OpenRouter API key (`sk-or-v1-...`) or import a `.txt`/`.env`/`.json` file containing it
-3. The key is stored in memory only (session-scoped) — closing the tab removes it
-4. **Meridian** (the model orchestrator) fetches the live free-model catalog and routes each request to the best free model
-5. **Anchor** (the offline engine) takes over instantly if the key is missing, the network is down, or the request fails
-
-Get a key at [openrouter.ai/keys](https://openrouter.ai/keys). Never use a management key. Never commit the key to Git.
-
-## Design system
-
-The "Vellum & Ember" design system is defined entirely in [`src/app/globals.css`](./src/app/globals.css) using Tailwind CSS v4's `@theme` directive:
-
-- **Ink** — warm near-black backgrounds (`ink-950` → `ink-500`)
-- **Mist** — warm parchment-tinted neutrals (`mist-100` → `mist-700`)
-- **Gold** — rich amber accent (`gold-200` → `gold-800`), routed through CSS custom properties so a single `data-accent` attribute on the root retints the entire UI
-- **Companion accents** — Ouro (indigo), Ankaa (ember), Ok (moss)
-- **Reader themes** — independent Light/Dark/Sepia scoped to `.reader-scope`
-
-## Deployment
-
-### Vercel (recommended)
-
-Lemniscate is preconfigured for instant deployment on [Vercel](https://vercel.com).
-
-#### Option 1: Vercel CLI
-1. Install Vercel CLI: `npm install -g vercel` (or `bun add -g vercel`)
-2. Deploy to production:
-   ```bash
-   bun run deploy
-   ```
-
-#### Option 2: Git Integration
-1. Push your repository to GitHub / GitLab / Bitbucket.
-2. Import the repository in the [Vercel Dashboard](https://vercel.com/new).
-3. Vercel automatically detects Next.js, executes `next build`, and deploys with optimized static caching and security headers via `vercel.json`.
-
-The app is client-rendered (the root `page.tsx` uses `next/dynamic` with `ssr: false` because it depends on IndexedDB/localStorage). There are no backend API routes — all AI calls go directly from the browser to OpenRouter. No server-side environment variables are required.
-
-### Other static platforms
-
-Any static host that can serve the `out/` directory works (the app is a fully client-side static export). Run `bun run build` then serve the `out/` folder with any static file server (e.g. `npx serve out`).
-
-## Security
-
-Lemniscate is local-first and client-only. There is NO server-side AI proxy, no server-side API key, and no server-side environment variable for OpenRouter.
-
-**Privacy model:**
-- **Local Only (no key):** documents and analysis stay in the browser. Anchor runs all extractive NLP on-device via IndexedDB.
-- **Online AI (key set):** relevant source text is sent directly from the browser to OpenRouter using the user's key. Lemniscate itself does NOT proxy or store AI requests.
-
-**API key handling:**
-- The OpenRouter key is stored in memory only (session-scoped) — never in localStorage, IndexedDB, or server environment variables.
-- Closing the browser tab removes the key.
-- It is sent directly to `openrouter.ai` over HTTPS in the `Authorization: Bearer` header.
-- It is never logged, never included in error messages, never in URLs, and never included in exported app data.
-- The key is never displayed in full after submission — only a masked version (`sk-or-v1••••••`) is shown.
-
-**File upload safety:**
-- Uploaded files are validated by extension, MIME type, and magic bytes (never trusts MIME alone).
-- Size limits are enforced (configurable in Settings → Import).
-- PDF/EPUB/DOCX/PPTX parsing runs client-side via pdf.js and JSZip — no server roundtrip.
-- Parsed text is treated as untrusted: it is never `eval`'d, never rendered with `dangerouslySetInnerHTML`, and AI prompts use delimiter-fenced `<<<text>>>` wrappers to reduce prompt-injection risk.
-
-**AI prompt injection resistance:**
-- Anchor is naturally resistant — it's extractive only (no model, no instruction following).
-- Online mode uses system-prompt framing to ground responses in the document.
-- User content is placed in the `user` role, never the `system` role.
-- Imported document text is treated as hostile/untrusted content for prompt-injection purposes.
-
-## License
-
-Private project.
+Private & proprietary. All rights reserved.

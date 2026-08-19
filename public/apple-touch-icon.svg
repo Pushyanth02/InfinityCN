@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" width="180" height="180">
+  <defs>
+    <!-- Multi-stop luxury gold gradient -->
+    <linearGradient id="appleGold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fae19c" />
+      <stop offset="30%" stop-color="#e6c270" />
+      <stop offset="65%" stop-color="#d9ad52" />
+      <stop offset="100%" stop-color="#946d2e" />
+    </linearGradient>
+
+    <!-- Warm Amber Radial Glow -->
+    <radialGradient id="appleAmberGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#d9ad52" stop-opacity="0.32" />
+      <stop offset="50%" stop-color="#d9ad52" stop-opacity="0.08" />
+      <stop offset="100%" stop-color="#08070a" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Background Gradient -->
+    <linearGradient id="appleBg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#15121c" />
+      <stop offset="100%" stop-color="#08070a" />
+    </linearGradient>
+  </defs>
+
+  <!-- Deep ink-black background squircle -->
+  <rect width="180" height="180" rx="42" fill="url(#appleBg)" />
+  
+  <!-- Subtle luxury gold border -->
+  <rect x="2" y="2" width="176" height="176" rx="40" fill="none" stroke="#d9ad52" stroke-opacity="0.2" stroke-width="2" />
+
+  <!-- Amber glow halo -->
+  <circle cx="90" cy="90" r="64" fill="url(#appleAmberGlow)" />
+
+  <!-- High-precision Gold Lemniscate Mark -->
+  <path
+    d="M 90 90 C 105.5 67.5 128 59 145 68.8 C 162 78.5 163.5 99.5 146.5 110.8 C 129.5 122 105.5 111 90 90 C 74.5 69 50.5 58 33.5 69 C 16.5 80 18 101 35 111 C 52 121 74.5 112.5 90 90 Z"
+    fill="none"
+    stroke="url(#appleGold)"
+    stroke-width="10.5"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+</svg>

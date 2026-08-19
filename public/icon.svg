@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Multi-stop luxury metallic gold gradient -->
+    <linearGradient id="iconGold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fae19c" />
+      <stop offset="30%" stop-color="#e6c270" />
+      <stop offset="65%" stop-color="#d9ad52" />
+      <stop offset="100%" stop-color="#946d2e" />
+    </linearGradient>
+
+    <!-- Deep Ambient Obsidian Background -->
+    <radialGradient id="iconBg" cx="50%" cy="35%" r="75%">
+      <stop offset="0%" stop-color="#181522" />
+      <stop offset="65%" stop-color="#0e0c12" />
+      <stop offset="100%" stop-color="#050406" />
+    </radialGradient>
+
+    <!-- Warm Amber Glow Halo -->
+    <radialGradient id="iconAmberGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#d9ad52" stop-opacity="0.35" />
+      <stop offset="45%" stop-color="#d9ad52" stop-opacity="0.12" />
+      <stop offset="100%" stop-color="#050406" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Indigo Companion Accent Glow -->
+    <radialGradient id="iconIndigoGlow" cx="30%" cy="40%" r="40%">
+      <stop offset="0%" stop-color="#6d84e8" stop-opacity="0.18" />
+      <stop offset="100%" stop-color="#050406" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Ember Companion Accent Glow -->
+    <radialGradient id="iconEmberGlow" cx="70%" cy="60%" r="40%">
+      <stop offset="0%" stop-color="#db814c" stop-opacity="0.18" />
+      <stop offset="100%" stop-color="#050406" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Soft drop shadow for ribbon -->
+    <filter id="iconDropShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#000000" flood-opacity="0.75" />
+    </filter>
+  </defs>
+
+  <!-- Deep ink-black background squircle -->
+  <rect width="512" height="512" rx="128" fill="url(#iconBg)" />
+  
+  <!-- Outer luxury gold border -->
+  <rect x="6" y="6" width="500" height="500" rx="122" fill="none" stroke="url(#iconGold)" stroke-opacity="0.22" stroke-width="4" />
+  
+  <!-- Inner hairline border -->
+  <rect x="18" y="18" width="476" height="476" rx="110" fill="none" stroke="#f8eac2" stroke-opacity="0.06" stroke-width="2" />
+
+  <!-- Multi-chromatic companion atmospheric glow -->
+  <circle cx="256" cy="256" r="190" fill="url(#iconAmberGlow)" />
+  <circle cx="160" cy="220" r="140" fill="url(#iconIndigoGlow)" />
+  <circle cx="352" cy="290" r="140" fill="url(#iconEmberGlow)" />
+
+  <!-- Centered high-precision gold lemniscate stroke -->
+  <g filter="url(#iconDropShadow)">
+    <path
+      d="M 256 256 C 300 192 364 168 412 196 C 460 224 464 284 416 316 C 368 348 300 316 256 256 C 212 196 144 164 96 196 C 48 228 52 288 100 316 C 148 344 212 320 256 256 Z"
+      fill="none"
+      stroke="url(#iconGold)"
+      stroke-width="30"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+  </g>
+
+  <!-- Subtle specular highlight points -->
+  <circle cx="412" cy="196" r="4" fill="#fae19c" opacity="0.6" />
+  <circle cx="100" cy="316" r="4" fill="#fae19c" opacity="0.6" />
+</svg>
