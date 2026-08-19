@@ -1,0 +1,376 @@
+@import "tailwindcss";
+
+/* ════════════════════════════════════════════════════════════════════
+   LEMNISCATE — "Vellum & Ember" design system
+   A warm, literary dark palette. Ink-black backgrounds with amber undertones
+   replace the cold blue-noir. Gold becomes richer and more luminous. Surfaces
+   gain subtle glass-like depth. Typography rhythm is tightened.
+   ════════════════════════════════════════════════════════════════════ */
+
+@theme {
+  --font-display: "Space Grotesk", "Open Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "Open Sans", ui-sans-serif, system-ui, sans-serif;
+
+  /* Reader typefaces — researched from faces actually used for long-form
+     book reading: Literata (Google Books), EB Garamond, Spectral, Source
+     Serif 4, Georgia, plus the classic system book stacks. */
+  --font-literata: "Literata", Georgia, "Times New Roman", serif;
+  --font-garamond: "EB Garamond", Garamond, "Adobe Garamond Pro", Georgia, serif;
+  --font-spectral: "Spectral", Georgia, "Times New Roman", serif;
+  --font-sourceserif: "Source Serif 4", "Source Serif Pro", Georgia, serif;
+  --font-georgia: Georgia, "Times New Roman", serif;
+  --font-bookerly: Bookerly, Charter, "Bitstream Charter", "Sitka Text", Cambria, Georgia, serif;
+  --font-baskerville: Baskerville, "Baskerville Old Face", "Hoefler Text", Garamond, "Times New Roman", serif;
+  --font-palatino: "Palatino Linotype", Palatino, "Palatino LT STD", "Book Antiqua", "URW Palladio L", Georgia, serif;
+
+  /* ── Ink: warm near-black with brown/amber undertone (not cold blue) ── */
+  --color-ink-950: #08070a;
+  --color-ink-900: #0d0c10;
+  --color-ink-875: #110f15;
+  --color-ink-850: #15131b;
+  --color-ink-800: #1a1822;
+  --color-ink-750: #211e2a;
+  --color-ink-700: #2a2636;
+  --color-ink-600: #383348;
+  --color-ink-500: #4a4460;
+
+  /* ── Mist: warm parchment-tinted neutrals ── */
+  --color-mist-100: #f5f1ea;
+  --color-mist-200: #e8e3d8;
+  --color-mist-300: #cdc8be;
+  --color-mist-400: #a8a399;
+  --color-mist-500: #847f76;
+  --color-mist-600: #63605a;
+  --color-mist-700: #4a4843;
+
+  /* ── Gold: richer, more luminous amber-gold ── */
+  --color-gold-200: #f8eac2;
+  --color-gold-300: #f0d99a;
+  --color-gold-400: #e6c270;
+  --color-gold-500: #d9ad52;
+  --color-gold-600: #bd8f3c;
+  --color-gold-700: #946d2e;
+  --color-gold-800: #6a4d20;
+
+  /* ── Companion accents ── */
+  --color-ouro-300: #b4c1f7;
+  --color-ouro-400: #92a4f4;
+  --color-ouro-500: #6d84e8;
+  --color-ouro-600: #5365c4;
+
+  --color-ankaa-300: #f2b893;
+  --color-ankaa-400: #ea9d6e;
+  --color-ankaa-500: #db814c;
+  --color-ankaa-600: #b56132;
+
+  --color-ok-400: #93d1a3;
+  --color-ok-500: #67ba7c;
+  --color-warn-400: #ecc883;
+  --color-danger-400: #e8907a;
+  --color-danger-500: #d96b56;
+
+  /* ── Shadows: softer, warmer ── */
+  --shadow-lift: 0 12px 40px -16px rgb(0 0 0 / 0.7), 0 2px 8px -2px rgb(0 0 0 / 0.4);
+  --shadow-glow-gold: 0 0 48px -8px rgb(217 173 82 / 0.4);
+  --shadow-card: 0 1px 0 0 rgb(255 255 255 / 0.05) inset, 0 8px 24px -12px rgb(0 0 0 / 0.5);
+  --shadow-float: 0 20px 60px -20px rgb(0 0 0 / 0.8), 0 0 0 1px rgb(255 255 255 / 0.06);
+
+  /* ── Animations ── */
+  --animate-trace: trace 7s linear infinite;
+  --animate-drift: drift 9s ease-in-out infinite;
+  --animate-pulse-soft: pulse-soft 3.2s ease-in-out infinite;
+  --animate-shimmer: shimmer 1.6s linear infinite;
+  --animate-rise: rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-glow: glow 4s ease-in-out infinite;
+}
+
+/* ═══ App accent system ═══
+   The whole "gold channel" routes through --acc variables, so a single
+   attribute on the app root retints buttons, badges, progress, focus
+   rings and glows — including opacity modifiers. */
+:root {
+  --acc: #d9ad52;
+  --acc-hi: #f0d99a;
+  --acc-deep: #bd8f3c;
+  --acc-ink: #171104;
+  --acc-soft: rgb(217 173 82 / 0.12);
+  --acc-soft2: rgb(217 173 82 / 0.28);
+  --acc-line: rgb(148 109 46 / 0.6);
+  --acc-glow: rgb(217 173 82 / 0.55);
+
+  --color-gold-200: var(--acc-hi);
+  --color-gold-300: var(--acc-hi);
+  --color-gold-400: var(--acc);
+  --color-gold-500: var(--acc);
+  --color-gold-600: var(--acc-deep);
+  --color-gold-700: var(--acc-deep);
+  --color-gold-800: var(--acc-deep);
+}
+[data-accent="ouro"] {
+  --acc: #92a4f4;
+  --acc-hi: #bcc8f8;
+  --acc-deep: #5365c4;
+  --acc-ink: #0a0e22;
+  --acc-soft: rgb(109 132 232 / 0.14);
+  --acc-soft2: rgb(109 132 232 / 0.3);
+  --acc-line: rgb(83 101 196 / 0.65);
+  --acc-glow: rgb(109 132 232 / 0.55);
+}
+[data-accent="ankaa"] {
+  --acc: #ea9d6e;
+  --acc-hi: #f5c6a5;
+  --acc-deep: #b56132;
+  --acc-ink: #200e04;
+  --acc-soft: rgb(219 129 76 / 0.14);
+  --acc-soft2: rgb(219 129 76 / 0.3);
+  --acc-line: rgb(181 97 50 / 0.65);
+  --acc-glow: rgb(219 129 76 / 0.55);
+}
+[data-accent="ok"] {
+  --acc: #7cc88d;
+  --acc-hi: #b5dec1;
+  --acc-deep: #4a8f5e;
+  --acc-ink: #07180c;
+  --acc-soft: rgb(103 186 124 / 0.14);
+  --acc-soft2: rgb(103 186 124 / 0.3);
+  --acc-line: rgb(74 143 94 / 0.65);
+  --acc-glow: rgb(103 186 124 / 0.5);
+}
+
+@keyframes trace {
+  from { stroke-dashoffset: 340; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes drift {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(0, -14px, 0); }
+}
+@keyframes pulse-soft {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+@keyframes shimmer {
+  from { background-position: -200% 0; }
+  to { background-position: 200% 0; }
+}
+@keyframes rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes spin-slow {
+  to { transform: rotate(360deg); }
+}
+@keyframes glow {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.05); }
+}
+
+html {
+  scrollbar-color: #2a2636 #0d0c10;
+  -webkit-text-size-adjust: 100%;
+}
+body {
+  @apply bg-ink-900 text-mist-200 font-body antialiased;
+  background-image:
+    radial-gradient(1100px 520px at 82% -10%, rgb(74 68 96 / 0.18), transparent 62%),
+    radial-gradient(900px 480px at -12% 24%, color-mix(in srgb, var(--acc) 7%, transparent), transparent 60%);
+  background-attachment: fixed;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+::selection {
+  background: var(--acc-soft2);
+  color: #f5f1ea;
+}
+:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--acc) 85%, transparent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+[data-ring="strong"]:focus-visible { outline-width: 3px; }
+
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-thumb { background: #2a2636; border-radius: 8px; border: 2px solid #0d0c10; }
+*::-webkit-scrollbar-thumb:hover { background: #383348; }
+*::-webkit-scrollbar-track { background: transparent; }
+
+kbd {
+  @apply font-display text-[10px] tracking-wide px-1.5 py-0.5 rounded border border-ink-600 bg-ink-800 text-mist-400;
+  box-shadow: 0 1px 0 #08070a;
+}
+
+/* ═══ Reader themes (scoped, independent of app theme) ═══ */
+.reader-scope {
+  --r-bg: #0d0c10;
+  --r-surface: #15131b;
+  --r-fg: #ddd9d0;
+  --r-muted: #8b8678;
+  --r-border: #2a2636;
+  --r-accent: #d9ad52;
+  --r-mark: rgb(217 173 82 / 0.22);
+}
+.reader-scope[data-rtheme="light"] {
+  --r-bg: #f7f4ed;
+  --r-surface: #ffffff;
+  --r-fg: #2a241a;
+  --r-muted: #79725e;
+  --r-border: #e2ddce;
+  --r-accent: #946d2e;
+  --r-mark: rgb(217 173 82 / 0.3);
+}
+.reader-scope[data-rtheme="sepia"] {
+  --r-bg: #f0e3c9;
+  --r-surface: #f7eed8;
+  --r-fg: #3f311c;
+  --r-muted: #84704d;
+  --r-border: #decba5;
+  --r-accent: #8a5a26;
+  --r-mark: rgb(176 116 40 / 0.28);
+}
+.reader-scope[data-rcontrast="high"][data-rtheme="dark"],
+.reader-scope[data-rcontrast="high"]:not([data-rtheme="light"]):not([data-rtheme="sepia"]) {
+  --r-fg: #f2eee5;
+  --r-muted: #aaa598;
+}
+.reader-scope[data-rcontrast="high"][data-rtheme="light"] { --r-fg: #141008; --r-muted: #4d4736; }
+.reader-scope[data-rcontrast="high"][data-rtheme="sepia"] { --r-fg: #241a0b; --r-muted: #5d4e30; }
+
+.reader-prose p {
+  text-wrap: pretty;
+  transition: opacity 0.45s ease;
+}
+.reader-prose p.dropcap::first-letter {
+  float: left;
+  font-family: var(--font-garamond);
+  font-size: 3.3em;
+  line-height: 0.82;
+  padding: 0.06em 0.12em 0 0;
+  color: var(--r-accent);
+  font-style: normal;
+}
+.reader-prose mark {
+  background: var(--r-mark);
+  color: inherit;
+  border-radius: 2px;
+  box-shadow: 0 1px 0 var(--r-accent);
+  cursor: pointer;
+  padding: 0.05em 0;
+}
+.reader-prose mark[data-active="true"] {
+  background: color-mix(in srgb, var(--r-mark) 100%, var(--r-accent) 26%);
+}
+
+/* ═══ Shared surface treatments ═══ */
+.hairline { border: 1px solid rgb(42 38 54 / 0.6); }
+
+.panel {
+  @apply bg-ink-850 rounded-xl;
+  border: 1px solid rgb(42 38 54 / 0.6);
+  box-shadow: var(--shadow-card);
+  backdrop-filter: blur(8px);
+}
+
+.panel-glass {
+  background: rgb(21 19 27 / 0.72);
+  border: 1px solid rgb(255 255 255 / 0.06);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+}
+
+.gold-rule {
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--acc) 65%, transparent), transparent);
+  height: 1px;
+}
+
+.skeleton {
+  background: linear-gradient(100deg, #1a1822 40%, #2a2636 50%, #1a1822 60%);
+  background-size: 200% 100%;
+  animation: var(--animate-shimmer);
+  @apply rounded-lg;
+}
+
+.cover-noise::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  opacity: 0.16;
+  mix-blend-mode: overlay;
+  background-image: url("/noise.svg");
+}
+
+/* Gradient text utility */
+.text-gradient-gold {
+  background: linear-gradient(135deg, var(--acc-hi), var(--acc) 50%, var(--acc-deep));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* Refined range inputs */
+input[type="range"] {
+  @apply appearance-none h-1 rounded-full bg-ink-600 cursor-pointer;
+}
+input[type="range"]::-webkit-slider-thumb {
+  @apply appearance-none w-4 h-4 rounded-full border-2;
+  background: var(--acc);
+  border-color: var(--acc-deep);
+  box-shadow: 0 0 12px var(--acc-glow), 0 2px 4px rgb(0 0 0 / 0.3);
+  transition: transform 0.15s ease;
+}
+input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
+input[type="range"]::-moz-range-thumb {
+  @apply w-4 h-4 rounded-full border-2;
+  background: var(--acc);
+  border-color: var(--acc-deep);
+  box-shadow: 0 0 12px var(--acc-glow);
+}
+
+/* ═══ Motion ═══ */
+.press { transition: transform 0.12s ease; }
+.press:active { transform: scale(0.965); }
+
+.hover-lift {
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.3s ease, border-color 0.3s ease;
+}
+.hover-lift:hover {
+  transform: translateY(-3px);
+}
+
+.motion-off *, .motion-off *::before, .motion-off *::after {
+  animation-duration: 0.001s !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.06s !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.06s !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ═══ Responsive helpers ═══ */
+/* Prevent horizontal overflow on small screens */
+html, body {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+/* Safe area insets for mobile */
+@supports (padding: max(0px)) {
+  .safe-bottom { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+  .safe-top { padding-top: max(0px, env(safe-area-inset-top)); }
+}
+
+/* Better tap targets on touch devices — WCAG 2.5.5 recommends ≥44px; we
+   hold 40px on phones for compact toolbar density while still clearing the
+   36px baseline. */
+@media (hover: none) and (pointer: coarse) {
+  button, [role="button"], [role="menuitem"], [role="tab"], a {
+    min-height: 40px;
+  }
+}
