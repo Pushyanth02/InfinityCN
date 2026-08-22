@@ -5,10 +5,29 @@
  */
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type {
-  ActivityRow, ActivityType, AiSceneRow, AnalysisJob, AnnotationRow, BookmarkRow,
-  DocumentRow, ParsedDoc, SceneDraft, StoryRow, UsageRow, BotId,
+  ActivityRow,
+  ActivityType,
+  AiSceneRow,
+  AnalysisJob,
+  AnnotationRow,
+  BookmarkRow,
+  DocumentRow,
+  ParsedDoc,
+  SceneDraft,
+  StoryRow,
+  UsageRow,
+  BotId,
 } from "./types";
-import { idbAll, idbBulkPut, idbClear, idbDelete, idbGet, idbPut, getUserId, STORES, type StoreName } from "./db";
+import {
+  idbAll,
+  idbBulkPut,
+  idbDelete,
+  idbGet,
+  idbPut,
+  getUserId,
+  STORES,
+  type StoreName,
+} from "./db";
 import { coverGradient, uid } from "./utils";
 import { toChapters } from "./engine";
 import type { Fileish } from "./ingest-types";
@@ -41,7 +60,9 @@ for (const s of STORES) storeVersions.set(s, 0);
 /** Snapshot of per-store versions — used by useQuery to detect whether
  *  ANY of its stores changed since its last fetch. Returns a frozen
  *  copy so callers can compare by reference after a bump. */
-function snapshotVersions(stores: readonly StoreName[]): Map<StoreName, number> {
+function snapshotVersions(
+  stores: readonly StoreName[],
+): Map<StoreName, number> {
   const snap = new Map<StoreName, number>();
   for (const s of stores) snap.set(s, storeVersions.get(s) ?? 0);
   return snap;
@@ -54,10 +75,12 @@ function snapshotVersions(stores: readonly StoreName[]): Map<StoreName, number> 
 export function bump(...stores: StoreName[]): void {
   version++;
   if (stores.length > 0) {
-    for (const s of stores) storeVersions.set(s, (storeVersions.get(s) ?? 0) + 1);
+    for (const s of stores)
+      storeVersions.set(s, (storeVersions.get(s) ?? 0) + 1);
   } else {
     // Global bump — increment every store so all queries refetch
-    for (const s of STORES) storeVersions.set(s, (storeVersions.get(s) ?? 0) + 1);
+    for (const s of STORES)
+      storeVersions.set(s, (storeVersions.get(s) ?? 0) + 1);
   }
   bus.dispatchEvent(new Event("change"));
 }
@@ -73,7 +96,10 @@ export function useDbVersion(): number {
 
 /** Check whether any of the given stores' versions have advanced past
  *  the snapshot. Used by useQuery's scoped-refetch optimization. */
-function storesChangedSince(stores: readonly StoreName[], snapshot: Map<StoreName, number>): boolean {
+function storesChangedSince(
+  stores: readonly StoreName[],
+  snapshot: Map<StoreName, number>,
+): boolean {
   for (const s of stores) {
     if ((storeVersions.get(s) ?? 0) !== (snapshot.get(s) ?? 0)) return true;
   }
@@ -88,9 +114,17 @@ export interface Query<T> {
   retry: () => void;
 }
 
-export function useQuery<T>(loader: () => Promise<T>, deps: readonly unknown[], stores?: readonly StoreName[]): Query<T> {
+export function useQuery<T>(
+  loader: () => Promise<T>,
+  deps: readonly unknown[],
+  stores?: readonly StoreName[],
+): Query<T> {
   const v = useDbVersion();
-  const [state, setState] = useState<Omit<Query<T>, "retry">>({ data: null, loading: true, error: null });
+  const [state, setState] = useState<Omit<Query<T>, "retry">>({
+    data: null,
+    loading: true,
+    error: null,
+  });
   const [attempt, setAttempt] = useState(0);
   const hadData = useRef(false);
   const autoRetried = useRef(false);
@@ -129,7 +163,13 @@ export function useQuery<T>(loader: () => Promise<T>, deps: readonly unknown[], 
     // refetching when a relevant store DID change (even if other stores also
     // changed in the same batched re-render).
     const currentStores = storesRef.current;
-    if (currentStores && currentStores.length > 0 && lastV.current !== v && hadData.current && versionSnapshot.current) {
+    if (
+      currentStores &&
+      currentStores.length > 0 &&
+      lastV.current !== v &&
+      hadData.current &&
+      versionSnapshot.current
+    ) {
       if (!storesChangedSince(currentStores, versionSnapshot.current)) {
         lastV.current = v;
         return; // skip refetch — none of this query's stores changed
@@ -145,7 +185,8 @@ export function useQuery<T>(loader: () => Promise<T>, deps: readonly unknown[], 
     }
     let on = true;
     let retryTimer: number | undefined;
-    loaderRef.current()
+    loaderRef
+      .current()
       .then((data) => {
         if (!on) return;
         hadData.current = true;
@@ -163,7 +204,9 @@ export function useQuery<T>(loader: () => Promise<T>, deps: readonly unknown[], 
         if (!on) return;
         if (!autoRetried.current && !hadData.current) {
           autoRetried.current = true;
-          retryTimer = window.setTimeout(() => { if (on) setAttempt((a) => a + 1); }, 700);
+          retryTimer = window.setTimeout(() => {
+            if (on) setAttempt((a) => a + 1);
+          }, 700);
           return;
         }
         setState((s) => ({
@@ -178,7 +221,13 @@ export function useQuery<T>(loader: () => Promise<T>, deps: readonly unknown[], 
     };
   }, [v, depKey, attempt, storesKey]);
 
-  return { ...state, retry: () => { autoRetried.current = true; setAttempt((a) => a + 1); } };
+  return {
+    ...state,
+    retry: () => {
+      autoRetried.current = true;
+      setAttempt((a) => a + 1);
+    },
+  };
 }
 
 const me = () => getUserId();
@@ -187,88 +236,165 @@ const me = () => getUserId();
 
 export function useDocuments(): Query<DocumentRow[]> {
   return useQuery(
-    () => idbAll<DocumentRow>("documents").then((rows) => rows.filter((r) => r.userId === me())),
+    () =>
+      idbAll<DocumentRow>("documents").then((rows) =>
+        rows.filter((r) => r.userId === me()),
+      ),
     [],
-    ["documents"]
+    ["documents"],
   );
 }
 
 export function useDoc(id: string | null): Query<DocumentRow> {
-  return useQuery(async () => {
-    if (!id) throw new Error("No document selected.");
-    const row = await idbGet<DocumentRow>("documents", id);
-    if (!row || row.userId !== me()) throw new Error("This document isn’t in your library.");
-    return row;
-  }, [id], ["documents"]);
+  return useQuery(
+    async () => {
+      if (!id) throw new Error("No document selected.");
+      const row = await idbGet<DocumentRow>("documents", id);
+      if (!row || row.userId !== me())
+        throw new Error("This document isn’t in your library.");
+      return row;
+    },
+    [id],
+    ["documents"],
+  );
 }
 
 export function useBookmarks(docId: string | null): Query<BookmarkRow[]> {
   return useQuery(
-    () => idbAll<BookmarkRow>("bookmarks").then((r) => r.filter((b) => b.documentId === docId).sort((a, b) => a.chunkIndex - b.chunkIndex)),
+    () =>
+      idbAll<BookmarkRow>("bookmarks").then((r) =>
+        r
+          .filter((b) => b.userId === me() && b.documentId === docId)
+          .sort((a, b) => a.chunkIndex - b.chunkIndex),
+      ),
     [docId],
-    ["bookmarks"]
+    ["bookmarks"],
   );
 }
 
 export function useAnnotations(docId: string | null): Query<AnnotationRow[]> {
   return useQuery(
-    () => idbAll<AnnotationRow>("annotations").then((r) => r.filter((a) => a.documentId === docId)),
+    () =>
+      idbAll<AnnotationRow>("annotations").then((r) =>
+        r.filter((a) => a.userId === me() && a.documentId === docId),
+      ),
     [docId],
-    ["annotations"]
+    ["annotations"],
   );
 }
 
 export function useScenes(docId: string | null): Query<AiSceneRow[]> {
   return useQuery(
-    () => idbAll<AiSceneRow>("scenes").then((r) => r.filter((s) => s.documentId === docId).sort((a, b) => a.chapterIndex - b.chapterIndex || a.ordinal - b.ordinal)),
+    () =>
+      idbAll<AiSceneRow>("scenes").then((r) =>
+        r
+          .filter((s) => s.userId === me() && s.documentId === docId)
+          .sort(
+            (a, b) => a.chapterIndex - b.chapterIndex || a.ordinal - b.ordinal,
+          ),
+      ),
     [docId],
-    ["scenes"]
+    ["scenes"],
   );
 }
 
 export function useActivity(limit = 40): Query<ActivityRow[]> {
   return useQuery(
-    () => idbAll<ActivityRow>("activity").then((r) => r.filter((a) => a.userId === me()).sort((a, b) => b.createdAt - a.createdAt).slice(0, limit)),
+    () =>
+      idbAll<ActivityRow>("activity").then((r) =>
+        r
+          .filter((a) => a.userId === me())
+          .sort((a, b) => b.createdAt - a.createdAt)
+          .slice(0, limit),
+      ),
     [limit],
-    ["activity"]
+    ["activity"],
   );
 }
 
 export function useUsage(): Query<UsageRow[]> {
-  return useQuery(() => idbAll<UsageRow>("usage").then((r) => r.filter((u) => u.userId === me())), [], ["usage"]);
+  return useQuery(
+    () =>
+      idbAll<UsageRow>("usage").then((r) => r.filter((u) => u.userId === me())),
+    [],
+    ["usage"],
+  );
 }
 
 export function useStories(): Query<StoryRow[]> {
   return useQuery(
-    () => idbAll<StoryRow>("stories").then((r) => r.filter((s) => s.userId === me()).sort((a, b) => b.createdAt - a.createdAt)),
+    () =>
+      idbAll<StoryRow>("stories").then((r) =>
+        r
+          .filter((s) => s.userId === me())
+          .sort((a, b) => b.createdAt - a.createdAt),
+      ),
     [],
-    ["stories"]
+    ["stories"],
   );
 }
 
 export function useJobs(docId?: string): Query<AnalysisJob[]> {
   return useQuery(
-    () => idbAll<AnalysisJob>("jobs").then((r) => r.filter((j) => j.userId === me() && (!docId || j.documentId === docId)).sort((a, b) => b.updatedAt - a.updatedAt)),
+    () =>
+      idbAll<AnalysisJob>("jobs").then((r) =>
+        r
+          .filter(
+            (j) => j.userId === me() && (!docId || j.documentId === docId),
+          )
+          .sort((a, b) => b.updatedAt - a.updatedAt),
+      ),
     [docId],
-    ["jobs"]
+    ["jobs"],
   );
 }
 
 /* ---------------- mutations ---------------- */
 
-export async function logActivity(type: ActivityType, detail: string, documentId: string | null = null): Promise<void> {
-  const row: ActivityRow = { id: uid("act"), userId: me(), documentId, type, detail, createdAt: Date.now() };
+export async function logActivity(
+  type: ActivityType,
+  detail: string,
+  documentId: string | null = null,
+): Promise<void> {
+  const row: ActivityRow = {
+    id: uid("act"),
+    userId: me(),
+    documentId,
+    type,
+    detail,
+    createdAt: Date.now(),
+  };
   await idbPut("activity", row);
   bump("activity");
 }
 
-export async function logUsage(bot: BotId, kind: string, estTokens: number, latencyMs: number, status: UsageRow["status"], documentId: string | null): Promise<void> {
-  const row: UsageRow = { id: uid("use"), userId: me(), bot, documentId, kind, estTokens, latencyMs, status, createdAt: Date.now() };
+export async function logUsage(
+  bot: BotId,
+  kind: string,
+  estTokens: number,
+  latencyMs: number,
+  status: UsageRow["status"],
+  documentId: string | null,
+): Promise<void> {
+  const row: UsageRow = {
+    id: uid("use"),
+    userId: me(),
+    bot,
+    documentId,
+    kind,
+    estTokens,
+    latencyMs,
+    status,
+    createdAt: Date.now(),
+  };
   await idbPut("usage", row);
   bump("usage");
 }
 
-export async function importParsed(file: Fileish, parsed: ParsedDoc): Promise<DocumentRow> {
+export async function importParsed(
+  file: Fileish,
+  parsed: ParsedDoc,
+): Promise<DocumentRow> {
   const now = Date.now();
   const row: DocumentRow = {
     id: uid("doc"),
@@ -298,24 +424,43 @@ export async function importParsed(file: Fileish, parsed: ParsedDoc): Promise<Do
     collection: null,
   };
   await idbPut("documents", row);
-  await logActivity("upload", `Imported “${row.title}” (${row.sourceType.toUpperCase()}, ${row.chapterCount} chapters)`, row.id);
+  await logActivity(
+    "upload",
+    `Imported “${row.title}” (${row.sourceType.toUpperCase()}, ${row.chapterCount} chapters)`,
+    row.id,
+  );
   return row;
 }
 
-export async function patchDocument(id: string, patch: Partial<DocumentRow>): Promise<void> {
+export async function patchDocument(
+  id: string,
+  patch: Partial<DocumentRow>,
+): Promise<void> {
   const row = await idbGet<DocumentRow>("documents", id);
   if (!row || row.userId !== me()) return;
   await idbPut("documents", { ...row, ...patch, id, updatedAt: Date.now() });
   bump("documents");
 }
 
-export async function setFavorite(id: string, favorite: boolean): Promise<void> {
+export async function setFavorite(
+  id: string,
+  favorite: boolean,
+): Promise<void> {
   await patchDocument(id, { favorite });
   const row = await idbGet<DocumentRow>("documents", id);
-  if (row) await logActivity("favorite", favorite ? `Starred “${row.title}”` : `Unstarred “${row.title}”`, id);
+  if (row)
+    await logActivity(
+      "favorite",
+      favorite ? `Starred “${row.title}”` : `Unstarred “${row.title}”`,
+      id,
+    );
 }
 
-export async function updateProgress(id: string, chunkIndex: number, progress: number): Promise<void> {
+export async function updateProgress(
+  id: string,
+  chunkIndex: number,
+  progress: number,
+): Promise<void> {
   const row = await idbGet<DocumentRow>("documents", id);
   if (!row || row.userId !== me()) return;
   const finishedNow = progress >= 99.5 && row.readingProgress < 99.5;
@@ -329,8 +474,15 @@ export async function updateProgress(id: string, chunkIndex: number, progress: n
   // Throttle read events: at most one per document per 10 minutes.
   const recent = await idbAll<ActivityRow>("activity");
   const cutoff = Date.now() - 10 * 60 * 1000;
-  const hasRecent = recent.some((a) => a.documentId === id && a.type === "read" && a.createdAt > cutoff);
-  if (!hasRecent) await logActivity("read", `Reading “${row.title}” — ${Math.round(progress)}%`, id);
+  const hasRecent = recent.some(
+    (a) => a.documentId === id && a.type === "read" && a.createdAt > cutoff,
+  );
+  if (!hasRecent)
+    await logActivity(
+      "read",
+      `Reading “${row.title}” — ${Math.round(progress)}%`,
+      id,
+    );
   if (finishedNow) await logActivity("finish", `Finished “${row.title}”`, id);
   // Scoped bump: only the documents store changed. This prevents the reader's
   // debounced progress save (every 900ms) from triggering useActivity,
@@ -352,15 +504,38 @@ export async function deleteDocument(id: string): Promise<void> {
   await cleanup("annotations", "documentId");
   await cleanup("scenes", "documentId");
   const jobs = await idbAll<AnalysisJob>("jobs");
-  for (const j of jobs.filter((j) => j.documentId === id)) await idbDelete("jobs", j.id);
-  if (row) await logActivity("delete", `Deleted “${row.title}” from the library`, null);
+  for (const j of jobs.filter((j) => j.documentId === id))
+    await idbDelete("jobs", j.id);
+  if (row)
+    await logActivity(
+      "delete",
+      `Deleted “${row.title}” from the library`,
+      null,
+    );
   bump();
 }
 
-export async function addBookmark(documentId: string, chunkIndex: number, label: string, note: string): Promise<void> {
-  const row: BookmarkRow = { id: uid("bm"), documentId, chunkIndex, label, note, createdAt: Date.now() };
+export async function addBookmark(
+  documentId: string,
+  chunkIndex: number,
+  label: string,
+  note: string,
+): Promise<void> {
+  const row: BookmarkRow = {
+    id: uid("bm"),
+    userId: me(),
+    documentId,
+    chunkIndex,
+    label,
+    note,
+    createdAt: Date.now(),
+  };
   await idbPut("bookmarks", row);
-  await logActivity("bookmark", label ? `Bookmarked: ${label}` : "Bookmark added", documentId);
+  await logActivity(
+    "bookmark",
+    label ? `Bookmarked: ${label}` : "Bookmark added",
+    documentId,
+  );
 }
 
 export async function removeBookmark(id: string): Promise<void> {
@@ -368,10 +543,21 @@ export async function removeBookmark(id: string): Promise<void> {
   bump("bookmarks");
 }
 
-export async function addAnnotation(a: Omit<AnnotationRow, "id" | "createdAt">): Promise<void> {
-  const row: AnnotationRow = { ...a, id: uid("an"), createdAt: Date.now() };
+export async function addAnnotation(
+  a: Omit<AnnotationRow, "id" | "createdAt" | "userId">,
+): Promise<void> {
+  const row: AnnotationRow = {
+    ...a,
+    userId: me(),
+    id: uid("an"),
+    createdAt: Date.now(),
+  };
   await idbPut("annotations", row);
-  await logActivity("annotation", `Annotated: “${a.text.slice(0, 48)}${a.text.length > 48 ? "…" : ""}”`, a.documentId);
+  await logActivity(
+    "annotation",
+    `Annotated: “${a.text.slice(0, 48)}${a.text.length > 48 ? "…" : ""}”`,
+    a.documentId,
+  );
 }
 
 export async function removeAnnotation(id: string): Promise<void> {
@@ -379,18 +565,36 @@ export async function removeAnnotation(id: string): Promise<void> {
   bump("annotations");
 }
 
-export async function putScenes(documentId: string, chapterIndex: number, scenes: SceneDraft[]): Promise<void> {
+export async function putScenes(
+  documentId: string,
+  chapterIndex: number,
+  scenes: SceneDraft[],
+): Promise<void> {
   const existing = await idbAll<AiSceneRow>("scenes");
-  for (const s of existing.filter((s) => s.documentId === documentId && s.chapterIndex === chapterIndex)) {
+  for (const s of existing.filter(
+    (s) => s.documentId === documentId && s.chapterIndex === chapterIndex,
+  )) {
     await idbDelete("scenes", s.id);
   }
   const rows: AiSceneRow[] = scenes.map((s, i) => ({
-    id: uid("scn"), documentId, chapterIndex, ordinal: i,
-    title: s.title, body: s.body, mood: s.mood, characters: s.characters, createdAt: Date.now(),
+    id: uid("scn"),
+    userId: me(),
+    documentId,
+    chapterIndex,
+    ordinal: i,
+    title: s.title,
+    body: s.body,
+    mood: s.mood,
+    characters: s.characters,
+    createdAt: Date.now(),
   }));
   await idbBulkPut("scenes", rows);
   bump("scenes"); // scenes must be visible the moment they land — don't wait for the activity row
-  await logActivity("scenes", `Cinematic scenes rendered for chapter ${chapterIndex + 1}`, documentId);
+  await logActivity(
+    "scenes",
+    `Cinematic scenes rendered for chapter ${chapterIndex + 1}`,
+    documentId,
+  );
 }
 
 /** Turn a finished Ankaa draft into a library document (shared by the
@@ -403,13 +607,30 @@ export async function putScenes(documentId: string, chapterIndex: number, scenes
  * open reader reflects the new chapter immediately. Reading position is
  * preserved (only forward chunk indices shift).
  */
-export async function appendChapterToDocument(docId: string, title: string, body: string): Promise<DocumentRow> {
+export async function appendChapterToDocument(
+  docId: string,
+  title: string,
+  body: string,
+): Promise<DocumentRow> {
   const doc = await idbGet<DocumentRow>("documents", docId);
-  if (!doc || doc.userId !== getUserId()) throw new Error("Document not found.");
-  const paras = body.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
-  if (!paras.length) throw new Error("Nothing to append — the draft was empty.");
-  const chapters = toChapters([...doc.contentJson.chapters.map((c) => ({ title: c.title, paras: c.chunks.map((k) => k.text) })), { title, paras }]);
-  const text = chapters.flatMap((c) => c.chunks.map((k) => k.text)).join("\n\n");
+  if (!doc || doc.userId !== getUserId())
+    throw new Error("Document not found.");
+  const paras = body
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (!paras.length)
+    throw new Error("Nothing to append — the draft was empty.");
+  const chapters = toChapters([
+    ...doc.contentJson.chapters.map((c) => ({
+      title: c.title,
+      paras: c.chunks.map((k) => k.text),
+    })),
+    { title, paras },
+  ]);
+  const text = chapters
+    .flatMap((c) => c.chunks.map((k) => k.text))
+    .join("\n\n");
   const updated: DocumentRow = {
     ...doc,
     contentJson: { chapters },
@@ -419,27 +640,58 @@ export async function appendChapterToDocument(docId: string, title: string, body
     updatedAt: Date.now(),
   };
   await idbPut("documents", updated);
-  await logActivity("story", `Ankaa appended “${title}” to “${doc.title}”`, docId);
+  await logActivity(
+    "story",
+    `Ankaa appended “${title}” to “${doc.title}”`,
+    docId,
+  );
   bump("documents");
   return updated;
 }
 
-export async function saveStoryToLibrary(story: StoryRow): Promise<DocumentRow> {
-  const paras = (story.body ?? "").split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+export async function saveStoryToLibrary(
+  story: StoryRow,
+): Promise<DocumentRow> {
+  const paras = (story.body ?? "")
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter(Boolean);
   const chapters = toChapters([{ title: story.title, paras }]);
   const text = paras.join("\n\n");
   const now = Date.now();
   const row: DocumentRow = {
-    id: uid("doc"), userId: getUserId(), title: story.title, author: "Ankaa · Lemniscate",
-    sourceType: "markdown", mimeType: "text/plain", byteSize: new Blob([text]).size,
-    status: "ready", error: null, warnings: [], summary: null, language: "en",
-    coverGradient: coverGradient(story.title + now.toString(36)), contentJson: { chapters },
-    chapterCount: chapters.length, wordCount: text.split(/\s+/).filter(Boolean).length, charCount: text.length,
-    createdAt: now, updatedAt: now, lastReadAt: null, readingProgress: 0, lastChunkIndex: 0,
-    favorite: false, tags: ["ankaa", "story"], collection: "Ankaa drafts",
+    id: uid("doc"),
+    userId: getUserId(),
+    title: story.title,
+    author: "Ankaa · Lemniscate",
+    sourceType: "markdown",
+    mimeType: "text/plain",
+    byteSize: new Blob([text]).size,
+    status: "ready",
+    error: null,
+    warnings: [],
+    summary: null,
+    language: "en",
+    coverGradient: coverGradient(story.title + now.toString(36)),
+    contentJson: { chapters },
+    chapterCount: chapters.length,
+    wordCount: text.split(/\s+/).filter(Boolean).length,
+    charCount: text.length,
+    createdAt: now,
+    updatedAt: now,
+    lastReadAt: null,
+    readingProgress: 0,
+    lastChunkIndex: 0,
+    favorite: false,
+    tags: ["ankaa", "story"],
+    collection: "Ankaa drafts",
   };
   await idbPut("documents", row);
-  await logActivity("upload", `Saved Ankaa draft “${row.title}” to the library`, row.id);
+  await logActivity(
+    "upload",
+    `Saved Ankaa draft “${row.title}” to the library`,
+    row.id,
+  );
   return row;
 }
 
@@ -448,10 +700,22 @@ export async function putStory(story: StoryRow): Promise<void> {
   bump("stories");
 }
 
-export async function patchStory(id: string, patch: Partial<StoryRow>): Promise<void> {
+export async function patchStory(
+  id: string,
+  patch: Partial<StoryRow>,
+): Promise<void> {
   const row = await idbGet<StoryRow>("stories", id);
   if (!row || row.userId !== me()) return;
   await idbPut("stories", { ...row, ...patch, id });
+  bump("stories");
+}
+
+/** Delete a draft from the writing desk and refresh every subscriber.
+ *  Components must use this instead of raw `idbDelete("stories", …)` —
+ *  a bare IndexedDB delete fires no version bump, so the story shelf
+ *  would keep showing the deleted row until an unrelated store change. */
+export async function deleteStory(id: string): Promise<void> {
+  await idbDelete("stories", id);
   bump("stories");
 }
 
@@ -462,13 +726,51 @@ export async function putJob(job: AnalysisJob): Promise<void> {
 
 /* ---------------- storage management ---------------- */
 
+/** Stores that hold user-owned rows (everything except the shared aiCache,
+ *  which is non-personal derived output keyed by document). */
+const USER_STORES = STORES.filter((s) => s !== "aiCache");
+
+/** One-time ownership migration: rows written before per-user stamping
+ *  existed (bookmarks / annotations / scenes) are claimed by the current
+ *  local identity so they remain visible and are correctly scoped. */
+export async function migrateOwnership(): Promise<void> {
+  const uidMe = getUserId();
+  const legacyStores: StoreName[] = ["bookmarks", "annotations", "scenes"];
+  for (const store of legacyStores) {
+    const rows = await idbAll<{ id: string; userId?: string }>(store);
+    const orphans = rows.filter((r) => !r.userId);
+    for (const r of orphans) await idbPut(store, { ...r, userId: uidMe });
+  }
+}
+
 export async function exportAllData(): Promise<string> {
+  const mine = getUserId();
   const out: Record<string, unknown[]> = {};
-  for (const s of STORES) out[s] = await idbAll(s);
-  return JSON.stringify({ app: "lemniscate", exportedAt: new Date().toISOString(), data: out }, null, 2);
+  for (const s of USER_STORES) {
+    // Only export rows owned by the current identity — never another
+    // local profile's documents, bookmarks, annotations or history.
+    out[s] = (await idbAll(s)).filter(
+      (r) =>
+        (r as { userId?: string }).userId === undefined ||
+        (r as { userId?: string }).userId === mine,
+    );
+  }
+  return JSON.stringify(
+    { app: "lemniscate", exportedAt: new Date().toISOString(), data: out },
+    null,
+    2,
+  );
 }
 
 export async function clearAllData(): Promise<void> {
-  for (const s of STORES) await idbClear(s);
+  const mine = getUserId();
+  for (const s of USER_STORES) {
+    const rows = await idbAll<{ id: string; userId?: string }>(s);
+    // Delete only this identity's rows; rows without an owner field
+    // (legacy/anonymous) are also cleared as they cannot be attributed.
+    for (const r of rows) {
+      if (!r.userId || r.userId === mine) await idbDelete(s, r.id);
+    }
+  }
   bump();
 }

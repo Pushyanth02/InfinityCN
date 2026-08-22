@@ -14,31 +14,57 @@ export async function parseDocx(file: File): Promise<RawDoc> {
   const { default: JSZip } = await import("jszip");
   const zip = await JSZip.loadAsync(await file.arrayBuffer());
   const docXml = await zip.file("word/document.xml")?.async("string");
-  if (!docXml) throw new IngestError("This file isn\u2019t a valid DOCX document.", "content");
+  if (!docXml)
+    throw new IngestError(
+      "This file isn\u2019t a valid DOCX document.",
+      "content",
+    );
 
   const xml = new DOMParser().parseFromString(docXml, "application/xml");
   const paras = xml.getElementsByTagName("w:p");
 
-  interface P { text: string; style: string; bold: boolean; size: number }
+  interface P {
+    text: string;
+    style: string;
+    bold: boolean;
+    size: number;
+  }
   const collected: P[] = [];
   for (const p of Array.from(paras)) {
     const text = Array.from(p.getElementsByTagName("w:t"))
       .map((t) => t.textContent ?? "")
       .join("");
-    const style = p.getElementsByTagName("w:pStyle")[0]?.getAttribute("w:val") ?? "";
+    const style =
+      p.getElementsByTagName("w:pStyle")[0]?.getAttribute("w:val") ?? "";
     const bold = p.getElementsByTagName("w:b").length > 0;
     const sizeRaw = p.getElementsByTagName("w:sz")[0]?.getAttribute("w:val");
-    collected.push({ text, style, bold, size: sizeRaw ? Number(sizeRaw) / 2 : 0 });
+    collected.push({
+      text,
+      style,
+      bold,
+      size: sizeRaw ? Number(sizeRaw) / 2 : 0,
+    });
   }
 
-  const sizes = collected.filter((c) => c.size > 0 && c.text.trim()).map((c) => c.size).sort((a, b) => a - b);
+  const sizes = collected
+    .filter((c) => c.size > 0 && c.text.trim())
+    .map((c) => c.size)
+    .sort((a, b) => a - b);
   const medianSize = sizes.length ? sizes[Math.floor(sizes.length / 2)] : 0;
 
   const lines: RawLine[] = collected.map((c) => {
     const t = c.text.trim();
     const styledHeading = /^Heading[1-3]$|^Title$/i.test(c.style);
-    const sizedHeading = c.bold && t.length > 2 && t.length < 70 && medianSize > 0 && c.size >= medianSize * 1.25;
-    return { text: c.text, heading: styledHeading || sizedHeading || (!!t && isHeading(t)) };
+    const sizedHeading =
+      c.bold &&
+      t.length > 2 &&
+      t.length < 70 &&
+      medianSize > 0 &&
+      c.size >= medianSize * 1.25;
+    return {
+      text: c.text,
+      heading: styledHeading || sizedHeading || (!!t && isHeading(t)),
+    };
   });
 
   let title: string | undefined;
@@ -46,10 +72,37 @@ export async function parseDocx(file: File): Promise<RawDoc> {
   const core = await zip.file("docProps/core.xml")?.async("string");
   if (core) {
     const meta = new DOMParser().parseFromString(core, "application/xml");
-    title = meta.getElementsByTagNameNS("*", "title")[0]?.textContent?.trim() || undefined;
-    author = meta.getElementsByTagNameNS("*", "creator")[0]?.textContent?.trim() || undefined;
+    title =
+      meta.getElementsByTagNameNS("*", "title")[0]?.textContent?.trim() ||
+      undefined;
+    author =
+      meta.getElementsByTagNameNS("*", "creator")[0]?.textContent?.trim() ||
+      undefined;
   }
   return { lines, title, author };
+}
+
+/* ---------------- ZIP container sniffing ---------------- */
+
+/** Identify an unknown zip container by inspecting its entries. A zip file
+ *  whose extension is missing or wrong (.zip, none) would otherwise be
+ *  rejected by detectFormat() before any adapter runs — this helper opens
+ *  the container and identifies it by its internal structure so such files
+ *  still import correctly. Returns null when nothing recognizable is inside. */
+export async function sniffZipType(
+  file: File,
+): Promise<"epub" | "docx" | "pptx" | null> {
+  try {
+    const { default: JSZip } = await import("jszip");
+    const zip = await JSZip.loadAsync(await file.arrayBuffer());
+    const mimetype = await zip.file("mimetype")?.async("string");
+    if (mimetype && mimetype.includes("epub")) return "epub";
+    if (zip.file("word/document.xml")) return "docx";
+    if (zip.file("ppt/presentation.xml")) return "pptx";
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 /* ---------------- EPUB ---------------- */
@@ -68,38 +121,67 @@ export async function parseEpub(file: File): Promise<RawDoc> {
   const zip = await JSZip.loadAsync(await file.arrayBuffer());
 
   const mimetype = await zip.file("mimetype")?.async("string");
-  if (mimetype && !mimetype.includes("epub")) throw new IngestError("This archive isn\u2019t a valid EPUB.", "content");
+  if (mimetype && !mimetype.includes("epub"))
+    throw new IngestError("This archive isn\u2019t a valid EPUB.", "content");
 
-  const containerXml = await zip.file("META-INF/container.xml")?.async("string");
-  if (!containerXml) throw new IngestError("Malformed EPUB: missing container.", "content");
-  const container = new DOMParser().parseFromString(containerXml, "application/xml");
-  const opfPath = container.getElementsByTagName("rootfile")[0]?.getAttribute("full-path");
-  if (!opfPath) throw new IngestError("Malformed EPUB: no package document.", "content");
+  const containerXml = await zip
+    .file("META-INF/container.xml")
+    ?.async("string");
+  if (!containerXml)
+    throw new IngestError("Malformed EPUB: missing container.", "content");
+  const container = new DOMParser().parseFromString(
+    containerXml,
+    "application/xml",
+  );
+  const opfPath = container
+    .getElementsByTagName("rootfile")[0]
+    ?.getAttribute("full-path");
+  if (!opfPath)
+    throw new IngestError("Malformed EPUB: no package document.", "content");
 
   const opfXml = await zip.file(opfPath)?.async("string");
-  if (!opfXml) throw new IngestError("Malformed EPUB: package document not found.", "content");
+  if (!opfXml)
+    throw new IngestError(
+      "Malformed EPUB: package document not found.",
+      "content",
+    );
   const opf = new DOMParser().parseFromString(opfXml, "application/xml");
 
-  const title = opf.getElementsByTagNameNS("*", "title")[0]?.textContent?.trim() || undefined;
-  const author = opf.getElementsByTagNameNS("*", "creator")[0]?.textContent?.trim() || undefined;
+  const title =
+    opf.getElementsByTagNameNS("*", "title")[0]?.textContent?.trim() ||
+    undefined;
+  const author =
+    opf.getElementsByTagNameNS("*", "creator")[0]?.textContent?.trim() ||
+    undefined;
 
   const manifest = new Map<string, { href: string; type: string }>();
   for (const item of Array.from(opf.getElementsByTagNameNS("*", "item"))) {
     const id = item.getAttribute("id");
     const href = item.getAttribute("href");
-    if (id && href) manifest.set(id, { href, type: item.getAttribute("media-type") ?? "" });
+    if (id && href)
+      manifest.set(id, { href, type: item.getAttribute("media-type") ?? "" });
   }
   const spineIds = Array.from(opf.getElementsByTagNameNS("*", "itemref"))
     .map((r) => r.getAttribute("idref"))
     .filter((x): x is string => !!x);
 
-  const baseDir = opfPath.includes("/") ? opfPath.split("/").slice(0, -1).join("/") : "";
+  const baseDir = opfPath.includes("/")
+    ? opfPath.split("/").slice(0, -1).join("/")
+    : "";
   const lines: RawLine[] = [];
   let sectionN = 0;
 
   for (const id of spineIds.slice(0, 400)) {
     const entry = manifest.get(id);
-    if (!entry || !(entry.type.includes("html") || entry.type.includes("xml") || /\.x?html?$/i.test(entry.href))) continue;
+    if (
+      !entry ||
+      !(
+        entry.type.includes("html") ||
+        entry.type.includes("xml") ||
+        /\.x?html?$/i.test(entry.href)
+      )
+    )
+      continue;
     const path = resolvePath(baseDir, entry.href);
     const content = await zip.file(path)?.async("string");
     if (!content) continue;
@@ -112,13 +194,24 @@ export async function parseEpub(file: File): Promise<RawDoc> {
     if (!hasText) continue;
     sectionN++;
     if (!hasHeading) {
-      const fileTitle = doc.title?.trim() || path.split("/").pop()?.replace(/\.\w+$/, "").replace(/[-_]/g, " ") || `Section ${sectionN}`;
+      const fileTitle =
+        doc.title?.trim() ||
+        path
+          .split("/")
+          .pop()
+          ?.replace(/\.\w+$/, "")
+          .replace(/[-_]/g, " ") ||
+        `Section ${sectionN}`;
       lines.push({ text: fileTitle, heading: true });
     }
     lines.push(...fileLines, { text: "", brk: true });
   }
 
-  if (!lines.length) throw new IngestError("No readable chapters found inside this EPUB.", "empty");
+  if (!lines.length)
+    throw new IngestError(
+      "No readable chapters found inside this EPUB.",
+      "empty",
+    );
   return { lines, title, author };
 }
 
@@ -169,7 +262,10 @@ async function ensureMainThreadWorker(): Promise<void> {
 /** Resolve a pdf.js outline `dest` first-element to a 0-based page index.
  *  `dest[0]` is typically a `RefProxy` (`{num, gen}`) referring to a page
  *  dictionary; sometimes it's a bare number (page index). */
-async function resolveDestPage(doc: PdfDoc, dest0: unknown): Promise<number | null> {
+async function resolveDestPage(
+  doc: PdfDoc,
+  dest0: unknown,
+): Promise<number | null> {
   if (typeof dest0 === "number" && Number.isFinite(dest0)) return dest0;
   if (dest0 && typeof dest0 === "object" && "num" in dest0 && "gen" in dest0) {
     try {
@@ -198,13 +294,21 @@ async function extractToc(doc: PdfDoc): Promise<Map<number, string>> {
           try {
             const resolved = await doc.getDestination(entry.dest);
             if (resolved && resolved.length) dest0 = resolved[0];
-          } catch { /* skip named dest that can't resolve */ }
+          } catch {
+            /* skip named dest that can't resolve */
+          }
         } else if (Array.isArray(entry.dest) && entry.dest.length) {
           dest0 = entry.dest[0];
         }
-        const pageIdx = dest0 != null ? await resolveDestPage(doc, dest0) : null;
+        const pageIdx =
+          dest0 != null ? await resolveDestPage(doc, dest0) : null;
         const title = (entry.title || "").trim();
-        if (pageIdx != null && pageIdx >= 0 && pageIdx < doc.numPages && title) {
+        if (
+          pageIdx != null &&
+          pageIdx >= 0 &&
+          pageIdx < doc.numPages &&
+          title
+        ) {
           // First outline entry at this page wins (top levels come first)
           if (!out.has(pageIdx + 1)) out.set(pageIdx + 1, title);
         }
@@ -212,7 +316,9 @@ async function extractToc(doc: PdfDoc): Promise<Map<number, string>> {
       }
     };
     await walk(outline, 0);
-  } catch { /* TOC is best-effort */ }
+  } catch {
+    /* TOC is best-effort */
+  }
   return out;
 }
 
@@ -236,7 +342,10 @@ function endsWithSentencePunct(text: string): boolean {
 /** Cluster font heights into buckets (rounded to nearest 0.5pt). Returns the
  *  body height (most-frequent bucket) and the heading threshold (top-quartile
  *  unique height). */
-function clusterHeights(heights: number[]): { bodyH: number; headingThreshold: number } {
+function clusterHeights(heights: number[]): {
+  bodyH: number;
+  headingThreshold: number;
+} {
   if (!heights.length) return { bodyH: 10, headingThreshold: 12 };
   const buckets = new Map<number, number>();
   for (const h of heights) {
@@ -247,7 +356,10 @@ function clusterHeights(heights: number[]): { bodyH: number; headingThreshold: n
   let bodyH = 10;
   let bodyCount = -1;
   for (const [h, n] of buckets) {
-    if (n > bodyCount) { bodyH = h; bodyCount = n; }
+    if (n > bodyCount) {
+      bodyH = h;
+      bodyCount = n;
+    }
   }
   // Heading threshold = top 25% of unique heights (rounded)
   const uniq = [...buckets.keys()].sort((a, b) => a - b);
@@ -280,7 +392,7 @@ export async function parsePdf(file: File): Promise<RawDoc> {
     } catch {
       throw new IngestError(
         "This PDF could not be opened — it may be encrypted, corrupted, or image-only.",
-        "content"
+        "content",
       );
     }
   }
@@ -297,9 +409,9 @@ export async function parsePdf(file: File): Promise<RawDoc> {
     text: string;
     h: number;
     gap: number;
-    page: number;       // 1-based
-    rowIdx: number;    // 0-based index within page (after empty-row skip)
-    rowCount: number;  // total non-empty rows on this page
+    page: number; // 1-based
+    rowIdx: number; // 0-based index within page (after empty-row skip)
+    rowCount: number; // total non-empty rows on this page
   }
   const allLines: PLine[] = [];
 
@@ -308,7 +420,11 @@ export async function parsePdf(file: File): Promise<RawDoc> {
     const tc = await page.getTextContent();
     const rows = new Map<number, { x: number; str: string; h: number }[]>();
     for (const it of tc.items) {
-      const item = it as { str?: string; transform?: number[]; height?: number };
+      const item = it as {
+        str?: string;
+        transform?: number[];
+        height?: number;
+      };
       if (!item.str || !item.transform) continue;
       const y = Math.round(item.transform[5]);
       const h = item.height || Math.abs(item.transform[3]) || 10;
@@ -318,16 +434,26 @@ export async function parsePdf(file: File): Promise<RawDoc> {
     }
     const ys = [...rows.keys()].sort((a, b) => b - a); // top→bottom (PDF y grows upward)
     let prevY: number | null = null;
-    const nonEmptyRows = ys.filter((y) => rows.get(y)!.some((r) => r.str.trim().length > 0));
+    const nonEmptyRows = ys.filter((y) =>
+      rows.get(y)!.some((r) => r.str.trim().length > 0),
+    );
     const rowCount = nonEmptyRows.length;
     let rowIdx = 0;
     for (const y of nonEmptyRows) {
       const items = rows.get(y)!.sort((a, b) => a.x - b.x);
       // Mend hyphenated line breaks within a single visual row: pdf.js
       // sometimes emits "word-" and "break" as separate items at the same y.
-      const text = items.map((i) => i.str).join("").replace(/-\s+/g, "-").trim()
-        .replace(/\s+/g, " ").trim();
-      if (!text) { rowIdx++; continue; }
+      const text = items
+        .map((i) => i.str)
+        .join("")
+        .replace(/-\s+/g, "-")
+        .trim()
+        .replace(/\s+/g, " ")
+        .trim();
+      if (!text) {
+        rowIdx++;
+        continue;
+      }
       allLines.push({
         text,
         h: Math.max(...items.map((i) => i.h)),
@@ -341,7 +467,11 @@ export async function parsePdf(file: File): Promise<RawDoc> {
     }
   }
 
-  if (!allLines.length) throw new IngestError("No extractable text — this PDF may be scanned images.", "empty");
+  if (!allLines.length)
+    throw new IngestError(
+      "No extractable text — this PDF may be scanned images.",
+      "empty",
+    );
 
   // 3. Filter out obvious page numbers (standalone short numeric lines at
   //    top/bottom of page). Running headers/footers (repeated prose) are
@@ -361,7 +491,10 @@ export async function parsePdf(file: File): Promise<RawDoc> {
   const { bodyH, headingThreshold } = clusterHeights(heights);
   void bodyH; // (kept for clarity; headingThreshold is what we use)
 
-  const gaps = filtered.map((l) => l.gap).filter((g) => g > 0).sort((a, b) => a - b);
+  const gaps = filtered
+    .map((l) => l.gap)
+    .filter((g) => g > 0)
+    .sort((a, b) => a - b);
   const medianGap = gaps.length ? gaps[Math.floor(gaps.length / 2)] : 12;
 
   // 5. Heading predicate: top-quartile font + short + no sentence punctuation,
@@ -382,11 +515,17 @@ export async function parsePdf(file: File): Promise<RawDoc> {
       t.length < 60 &&
       words.length <= 8 &&
       !/\d{3,}/.test(t)
-    ) return true;
+    )
+      return true;
     // Title-Case line with no terminal punctuation: ≥60% of words start
     // with a capital letter. Filters out sentences (only proper nouns
     // are capitalized mid-sentence).
-    if (t.length > 6 && t.length < 60 && words.length >= 2 && words.length <= 8) {
+    if (
+      t.length > 6 &&
+      t.length < 60 &&
+      words.length >= 2 &&
+      words.length <= 8
+    ) {
       const capCount = words.filter((w) => /^[A-Z]/.test(w)).length;
       if (capCount / words.length >= 0.6) return true;
     }
@@ -429,9 +568,19 @@ export async function parsePdf(file: File): Promise<RawDoc> {
     let isHeadingLine = headingLike;
     let injected = false;
     if (isPageFirstLine && isChapterStart && tocTitle) {
-      const normLine = l.text.toLowerCase().replace(/[^a-z0-9\s]/g, "").trim().slice(0, 24);
-      const normToc = tocTitle.toLowerCase().replace(/[^a-z0-9\s]/g, "").trim().slice(0, 24);
-      const matchesToc = normLine.length >= 3 && normToc.length >= 3 &&
+      const normLine = l.text
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, "")
+        .trim()
+        .slice(0, 24);
+      const normToc = tocTitle
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, "")
+        .trim()
+        .slice(0, 24);
+      const matchesToc =
+        normLine.length >= 3 &&
+        normToc.length >= 3 &&
         (normLine.includes(normToc) || normToc.includes(normLine));
       if (headingLike || matchesToc || l.h >= headingThreshold) {
         isHeadingLine = true;
@@ -459,7 +608,9 @@ export async function parsePdf(file: File): Promise<RawDoc> {
     const info = meta?.info as { Title?: string; Author?: string } | undefined;
     title = info?.Title?.trim() || undefined;
     author = info?.Author?.trim() || undefined;
-  } catch { /* metadata is best-effort */ }
+  } catch {
+    /* metadata is best-effort */
+  }
 
   void medianH;
   return { lines, title, author };
@@ -533,7 +684,10 @@ export async function parsePptx(file: File): Promise<RawDoc> {
     if (!slideTitle) slideTitle = texts[0];
 
     // Add the slide title as a heading
-    lines.push({ text: `Slide ${slidePath.match(/slide(\d+)/i)?.[1] ?? ""}: ${slideTitle}`, heading: true });
+    lines.push({
+      text: `Slide ${slidePath.match(/slide(\d+)/i)?.[1] ?? ""}: ${slideTitle}`,
+      heading: true,
+    });
 
     // Add all text runs as content lines
     for (const t of texts) {
@@ -548,12 +702,19 @@ export async function parsePptx(file: File): Promise<RawDoc> {
   const core = await zip.file("docProps/core.xml")?.async("string");
   if (core) {
     const meta = new DOMParser().parseFromString(core, "application/xml");
-    title = meta.getElementsByTagNameNS("*", "title")[0]?.textContent?.trim() || undefined;
-    author = meta.getElementsByTagNameNS("*", "creator")[0]?.textContent?.trim() || undefined;
+    title =
+      meta.getElementsByTagNameNS("*", "title")[0]?.textContent?.trim() ||
+      undefined;
+    author =
+      meta.getElementsByTagNameNS("*", "creator")[0]?.textContent?.trim() ||
+      undefined;
   }
 
   if (lines.length === 0) {
-    throw new IngestError("No text could be extracted from this PPTX — it may contain only images.", "empty");
+    throw new IngestError(
+      "No text could be extracted from this PPTX — it may contain only images.",
+      "empty",
+    );
   }
 
   return { lines, title, author };

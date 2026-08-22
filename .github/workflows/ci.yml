@@ -4,23 +4,14 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
-
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
-  quality:
-    name: Lint · Typecheck · Build
+  ci:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
 
@@ -30,18 +21,11 @@ jobs:
       - name: Lint
         run: bun run lint
 
-      - name: Type-check
+      - name: Typecheck
         run: bun run typecheck
+
+      - name: Unit tests
+        run: bun run test
 
       - name: Build
         run: bun run build
-        env:
-          NEXT_TELEMETRY_DISABLED: "1"
-
-      - name: Upload build artifact
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        uses: actions/upload-artifact@v4
-        with:
-          name: static-export
-          path: out/
-          retention-days: 7

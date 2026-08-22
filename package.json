@@ -10,8 +10,10 @@
     "start": "bunx serve out",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "clean": "rimraf .next out tsconfig.tsbuildinfo",
-    "ci": "bun run lint && bun run typecheck && bun run build"
+    "ci": "bun run lint && bun run typecheck && bun run test && bun run build"
   },
   "dependencies": {
     "framer-motion": "^12.23.2",
@@ -32,6 +34,7 @@
     "eslint": "^9",
     "eslint-config-next": "^16.1.1",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.11"
   }
 }

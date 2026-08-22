@@ -1,9 +1,12 @@
-/** First-run seed: two original sample texts so every surface is alive immediately. */
+/** Opt-in sample texts. Nothing is seeded automatically — a fresh visitor
+ *  starts with an honestly-empty local library. The two originals below are
+ *  loaded only when the user explicitly asks for them (Library → empty state),
+ *  so no one ever mistakes built-in demos for another person's documents. */
 import type { DocumentRow } from "./types";
-import { idbAll, idbPut, getUserId } from "./db";
+import { idbGet, idbPut, getUserId } from "./db";
 import { toChapters } from "./engine";
 import { coverGradient } from "./utils";
-import { logActivity } from "./data";
+import { logActivity, bump } from "./data";
 
 const DUNGEONCORE: { title: string; paras: string[] }[] = [
   {
@@ -61,33 +64,84 @@ const FIELD_NOTES: { title: string; paras: string[] }[] = [
   },
 ];
 
-function buildRow(id: string, title: string, author: string, sourceType: DocumentRow["sourceType"], sections: { title: string; paras: string[] }[], progress: number): DocumentRow {
+function buildRow(
+  id: string,
+  title: string,
+  author: string,
+  sourceType: DocumentRow["sourceType"],
+  sections: { title: string; paras: string[] }[],
+): DocumentRow {
   const chapters = toChapters(sections);
-  const text = chapters.flatMap((c) => c.chunks.map((k) => k.text)).join("\n\n");
+  const NL = String.fromCharCode(10);
+  const text = chapters
+    .flatMap((c) => c.chunks.map((k) => k.text))
+    .join(NL + NL);
   const words = text.split(/\s+/).filter(Boolean).length;
   const now = Date.now();
-  const totalChunks = chapters.reduce((a, c) => a + c.chunks.length, 0);
-  const lastChunk = Math.min(totalChunks - 1, Math.round((progress / 100) * totalChunks));
   return {
-    id, userId: getUserId(), title, author, sourceType,
-    mimeType: "text/plain", byteSize: new Blob([text]).size,
-    status: "ready", error: null, warnings: [], summary: null, language: "en",
-    coverGradient: coverGradient(title + id), contentJson: { chapters },
-    chapterCount: chapters.length, wordCount: words, charCount: text.length,
-    createdAt: now - 86400e3 * 2, updatedAt: now - 3600e3, lastReadAt: now - 3600e3 * 2,
-    readingProgress: progress, lastChunkIndex: lastChunk, favorite: title === "Dungeoncore Necromancer",
-    tags: [sourceType, "sample"], collection: "Samples",
+    id,
+    userId: getUserId(),
+    title,
+    author,
+    sourceType,
+    mimeType: "text/plain",
+    byteSize: new Blob([text]).size,
+    status: "ready",
+    error: null,
+    warnings: [],
+    summary: null,
+    language: "en",
+    coverGradient: coverGradient(title + id),
+    contentJson: { chapters },
+    chapterCount: chapters.length,
+    wordCount: words,
+    charCount: text.length,
+    createdAt: now,
+    updatedAt: now,
+    lastReadAt: null,
+    readingProgress: 0,
+    lastChunkIndex: 0,
+    favorite: false,
+    tags: [sourceType, "sample"],
+    collection: "Samples",
   };
 }
 
-export async function ensureSeed(): Promise<void> {
-  const docs = await idbAll<DocumentRow>("documents");
-  if (docs.length > 0) return;
-  const a = buildRow("doc_dungeoncore", "Dungeoncore Necromancer", "Pushyanth", "txt", DUNGEONCORE, 38);
-  const b = buildRow("doc_fieldnotes", "Field Notes on Light", "J. Halloran", "markdown", FIELD_NOTES, 0);
-  await idbPut("documents", a);
-  await idbPut("documents", b);
-  await logActivity("upload", "Seeded sample: “Dungeoncore Necromancer” (TXT, 3 chapters)", a.id);
-  await logActivity("upload", "Seeded sample: “Field Notes on Light” (MD, 3 chapters)", b.id);
-  await logActivity("read", "Reading “Dungeoncore Necromancer” — 38%", a.id);
+/** Explicitly load the built-in sample books into THIS device's library.
+ *  Idempotent: skips any sample that already exists. No fabricated reading
+ *  history is created — the samples start unread, like any real import. */
+export async function seedSampleBooks(): Promise<void> {
+  const existingA = await idbGet<DocumentRow>("documents", "doc_dungeoncore");
+  const existingB = await idbGet<DocumentRow>("documents", "doc_fieldnotes");
+  if (!existingA) {
+    const a = buildRow(
+      "doc_dungeoncore",
+      "Dungeoncore Necromancer",
+      "Pushyanth",
+      "txt",
+      DUNGEONCORE,
+    );
+    await idbPut("documents", a);
+    await logActivity(
+      "upload",
+      "Loaded sample: “Dungeoncore Necromancer” (TXT, 3 chapters)",
+      a.id,
+    );
+  }
+  if (!existingB) {
+    const b = buildRow(
+      "doc_fieldnotes",
+      "Field Notes on Light",
+      "J. Halloran",
+      "markdown",
+      FIELD_NOTES,
+    );
+    await idbPut("documents", b);
+    await logActivity(
+      "upload",
+      "Loaded sample: “Field Notes on Light” (MD, 3 chapters)",
+      b.id,
+    );
+  }
+  bump("documents", "activity");
 }

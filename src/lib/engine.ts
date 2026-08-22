@@ -6,9 +6,21 @@
  * Text formats are handled inline; binary formats (PDF/EPUB/DOCX) live in
  * engine-adapters.ts and are code-split via dynamic import.
  */
-import type { Chapter, Chunk, ParsedDoc, QualityReport, SourceType } from "./types";
+import type {
+  Chapter,
+  Chunk,
+  ParsedDoc,
+  QualityReport,
+  SourceType,
+} from "./types";
 import { clamp } from "./utils";
-import { parsePdf, parseEpub, parseDocx, parsePptx } from "./engine-adapters";
+import {
+  parsePdf,
+  parseEpub,
+  parseDocx,
+  parsePptx,
+  sniffZipType,
+} from "./engine-adapters";
 
 export interface RawLine {
   text: string;
@@ -29,26 +41,89 @@ export class IngestError extends Error {
   }
 }
 
-export const FORMATS: { type: SourceType; label: string; exts: string[]; mimes: string[]; note: string }[] = [
-  { type: "pdf", label: "PDF", exts: ["pdf"], mimes: ["application/pdf"], note: "Layout-tolerant text extraction" },
-  { type: "epub", label: "EPUB", exts: ["epub"], mimes: ["application/epub+zip"], note: "Spine-aware chapters + metadata" },
-  { type: "docx", label: "DOCX", exts: ["docx"], mimes: ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"], note: "Heading styles become chapters" },
-  { type: "pptx", label: "PPTX", exts: ["pptx", "ppt"], mimes: ["application/vnd.openxmlformats-officedocument.presentationml.presentation"], note: "Slide text extracted as chapters" },
-  { type: "markdown", label: "Markdown", exts: ["md", "markdown"], mimes: ["text/markdown"], note: "Headings preserved as structure" },
-  { type: "txt", label: "TXT", exts: ["txt", "text"], mimes: ["text/plain"], note: "Gutenberg boilerplate stripped" },
-  { type: "html", label: "HTML", exts: ["html", "htm"], mimes: ["text/html"], note: "Readable content, no chrome" },
+export const FORMATS: {
+  type: SourceType;
+  label: string;
+  exts: string[];
+  mimes: string[];
+  note: string;
+}[] = [
+  {
+    type: "pdf",
+    label: "PDF",
+    exts: ["pdf"],
+    mimes: ["application/pdf"],
+    note: "Layout-tolerant text extraction",
+  },
+  {
+    type: "epub",
+    label: "EPUB",
+    exts: ["epub"],
+    mimes: ["application/epub+zip"],
+    note: "Spine-aware chapters + metadata",
+  },
+  {
+    type: "docx",
+    label: "DOCX",
+    exts: ["docx"],
+    mimes: [
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ],
+    note: "Heading styles become chapters",
+  },
+  {
+    type: "pptx",
+    label: "PPTX",
+    exts: ["pptx", "ppt"],
+    mimes: [
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ],
+    note: "Slide text extracted as chapters",
+  },
+  {
+    type: "markdown",
+    label: "Markdown",
+    exts: ["md", "markdown"],
+    mimes: ["text/markdown"],
+    note: "Headings preserved as structure",
+  },
+  {
+    type: "txt",
+    label: "TXT",
+    exts: ["txt", "text"],
+    mimes: ["text/plain"],
+    note: "Gutenberg boilerplate stripped",
+  },
+  {
+    type: "html",
+    label: "HTML",
+    exts: ["html", "htm"],
+    mimes: ["text/html"],
+    note: "Readable content, no chrome",
+  },
 ];
 
 const ALL_EXTS = FORMATS.flatMap((f) => f.exts);
 
 export function extOf(name: string): string {
-  return (name.split(".").pop() ?? "").toLowerCase();
+  const i = name.lastIndexOf(".");
+  return i === -1 ? "" : name.slice(i + 1).toLowerCase();
 }
 
 /** Detect format from extension + MIME + magic bytes. Never trusts MIME alone. */
-export function detectFormat(name: string, mime: string, head: Uint8Array): SourceType | null {
+export function detectFormat(
+  name: string,
+  mime: string,
+  head: Uint8Array,
+): SourceType | null {
   // Magic bytes win: %PDF- and PK zip signatures.
-  if (head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 && head[3] === 0x46) return "pdf";
+  if (
+    head[0] === 0x25 &&
+    head[1] === 0x50 &&
+    head[2] === 0x44 &&
+    head[3] === 0x46
+  )
+    return "pdf";
   const ext = extOf(name);
   const isZip = head[0] === 0x50 && head[1] === 0x4b;
   if (isZip) {
@@ -70,10 +145,16 @@ export function detectFormat(name: string, mime: string, head: Uint8Array): Sour
 export function validateFile(file: File, maxMB: number): SourceType {
   const ext = extOf(file.name);
   if (!ALL_EXTS.includes(ext)) {
-    throw new IngestError(`“.${ext || "?"}” isn’t supported. Import PDF, EPUB, DOCX, PPTX, Markdown, TXT or HTML.`, "type");
+    throw new IngestError(
+      `“.${ext || "?"}” isn’t supported. Import PDF, EPUB, DOCX, PPTX, Markdown, TXT or HTML.`,
+      "type",
+    );
   }
   if (file.size > maxMB * 1024 * 1024) {
-    throw new IngestError(`File exceeds the ${maxMB} MB limit (adjustable in Settings → Import).`, "size");
+    throw new IngestError(
+      `File exceeds the ${maxMB} MB limit (adjustable in Settings → Import).`,
+      "size",
+    );
   }
   if (file.size === 0) throw new IngestError("The file is empty.", "empty");
   if (ext === "htm") return "html";
@@ -85,7 +166,13 @@ export function validateFile(file: File, maxMB: number): SourceType {
 
 /* ---------------- text normalization ---------------- */
 
-const LIGATURES: Record<string, string> = { "ﬁ": "fi", "ﬂ": "fl", "ﬃ": "ffi", "ﬄ": "ffl", "…": "…" };
+const LIGATURES: Record<string, string> = {
+  ﬁ: "fi",
+  ﬂ: "fl",
+  ﬃ: "ffi",
+  ﬄ: "ffl",
+  "…": "…",
+};
 
 /** Convert straight `"` and `'` to contextually-correct curly quotes.
  *  - `"` → `“` when whitespace precedes and non-whitespace follows (open)
@@ -131,9 +218,9 @@ export function cleanInline(s: string): string {
       // 5. Normalize em-dashes: " — " → "—", keep "word—word" intact.
       //    Also fold en-dashes used as parenthetical dashes to em-dash.
       .replace(/\s*[\u2014\u2013]\s*/g, "\u2014")
-      // 6. Strip spaces before punctuation: "word ," → "word,"
-      .replace(/ +([,.;:!?%)\]])/g, "$1")
-      .trim()
+      // 6. Strip spaces before punctuation: "word ," → "word," (also "wait …")
+      .replace(/ +([,.;:!?%)\]\u2026])/g, "$1")
+      .trim(),
   );
 }
 
@@ -151,7 +238,8 @@ export function joinLines(parts: string[]): string {
 /** Strip Project Gutenberg header/footer boilerplate. */
 export function stripGutenberg(text: string): string {
   if (!/project gutenberg/i.test(text)) return text;
-  const startRe = /\*\*\* ?START OF (THE |THIS )?(PROJECT GUTENBERG|EBOOK|E-TEXT)[^\n]*\n/i;
+  const startRe =
+    /\*\*\* ?START OF (THE |THIS )?(PROJECT GUTENBERG|EBOOK|E-TEXT)[^\n]*\n/i;
   const endRe = /\*\*\* ?END OF (THE |THIS )?(PROJECT GUTENBERG|EBOOK|E-TEXT)/i;
   const start = text.search(startRe);
   if (start !== -1) {
@@ -166,17 +254,26 @@ export function stripGutenberg(text: string): string {
 }
 
 /** Remove running headers/footers (short lines repeated many times). */
-export function dedupeRunningHeads(lines: RawLine[]): { lines: RawLine[]; removed: number } {
+export function dedupeRunningHeads(lines: RawLine[]): {
+  lines: RawLine[];
+  removed: number;
+} {
   const freq = new Map<string, number>();
   for (const l of lines) {
     const t = l.text.trim();
-    if (t && t.length < 60 && !l.heading) freq.set(t.toLowerCase(), (freq.get(t.toLowerCase()) ?? 0) + 1);
+    if (t && t.length < 60 && !l.heading)
+      freq.set(t.toLowerCase(), (freq.get(t.toLowerCase()) ?? 0) + 1);
   }
   let removed = 0;
   const kept = lines.filter((l) => {
     const t = l.text.trim();
     const n = freq.get(t.toLowerCase()) ?? 0;
-    if (n >= 5 && n / Math.max(1, lines.length) > 0.012 && t.length < 60 && !l.heading) {
+    if (
+      n >= 5 &&
+      n / Math.max(1, lines.length) > 0.012 &&
+      t.length < 60 &&
+      !l.heading
+    ) {
       removed++;
       return false;
     }
@@ -197,7 +294,7 @@ const EN_ORDINALS =
   "first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth|thirteenth|fourteenth|fifteenth|sixteenth|seventeenth|eighteenth|nineteenth|twentieth|final|last";
 const EN_WORD_NUM_RE = new RegExp(
   `\\b(?:${EN_CARDINALS}|${EN_ORDINALS})(?:[-\\s](?:one|two|three|four|five|six|seven|eight|nine))?\\b`,
-  "i"
+  "i",
 );
 
 export function isHeading(t: string): boolean {
@@ -209,38 +306,68 @@ export function isHeading(t: string): boolean {
   // "Capítulo", etc.) at the start of the line.
   if (HEADWORD_RE.test(s)) return true;
   // English: "CHAPTER ONE", "PART TWO", "CHAPTER TWENTY-THREE", etc.
-  if (/^(?:the\s+)?(?:chapter|part|book|canto|act|scene|section)\s+/i.test(s) && EN_WORD_NUM_RE.test(s)) return true;
+  if (
+    /^(?:the\s+)?(?:chapter|part|book|canto|act|scene|section)\s+/i.test(s) &&
+    EN_WORD_NUM_RE.test(s)
+  )
+    return true;
   // English: "FIRST CHAPTER", "THE THIRD BOOK", "FINAL ACT".
-  if (new RegExp(`^(?:the\\s+)?(?:${EN_ORDINALS})\\s+(?:chapter|part|book|canto|act|scene|section)\\b`, "i").test(s)) return true;
+  if (
+    new RegExp(
+      `^(?:the\\s+)?(?:${EN_ORDINALS})\\s+(?:chapter|part|book|canto|act|scene|section)\\b`,
+      "i",
+    ).test(s)
+  )
+    return true;
   // Numeric / Roman forms (English) — kept from original implementation.
-  if (/^(chapter|part|book|canto|act)\s+[ivxlcdm0-9]+[.:—-]?(\s.*)?$/i.test(s)) return true;
+  if (/^(chapter|part|book|canto|act)\s+[ivxlcdm0-9]+[.:—-]?(\s.*)?$/i.test(s))
+    return true;
   /* CJK chapter markers: 第一章 / 第1章 / 第三节 / 第五回 … (with or without a title after) */
-  if (/^第\s*[0-9０-９一二三四五六七八九十百千两]+\s*[章节回部卷篇].*$/.test(s)) return true;
+  if (/^第\s*[0-9０-９一二三四五六七八九十百千两]+\s*[章节回部卷篇].*$/.test(s))
+    return true;
   if (/^[ivxlcdm]{1,7}[.)]\s*$/i.test(s)) return true;
   /* bare Roman numeral ("IV", "XII") */
   if (/^[IVXLC]{1,7}$/.test(s)) return true;
   /* Roman numeral + title ("IV. The Return", "XII — Salt") */
-  if (/^[ivxlcdm]{1,7}[.):—-]\s+\S.*$/i.test(s) && s.split(/\s+/).length <= 9) return true;
+  if (/^[ivxlcdm]{1,7}[.):—-]\s+\S.*$/i.test(s) && s.split(/\s+/).length <= 9)
+    return true;
   /* Arabic-numbered heading ("7. Arrival") — guarded against list items and
      long narrative sentences that merely start with a number */
-  if (/^\d{1,3}[.)]\s+\S.*$/.test(s) && s.length <= 60 && s.split(/\s+/).length <= 9 && !/[.!?]$/.test(s)) return true;
+  if (
+    /^\d{1,3}[.)]\s+\S.*$/.test(s) &&
+    s.length <= 60 &&
+    s.split(/\s+/).length <= 9 &&
+    !/[.!?]$/.test(s)
+  )
+    return true;
   /* ALL-CAPS short label ("DRAMATIS PERSONAE", "PART ONE"). Filters out
      sentences which happen to be in caps via length + word-count caps. */
   const letters = s.replace(/[^a-zA-Z]/g, "");
-  if (letters.length >= 4 && letters.length >= s.replace(/\s/g, "").length - 2 && s === s.toUpperCase() && !/\d{3,}/.test(s) && s.split(/\s+/).length <= 8) {
+  if (
+    letters.length >= 4 &&
+    letters.length >= s.replace(/\s/g, "").length - 2 &&
+    s === s.toUpperCase() &&
+    !/\d{3,}/.test(s) &&
+    s.split(/\s+/).length <= 8
+  ) {
     return true;
   }
   return false;
 }
 
-interface AccChapter { title: string; paras: string[] }
+interface AccChapter {
+  title: string;
+  paras: string[];
+}
 
 /** Count words in a paragraph (whitespace-split, ignoring empty). */
 function wordCount(s: string): number {
   return s.split(/\s+/).filter(Boolean).length;
 }
 
-export function buildChapters(lines: RawLine[]): { title: string; paras: string[] }[] {
+export function buildChapters(
+  lines: RawLine[],
+): { title: string; paras: string[] }[] {
   const chapters: AccChapter[] = [];
   let cur: AccChapter | null = null;
   let buf: string[] = [];
@@ -260,9 +387,15 @@ export function buildChapters(lines: RawLine[]): { title: string; paras: string[
      paragraph; narrative continuation lines are mended together. */
   const SPEECH_START = /^[\u201C\u201D\u2018\u2019"'«»\u2014\u2013]/;
   for (const line of lines) {
-    if (line.brk) { flushPara(); continue; }
+    if (line.brk) {
+      flushPara();
+      continue;
+    }
     const t = line.text.trim();
-    if (!t) { flushPara(); continue; }
+    if (!t) {
+      flushPara();
+      continue;
+    }
     if ((line.heading || isHeading(t)) && t.length <= 80) {
       flushPara();
       if (cur && cur.paras.length > 0) chapters.push(cur);
@@ -306,15 +439,21 @@ export function buildChapters(lines: RawLine[]): { title: string; paras: string[
  *  Splits on paragraph boundaries (never mid-paragraph) and prefers roughly
  *  equal parts by word count, allowing flexibility so we don't end up with a
  *  tiny orphan trailing part. */
-export function fallbackSplit(paras: string[], words: number): { title: string; paras: string[] }[] {
+export function fallbackSplit(
+  paras: string[],
+  words: number,
+): { title: string; paras: string[] }[] {
   if (words < 6000) return [{ title: "Full text", paras }];
   const parts: { title: string; paras: string[] }[] = [];
   let cur: string[] = [];
   let count = 0;
   const target = 2800;
-  const minPart = Math.floor(target * 0.6);   // don't close a part too small
-  const maxPart = Math.floor(target * 1.5);    // don't let one part run away
-  const roman = (n: number) => ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"][n - 1] ?? String(n);
+  const minPart = Math.floor(target * 0.6); // don't close a part too small
+  const maxPart = Math.floor(target * 1.5); // don't let one part run away
+  const roman = (n: number) =>
+    ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"][
+      n - 1
+    ] ?? String(n);
 
   const flush = () => {
     if (cur.length) {
@@ -356,12 +495,23 @@ export function fallbackSplit(paras: string[], words: number): { title: string; 
   return parts;
 }
 
-export function toChapters(sections: { title: string; paras: string[] }[]): Chapter[] {
+export function toChapters(
+  sections: { title: string; paras: string[] }[],
+): Chapter[] {
   let cursor = 0;
   return sections.map((s, i) => {
     const id = `ch${i}`;
-    const chunks: Chunk[] = s.paras.map((text, j) => ({ id: `${id}:${j}`, kind: "p" as const, text }));
-    const chapter: Chapter = { id, title: s.title || `Section ${i + 1}`, startChunk: cursor, chunks };
+    const chunks: Chunk[] = s.paras.map((text, j) => ({
+      id: `${id}:${j}`,
+      kind: "p" as const,
+      text,
+    }));
+    const chapter: Chapter = {
+      id,
+      title: s.title || `Section ${i + 1}`,
+      startChunk: cursor,
+      chunks,
+    };
     cursor += chunks.length;
     return chapter;
   });
@@ -369,8 +519,14 @@ export function toChapters(sections: { title: string; paras: string[] }[]): Chap
 
 /* ---------------- metadata ---------------- */
 
-export function metaFromFilename(name: string): { title: string; author: string } {
-  const base = name.replace(/\.[^.]+$/, "").replace(/[_]+/g, " ").trim();
+export function metaFromFilename(name: string): {
+  title: string;
+  author: string;
+} {
+  const base = name
+    .replace(/\.[^.]+$/, "")
+    .replace(/[_]+/g, " ")
+    .trim();
   const dash = base.split(/\s+[-–—]\s+/);
   if (dash.length === 2 && dash[0].length > 1 && dash[1].length > 1) {
     return { author: titleCase(dash[0]), title: titleCase(dash[1]) };
@@ -386,14 +542,40 @@ export function titleCase(s: string): string {
   const hasCaps = words.some((w) => /[A-Z]{2,}/.test(w));
   if (hasCaps) return words.join(" ");
   return words
-    .map((w, i) => (i > 0 && /^(of|the|a|an|and|or|in|on|at|to|for|with)$/.test(w.toLowerCase()) ? w.toLowerCase() : w.charAt(0).toUpperCase() + w.slice(1)))
+    .map((w, i) =>
+      i > 0 &&
+      /^(of|the|a|an|and|or|in|on|at|to|for|with)$/.test(w.toLowerCase())
+        ? w.toLowerCase()
+        : w.charAt(0).toUpperCase() + w.slice(1),
+    )
     .join(" ");
 }
 
 export function detectLanguage(sample: string): string {
   const words = sample.toLowerCase().split(/\s+/).filter(Boolean).slice(0, 600);
   if (!words.length) return "und";
-  const stops = new Set(["the", "and", "of", "to", "in", "was", "is", "that", "it", "he", "she", "with", "for", "as", "had", "his", "her", "not", "but", "be"]);
+  const stops = new Set([
+    "the",
+    "and",
+    "of",
+    "to",
+    "in",
+    "was",
+    "is",
+    "that",
+    "it",
+    "he",
+    "she",
+    "with",
+    "for",
+    "as",
+    "had",
+    "his",
+    "her",
+    "not",
+    "but",
+    "be",
+  ]);
   let hits = 0;
   for (const w of words) if (stops.has(w.replace(/[^a-z']/g, ""))) hits++;
   return hits / words.length > 0.045 ? "en" : "und";
@@ -401,21 +583,42 @@ export function detectLanguage(sample: string): string {
 
 /* ---------------- quality scoring ---------------- */
 
-export function scoreQuality(text: string, chapterCount: number, notes: string[]): QualityReport {
+export function scoreQuality(
+  text: string,
+  chapterCount: number,
+  notes: string[],
+): QualityReport {
   let score = 100;
   const words = text.split(/\s+/).filter(Boolean);
   const garbage = (text.match(/[^\p{L}\p{N}\p{P}\p{S}\p{Z}\n]/gu) ?? []).length;
   const garbageRatio = text.length ? garbage / text.length : 0;
-  if (garbageRatio > 0.02) { score -= 25; notes.push("Unusual character noise detected (possible OCR artifacts)."); }
-  else if (garbageRatio > 0.005) { score -= 10; notes.push("Minor character noise detected."); }
+  if (garbageRatio > 0.02) {
+    score -= 25;
+    notes.push("Unusual character noise detected (possible OCR artifacts).");
+  } else if (garbageRatio > 0.005) {
+    score -= 10;
+    notes.push("Minor character noise detected.");
+  }
   if (words.length) {
     const avgLen = words.reduce((a, w) => a + w.length, 0) / words.length;
-    if (avgLen < 3.1) { score -= 15; notes.push("Very short average word length — text may be fragmented."); }
+    if (avgLen < 3.1) {
+      score -= 15;
+      notes.push("Very short average word length — text may be fragmented.");
+    }
     const shortRatio = words.filter((w) => w.length <= 2).length / words.length;
-    if (shortRatio > 0.32) { score -= 10; notes.push("Many short tokens — layout debris may remain."); }
+    if (shortRatio > 0.32) {
+      score -= 10;
+      notes.push("Many short tokens — layout debris may remain.");
+    }
   }
-  if (chapterCount <= 1 && words.length > 4000) notes.push("No structural headings found; text is navigated as continuous parts.");
-  if (words.length < 120) { score -= 30; notes.push("Very little extractable text."); }
+  if (chapterCount <= 1 && words.length > 4000)
+    notes.push(
+      "No structural headings found; text is navigated as continuous parts.",
+    );
+  if (words.length < 120) {
+    score -= 30;
+    notes.push("Very little extractable text.");
+  }
   return { score: clamp(Math.round(score), 5, 98), notes };
 }
 
@@ -439,12 +642,27 @@ export function markdownToLines(raw: string): RawLine[] {
   const out: RawLine[] = [];
   let fence = false;
   for (const line of raw.replace(/\r\n?/g, "\n").split("\n")) {
-    if (/^\s*```/.test(line)) { fence = !fence; continue; }
-    if (fence) { out.push({ text: line }); continue; }
-    if (/^\s*(<!--.*-->|\s*)$/.test(line)) { if (!line.trim()) out.push({ text: "" }); continue; }
+    if (/^\s*```/.test(line)) {
+      fence = !fence;
+      continue;
+    }
+    if (fence) {
+      out.push({ text: line });
+      continue;
+    }
+    if (/^\s*(<!--.*-->|\s*)$/.test(line)) {
+      if (!line.trim()) out.push({ text: "" });
+      continue;
+    }
     const h = line.match(/^\s{0,3}(#{1,3})\s+(.*)$/);
-    if (h) { out.push({ text: stripMd(h[2]), heading: true }); continue; }
-    if (/^\s*([-*_])\s*(\1\s*){2,}$/.test(line)) { out.push({ text: "" }); continue; }
+    if (h) {
+      out.push({ text: stripMd(h[2]), heading: true });
+      continue;
+    }
+    if (/^\s*([-*_])\s*(\1\s*){2,}$/.test(line)) {
+      out.push({ text: "" });
+      continue;
+    }
     out.push({ text: stripMd(line) });
   }
   return out;
@@ -462,9 +680,17 @@ export function stripMd(s: string): string {
 }
 
 /** Extract readable lines from an HTML document (shared by .html files and EPUB chapters). */
-export function domToLines(root: Element, headingTags = ["h1", "h2", "h3"]): RawLine[] {
-  root.querySelectorAll("script,style,noscript,nav,header,footer,aside,form,iframe,svg,button,figure > figcaption").forEach((n) => n.remove());
-  const scope = root.querySelector("article") ?? root.querySelector("main") ?? root;
+export function domToLines(
+  root: Element,
+  headingTags = ["h1", "h2", "h3"],
+): RawLine[] {
+  root
+    .querySelectorAll(
+      "script,style,noscript,nav,header,footer,aside,form,iframe,svg,button,figure > figcaption",
+    )
+    .forEach((n) => n.remove());
+  const scope =
+    root.querySelector("article") ?? root.querySelector("main") ?? root;
   const nodes = scope.querySelectorAll("h1,h2,h3,h4,h5,h6,p,li,blockquote,pre");
   const out: RawLine[] = [];
   nodes.forEach((el) => {
@@ -475,10 +701,19 @@ export function domToLines(root: Element, headingTags = ["h1", "h2", "h3"]): Raw
   return out;
 }
 
-export function htmlToLines(raw: string): { lines: RawLine[]; title?: string; author?: string } {
+export function htmlToLines(raw: string): {
+  lines: RawLine[];
+  title?: string;
+  author?: string;
+} {
   const doc = new DOMParser().parseFromString(raw, "text/html");
-  const title = doc.querySelector("h1")?.textContent?.trim() || doc.title?.trim() || undefined;
-  const author = (doc.querySelector('meta[name="author"]') as HTMLMetaElement | null)?.content || undefined;
+  const title =
+    doc.querySelector("h1")?.textContent?.trim() ||
+    doc.title?.trim() ||
+    undefined;
+  const author =
+    (doc.querySelector('meta[name="author"]') as HTMLMetaElement | null)
+      ?.content || undefined;
   return { lines: domToLines(doc.body), title, author };
 }
 
@@ -486,21 +721,49 @@ export function htmlToLines(raw: string): { lines: RawLine[]; title?: string; au
 
 /** Post-parse verification: proves the text layer was actually retrieved
  *  (not just that the container opened) before anything touches the shelf. */
-export function verifyParsed(p: ParsedDoc): { ok: true; passages: number } | { ok: false; reason: string } {
+export function verifyParsed(
+  p: ParsedDoc,
+): { ok: true; passages: number } | { ok: false; reason: string } {
   const passages = p.chapters.reduce((a, c) => a + c.chunks.length, 0);
-  if (p.chapters.length === 0) return { ok: false, reason: "No chapters were detected in this file." };
-  if (passages === 0) return { ok: false, reason: "No readable passages were extracted." };
-  const nonEmpty = p.chapters.every((c) => c.chunks.some((k) => k.text.trim().length > 0));
-  if (!nonEmpty) return { ok: false, reason: "Extracted chapters contain no text — the file may be image-only." };
-  if (p.wordCount < 10) return { ok: false, reason: "Extracted text is too short to be a document." };
+  if (p.chapters.length === 0)
+    return { ok: false, reason: "No chapters were detected in this file." };
+  if (passages === 0)
+    return { ok: false, reason: "No readable passages were extracted." };
+  const nonEmpty = p.chapters.every((c) =>
+    c.chunks.some((k) => k.text.trim().length > 0),
+  );
+  if (!nonEmpty)
+    return {
+      ok: false,
+      reason:
+        "Extracted chapters contain no text — the file may be image-only.",
+    };
+  if (p.wordCount < 10)
+    return {
+      ok: false,
+      reason: "Extracted text is too short to be a document.",
+    };
   return { ok: true, passages };
 }
 
-export async function ingestFile(file: File, maxMB: number): Promise<ParsedDoc> {
+export async function ingestFile(
+  file: File,
+  maxMB: number,
+): Promise<ParsedDoc> {
   validateFile(file, maxMB);
   const head = new Uint8Array(await file.slice(0, 16).arrayBuffer());
-  const fmt = detectFormat(file.name, file.type, head);
-  if (!fmt) throw new IngestError("Couldn’t identify this file’s format from its content.", "content");
+  let fmt = detectFormat(file.name, file.type, head);
+  // Extension/mime unknown but the file is a zip container (PK\x03\x04)?
+  // Identify it by its internal structure (EPUB mimetype entry, OOXML parts)
+  // so mislabeled or extension-less archives still import.
+  if (!fmt && head[0] === 0x50 && head[1] === 0x4b) {
+    fmt = await sniffZipType(file);
+  }
+  if (!fmt)
+    throw new IngestError(
+      "Couldn’t identify this file’s format from its content.",
+      "content",
+    );
 
   let raw: RawDoc;
   if (fmt === "txt") {
@@ -510,20 +773,33 @@ export async function ingestFile(file: File, maxMB: number): Promise<ParsedDoc> 
   } else if (fmt === "html") {
     raw = htmlToLines(await readTextFile(file));
   } else {
-    raw = fmt === "pdf" ? await parsePdf(file) : fmt === "epub" ? await parseEpub(file) : fmt === "pptx" ? await parsePptx(file) : await parseDocx(file);
+    raw =
+      fmt === "pdf"
+        ? await parsePdf(file)
+        : fmt === "epub"
+          ? await parseEpub(file)
+          : fmt === "pptx"
+            ? await parsePptx(file)
+            : await parseDocx(file);
   }
 
   const deduped = dedupeRunningHeads(raw.lines);
   const notes: string[] = [];
-  if (deduped.removed > 0) notes.push(`Removed ${deduped.removed} repeated running-header lines.`);
+  if (deduped.removed > 0)
+    notes.push(`Removed ${deduped.removed} repeated running-header lines.`);
 
   let sections = buildChapters(deduped.lines);
-  if (sections.length === 0) throw new IngestError("No readable text could be extracted from this file.", "empty");
+  if (sections.length === 0)
+    throw new IngestError(
+      "No readable text could be extracted from this file.",
+      "empty",
+    );
 
   const allText = sections.flatMap((s) => s.paras).join("\n");
   const wordCount = allText.split(/\s+/).filter(Boolean).length;
 
-  if (sections.length === 1) sections = fallbackSplit(sections[0].paras, wordCount);
+  if (sections.length === 1)
+    sections = fallbackSplit(sections[0].paras, wordCount);
 
   const chapters = toChapters(sections);
   const fallback = metaFromFilename(file.name);
@@ -549,11 +825,15 @@ export function globalChunkCount(chapters: Chapter[]): number {
   return chapters.reduce((a, c) => a + c.chunks.length, 0);
 }
 
-export function chapterAtChunk(chapters: Chapter[], globalIdx: number): { chapterIndex: number; localIndex: number } {
+export function chapterAtChunk(
+  chapters: Chapter[],
+  globalIdx: number,
+): { chapterIndex: number; localIndex: number } {
   let acc = 0;
   for (let i = 0; i < chapters.length; i++) {
     const len = chapters[i].chunks.length;
-    if (globalIdx < acc + len) return { chapterIndex: i, localIndex: globalIdx - acc };
+    if (globalIdx < acc + len)
+      return { chapterIndex: i, localIndex: globalIdx - acc };
     acc += len;
   }
   return { chapterIndex: Math.max(0, chapters.length - 1), localIndex: 0 };

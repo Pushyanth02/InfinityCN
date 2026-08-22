@@ -1,6 +1,13 @@
 /** Shared domain types for Lemniscate. No `any` — keep the contract explicit. */
 
-export type SourceType = "pdf" | "epub" | "docx" | "pptx" | "markdown" | "txt" | "html";
+export type SourceType =
+  | "pdf"
+  | "epub"
+  | "docx"
+  | "pptx"
+  | "markdown"
+  | "txt"
+  | "html";
 export type DocumentStatus = "processing" | "ready" | "error";
 export type BotId = "luma" | "ouro" | "ankaa";
 
@@ -66,6 +73,7 @@ export interface DocumentRow {
 
 export interface BookmarkRow {
   id: string;
+  userId: string;
   documentId: string;
   chunkIndex: number;
   label: string;
@@ -76,6 +84,7 @@ export interface BookmarkRow {
 export type AnnotationColor = "gold" | "ouro" | "ankaa" | "ok";
 export interface AnnotationRow {
   id: string;
+  userId: string;
   documentId: string;
   chunkIndex: number;
   start: number;
@@ -87,8 +96,17 @@ export interface AnnotationRow {
 }
 
 export type ActivityType =
-  | "upload" | "read" | "bookmark" | "annotation" | "summary" | "scenes"
-  | "delete" | "favorite" | "story" | "analyze" | "finish";
+  | "upload"
+  | "read"
+  | "bookmark"
+  | "annotation"
+  | "summary"
+  | "scenes"
+  | "delete"
+  | "favorite"
+  | "story"
+  | "analyze"
+  | "finish";
 
 export interface ActivityRow {
   id: string;
@@ -101,6 +119,7 @@ export interface ActivityRow {
 
 export interface AiSceneRow {
   id: string;
+  userId: string;
   documentId: string;
   chapterIndex: number;
   ordinal: number;
@@ -150,7 +169,13 @@ export interface AnalysisJob {
   wordsPerMinute?: number | null;
 }
 
-export type AnkaaMode = "continue" | "alternate" | "chapter" | "lore" | "children" | "whatif";
+export type AnkaaMode =
+  | "continue"
+  | "alternate"
+  | "chapter"
+  | "lore"
+  | "children"
+  | "whatif";
 export interface StoryRow {
   id: string;
   userId: string;
@@ -170,8 +195,14 @@ export interface StoryRow {
  *  novel typography), Georgia (ubiquitous screen serif), Bookerly/Charter
  *  (Kindle-grade system stacks). */
 export type ReaderFontId =
-  | "literata" | "garamond" | "spectral" | "sourceserif"
-  | "georgia" | "bookerly" | "baskerville" | "palatino";
+  | "literata"
+  | "garamond"
+  | "spectral"
+  | "sourceserif"
+  | "georgia"
+  | "bookerly"
+  | "baskerville"
+  | "palatino";
 export type ReaderThemeId = "light" | "dark" | "sepia";
 
 export interface ReaderSettings {
@@ -254,5 +285,13 @@ export interface SceneDraft {
 }
 
 export type View =
-  | "landing" | "dashboard" | "library" | "upload" | "reader"
-  | "settings" | "account" | "analytics" | "history" | "create";
+  | "landing"
+  | "dashboard"
+  | "library"
+  | "upload"
+  | "reader"
+  | "settings"
+  | "account"
+  | "analytics"
+  | "history"
+  | "create";

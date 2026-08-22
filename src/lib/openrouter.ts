@@ -59,7 +59,8 @@ export function getKeyMasked(): string {
    ──────────────────────────────────────────────────────────── */
 
 function requireKey(): string {
-  if (!sessionKey) throw new Error("No OpenRouter key set — add one in Settings.");
+  if (!sessionKey)
+    throw new Error("No OpenRouter key set — add one in Settings.");
   return sessionKey;
 }
 
@@ -115,10 +116,15 @@ function sanitiseUpstream(body: unknown, status: number): string {
    sanitised message on any failure.
    ──────────────────────────────────────────────────────────── */
 
-export async function validateKey(key: string): Promise<{ ok: boolean; message: string }> {
+export async function validateKey(
+  key: string,
+): Promise<{ ok: boolean; message: string }> {
   const k = key.trim();
   if (!k || k.length < 10) {
-    return { ok: false, message: "Key looks too short — OpenRouter keys start with sk-or-…" };
+    return {
+      ok: false,
+      message: "Key looks too short — OpenRouter keys start with sk-or-…",
+    };
   }
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), KEY_TIMEOUT_MS);
@@ -129,7 +135,10 @@ export async function validateKey(key: string): Promise<{ ok: boolean; message: 
       headers: authHeaders(k),
     });
     if (!res.ok) {
-      return { ok: false, message: sanitiseUpstream(await safeJson(res), res.status) };
+      return {
+        ok: false,
+        message: sanitiseUpstream(await safeJson(res), res.status),
+      };
     }
     return { ok: true, message: "Key works — OpenRouter is reachable." };
   } catch (e) {
@@ -146,9 +155,15 @@ export async function validateKey(key: string): Promise<{ ok: boolean; message: 
  *  `setSessionKey()`). Used by `testConnection()` in ./ai so the
  *  Settings "Test connection" button can probe the live session key
  *  without ever exposing the raw key to other modules. */
-export async function validateSessionKey(): Promise<{ ok: boolean; message: string }> {
+export async function validateSessionKey(): Promise<{
+  ok: boolean;
+  message: string;
+}> {
   if (!sessionKey) {
-    return { ok: false, message: "No OpenRouter key set — paste your key in Settings to connect." };
+    return {
+      ok: false,
+      message: "No OpenRouter key set — paste your key in Settings to connect.",
+    };
   }
   return validateKey(sessionKey);
 }
@@ -204,7 +219,10 @@ export async function fetchFreeModels(_force = false): Promise<AiModelInfo[]> {
    Chat — POST /api/v1/chat/completions
    ──────────────────────────────────────────────────────────── */
 
-export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
+export type ChatMessage = {
+  role: "system" | "user" | "assistant";
+  content: string;
+};
 
 /** Parse a single SSE buffer chunk into [events, leftover]. Pure —
  *  unit-testable. Exposed via re-export in `./ai` for the existing
@@ -228,7 +246,7 @@ export async function streamChat(
   model: string,
   onDelta: (chunk: string) => void,
   signal: AbortSignal | undefined,
-  opts: { temperature?: number; maxTokens?: number } = {}
+  opts: { temperature?: number; maxTokens?: number } = {},
 ): Promise<{ text: string; tokens: number | null }> {
   const body: Record<string, unknown> = {
     model,
@@ -253,6 +271,10 @@ export async function streamChat(
   let buf = "";
   let text = "";
   let tokens: number | null = null;
+  // Bound the number of tolerated malformed frames — a stream that is
+  // persistently garbage (proxy error page, truncated JSON) must fail
+  // loudly instead of silently returning an empty/partial answer.
+  let malformed = 0;
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -269,7 +291,9 @@ export async function streamChat(
         };
         if (j.error?.message) {
           // Strip any accidental key echo from upstream error messages.
-          throw new Error(j.error.message.replace(/sk-or-[A-Za-z0-9-_]+/gi, "sk-or-••••"));
+          throw new Error(
+            j.error.message.replace(/sk-or-[A-Za-z0-9-_]+/gi, "sk-or-••••"),
+          );
         }
         const delta = j.choices?.[0]?.delta?.content;
         if (delta) {
@@ -279,7 +303,12 @@ export async function streamChat(
         if (j.usage?.total_tokens) tokens = j.usage.total_tokens;
       } catch (e) {
         if (e instanceof Error && !e.message.includes("JSON")) throw e;
-        // tolerate one malformed frame — SSE chunks sometimes split a JSON object
+        // Tolerate occasional malformed frames — SSE chunks sometimes split
+        // a JSON object across network boundaries — but only a few.
+        if (++malformed > 3)
+          throw new Error(
+            "Stream contained too many malformed frames — aborting.",
+          );
       }
     }
   }
@@ -293,7 +322,7 @@ export async function chat(
   messages: ChatMessage[],
   model: string,
   timeoutMs: number = CHAT_TIMEOUT_MS,
-  maxTokens?: number
+  maxTokens?: number,
 ): Promise<{ text: string; tokens: number | null }> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
