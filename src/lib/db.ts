@@ -183,15 +183,26 @@ export async function idbByIndex<T extends Row>(
 
 /* ---------------- session identity ---------------- */
 
-const UID_KEY = "lemniscate:uid";
-const UID_CREATED_KEY = "lemniscate:uid-created";
+/** localStorage keys for the anonymous local identity. Exported so other
+ *  surfaces (e.g. Settings' "rotate identity" action) never duplicate the
+ *  literals. */
+export const UID_KEY = "lemniscate:uid";
+export const UID_CREATED_KEY = "lemniscate:uid-created";
 
 /** Anonymous signed-style local identity. All rows are stamped with it so
- *  data access is always filtered by owner — mirroring server-side isolation. */
+ *  data access is always filtered by owner — mirroring server-side isolation.
+ *  Uses crypto.randomUUID() (CSPRNG) when available; falls back to the
+ *  legacy Math.random scheme only in environments without Web Crypto. */
 export function getUserId(): string {
   let id = localStorage.getItem(UID_KEY);
   if (!id) {
-    id = `anon_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
+    const cryptoObj =
+      typeof globalThis.crypto !== "undefined" ? globalThis.crypto : null;
+    if (cryptoObj && typeof cryptoObj.randomUUID === "function") {
+      id = `anon_${cryptoObj.randomUUID()}`;
+    } else {
+      id = `anon_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
+    }
     localStorage.setItem(UID_KEY, id);
     localStorage.setItem(UID_CREATED_KEY, String(Date.now()));
   }

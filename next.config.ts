@@ -7,8 +7,8 @@ const nextConfig: NextConfig = {
   /* Static export for optimal client-side CDN performance on Vercel. */
   output: "export",
 
-  /* Allow the preview environment's proxy origin to load dev resources. */
-  allowedDevOrigins: ["*.space-z.ai", "*.chatglm.cn", "localhost", "127.0.0.1"],
+  /* Allow local dev origins only — no third-party preview scaffolding. */
+  allowedDevOrigins: ["localhost", "127.0.0.1"],
 };
 
 export default nextConfig;

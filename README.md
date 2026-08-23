@@ -80,15 +80,15 @@ graph TD
     C -->|MD / HTML / TXT| D3[DOM & Gutenberg Sanitizer]
     D1 & D2 & D3 --> E[Chapter Segmenter & Scoring Engine]
     E --> F[(IndexedDB Storage Vault)]
-    
+
     F --> G[Reader Runtime Engine]
     G --> H[8 Typography Stacks & Scoped Lighting]
     G --> I[Global ⌘K Spotlight & Scene Mode]
-    
+
     F --> J{AI Orchestrator}
     J -->|Online BYOK| K[Meridian Dynamic Model Router]
     J -->|Offline / No Key| L[Anchor Extractive NLP Engine]
-    
+
     K & L --> M1[Luma: Conversational Margin Stream]
     K & L --> M2[Ouro: Zod-Validated Seminar Sets]
     K & L --> M3[Ankaa: Async Long-Form Writing Queue]
@@ -100,11 +100,11 @@ graph TD
 
 Lemniscate introduces three specialized companions operating alongside your reading flow:
 
-| Companion | Archetype | Capabilities | Offline Mode (Anchor) |
-|:---|:---|:---|:---|
-| **Luma** | *Marginalia Conversationalist* | Token-by-token SSE streaming, contextual chapter citations, quote extraction, conversational depth, markdown-lite rendering. | Extractive text search with heuristic sentence scoring and quotation ranking. |
-| **Ouro** | *Seminar & Study Architect* | Generates comprehensive study sets: Executive summaries, thematic breakdowns, character rosters, vocabulary, sourced quizzes, flashcards, and essay prompts. Validated with strict **Zod schemas** and cached 7 days per document hash. | Deterministic extraction of key vocabulary, structural summaries, and passage-level flashcards. |
-| **Ankaa** | *Writing & Synthesis Desk* | Drafts long-form essays, critiques, and creative extensions (~2,500 words online / ~1,800 words offline). Managed via an **asynchronous background job queue** with live word counts, step trackers, and crash recovery. | Multi-pass heuristic expansion synthesizing chapter segments into structured drafts. |
+| Companion | Archetype                      | Capabilities                                                                                                                                                                                                                            | Offline Mode (Anchor)                                                                           |
+| :-------- | :----------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------- |
+| **Luma**  | _Marginalia Conversationalist_ | Token-by-token SSE streaming, contextual chapter citations, quote extraction, conversational depth, markdown-lite rendering.                                                                                                            | Extractive text search with heuristic sentence scoring and quotation ranking.                   |
+| **Ouro**  | _Seminar & Study Architect_    | Generates comprehensive study sets: Executive summaries, thematic breakdowns, character rosters, vocabulary, sourced quizzes, flashcards, and essay prompts. Validated with strict **Zod schemas** and cached 7 days per document hash. | Deterministic extraction of key vocabulary, structural summaries, and passage-level flashcards. |
+| **Ankaa** | _Writing & Synthesis Desk_     | Drafts long-form essays, critiques, and creative extensions (~2,500 words online / ~1,800 words offline). Managed via an **asynchronous background job queue** with live word counts, step trackers, and crash recovery.                | Multi-pass heuristic expansion synthesizing chapter segments into structured drafts.            |
 
 ---
 
@@ -113,7 +113,9 @@ Lemniscate introduces three specialized companions operating alongside your read
 The reader interface is designed to disappear, leaving only the narrative.
 
 ### Typography Stacks
+
 Research-backed typography engineered specifically for sustained long-form reading:
+
 - **Literata**: Modern digital book face designed for Google Play Books.
 - **EB Garamond**: Classic Renaissance elegance with true book proportions.
 - **Spectral**: Crisp, contemporary editorial serif created for screen legibility.
@@ -124,12 +126,14 @@ Research-backed typography engineered specifically for sustained long-form readi
 - **Palatino**: Hermann Zapf's humanist Renaissance masterpiece.
 
 ### Lighting & Contrast Scopes
+
 - **Obsidian Dark**: Warm near-black backgrounds (`#08070a` to `#15131b`) with amber undertones.
 - **Vellum Light**: Soft, low-glare parchment surface (`#f7f4ed`) tailored for daylight.
 - **Parchment Sepia**: Warm nostalgic paper tone (`#f0e3c9`) with earthen contrast.
 - **High-Contrast Toggle**: Intensifies text contrast across all three lighting scopes.
 
 ### Reading Controls
+
 - **Cinematic Scene Mode (`s`)**: Isolates dialogue and action into focused theatrical beats.
 - **In-Document Search (`/`)**: Instant client-side fuzzy search across all chapters.
 - **Text Controls**: Granular adjustments for font size, line height, paragraph spacing, measure width, and decorative drop-caps.
@@ -141,15 +145,15 @@ Research-backed typography engineered specifically for sustained long-form readi
 
 To ensure safety and reliability, Lemniscate validates all uploaded files using **magic bytes** rather than trusting client-reported MIME types:
 
-| Format | Magic Bytes / Header | Ingestion Adapter | Output Structure |
-|:---|:---|:---|:---|
-| **PDF** | `%PDF-` (`0x25 0x50 0x44 0x46 0x2D`) | `pdfjs-dist` (Worker-isolated) | Font-size heuristic chapters & structural sections |
-| **EPUB** | `PK\x03\x04` (`mimetype: application/epub+zip`) | `JSZip` Container & OPF Spine Walk | Ordered spine items transformed into native chapters |
-| **DOCX** | `PK\x03\x04` (`word/document.xml`) | `JSZip` XML Parser | Heading-style mapped chapters and paragraph preservation |
-| **PPTX** | `PK\x03\x04` (`ppt/presentation.xml`) | `JSZip` XML Slide Extractor | Individual slides formatted as discrete readable chapters |
-| **Markdown** | Text UTF-8 Validation | Native Regex Parser | ATX (`#`) and Setext (`===`) heading hierarchies |
-| **HTML** | `<!DOCTYPE html` or `<html>` | DOMParser + Readability Sanitizer | Stripped boilerplate, extracted main prose chapters |
-| **Plain Text** | UTF-8 / ASCII Byte Validation | Boilerplate Stripper | Project Gutenberg header/footer sanitization, chapter splits |
+| Format         | Magic Bytes / Header                            | Ingestion Adapter                  | Output Structure                                             |
+| :------------- | :---------------------------------------------- | :--------------------------------- | :----------------------------------------------------------- |
+| **PDF**        | `%PDF-` (`0x25 0x50 0x44 0x46 0x2D`)            | `pdfjs-dist` (Worker-isolated)     | Font-size heuristic chapters & structural sections           |
+| **EPUB**       | `PK\x03\x04` (`mimetype: application/epub+zip`) | `JSZip` Container & OPF Spine Walk | Ordered spine items transformed into native chapters         |
+| **DOCX**       | `PK\x03\x04` (`word/document.xml`)              | `JSZip` XML Parser                 | Heading-style mapped chapters and paragraph preservation     |
+| **PPTX**       | `PK\x03\x04` (`ppt/presentation.xml`)           | `JSZip` XML Slide Extractor        | Individual slides formatted as discrete readable chapters    |
+| **Markdown**   | Text UTF-8 Validation                           | Native Regex Parser                | ATX (`#`) and Setext (`===`) heading hierarchies             |
+| **HTML**       | `<!DOCTYPE html` or `<html>`                    | DOMParser + Readability Sanitizer  | Stripped boilerplate, extracted main prose chapters          |
+| **Plain Text** | UTF-8 / ASCII Byte Validation                   | Boilerplate Stripper               | Project Gutenberg header/footer sanitization, chapter splits |
 
 ---
 
@@ -183,15 +187,15 @@ Lemniscate is styled using Tailwind CSS v4's `@theme` directive, utilizing warm 
 
 ```css
 /* Palette Tokens */
---color-ink-950: #08070a;      /* Obsidian canvas */
---color-ink-900: #0d0c10;      /* Elevated dark surface */
---color-mist-100: #f5f1ea;     /* Primary parchment text */
---color-gold-500: #d9ad52;     /* Core amber accent */
+--color-ink-950: #08070a; /* Obsidian canvas */
+--color-ink-900: #0d0c10; /* Elevated dark surface */
+--color-mist-100: #f5f1ea; /* Primary parchment text */
+--color-gold-500: #d9ad52; /* Core amber accent */
 
 /* Companion Accent Tokens */
---color-ouro-500: #6d84e8;     /* Study indigo */
---color-ankaa-500: #db814c;    /* Writing ember */
---color-ok-500: #67ba7c;       /* Reading moss */
+--color-ouro-500: #6d84e8; /* Study indigo */
+--color-ankaa-500: #db814c; /* Writing ember */
+--color-ok-500: #67ba7c; /* Reading moss */
 ```
 
 Dynamic accent switching (`data-accent="ouro | ankaa | ok"`) dynamically recalculates the entire application's focus rings, badges, progress bars, and glows through centralized CSS custom properties.
@@ -200,27 +204,29 @@ Dynamic accent switching (`data-accent="ouro | ankaa | ok"`) dynamically recalcu
 
 ## ✦ Keyboard Shortcuts
 
-| Shortcut | Scope | Action |
-|:---|:---|:---|
-| <kbd>⌘</kbd> + <kbd>K</kbd> / <kbd>Ctrl</kbd> + <kbd>K</kbd> | Global | Open Universal Spotlight Search |
-| <kbd>Alt</kbd> + <kbd>→</kbd> | Reader | Advance to Next Chapter |
-| <kbd>Alt</kbd> + <kbd>←</kbd> | Reader | Return to Previous Chapter |
-| <kbd>/</kbd> | Reader | Open In-Document Search |
-| <kbd>L</kbd> | Reader | Toggle Luma & Ouro Margin Drawer |
-| <kbd>T</kbd> | Reader | Toggle Table of Contents Drawer |
-| <kbd>B</kbd> | Reader | Add Bookmark / View Annotations |
-| <kbd>S</kbd> | Reader | Toggle Cinematic Scene Mode |
-| <kbd>Esc</kbd> | Overlays | Dismiss Modal / Close Active Drawer |
+| Shortcut                                                     | Scope    | Action                              |
+| :----------------------------------------------------------- | :------- | :---------------------------------- |
+| <kbd>⌘</kbd> + <kbd>K</kbd> / <kbd>Ctrl</kbd> + <kbd>K</kbd> | Global   | Open Universal Spotlight Search     |
+| <kbd>Alt</kbd> + <kbd>→</kbd>                                | Reader   | Advance to Next Chapter             |
+| <kbd>Alt</kbd> + <kbd>←</kbd>                                | Reader   | Return to Previous Chapter          |
+| <kbd>/</kbd>                                                 | Reader   | Open In-Document Search             |
+| <kbd>L</kbd>                                                 | Reader   | Toggle Luma & Ouro Margin Drawer    |
+| <kbd>T</kbd>                                                 | Reader   | Toggle Table of Contents Drawer     |
+| <kbd>B</kbd>                                                 | Reader   | Add Bookmark / View Annotations     |
+| <kbd>S</kbd>                                                 | Reader   | Toggle Cinematic Scene Mode         |
+| <kbd>Esc</kbd>                                               | Overlays | Dismiss Modal / Close Active Drawer |
 
 ---
 
 ## ✦ Quick Start
 
 ### Prerequisites
+
 - **Runtime**: [Bun](https://bun.sh) `>= 1.1` (or Node.js `>= 20`)
 - **Package Manager**: Bun (recommended) or npm/pnpm/yarn
 
 ### 1. Clone & Install
+
 ```bash
 git clone https://github.com/Pushyanth02/Lemniscate.git
 cd Lemniscate
@@ -228,10 +234,12 @@ bun install
 ```
 
 ### 2. Launch Local Dev Server
+
 ```bash
 bun run dev
 ```
-Open **[http://localhost:3000](http://localhost:3000)**. Two classic texts are seeded into your local library immediately on first launch.
+
+Open **[http://localhost:3000](http://localhost:3000)**. The library starts empty — nothing is seeded automatically. You can import your own documents, or load two optional sample books from the Library's empty state (explicitly opt-in, never fabricated history).
 
 ---
 
@@ -253,7 +261,10 @@ bun run build
 # Clean build artifacts and caches
 bun run clean
 
-# Run complete CI verification suite (lint + typecheck + build)
+# Run the test suite (Vitest, 63 unit tests)
+bun run test
+
+# Run complete CI verification suite (lint + typecheck + test + build)
 bun run ci
 ```
 
@@ -262,18 +273,25 @@ bun run ci
 ## ✦ Deployment
 
 ### Vercel (Recommended)
+
 Lemniscate is configured for static export deployment on [Vercel](https://vercel.com).
+
 ```bash
 bunx vercel --prod
 ```
+
 Since Lemniscate is client-rendered with IndexedDB storage, no backend server environment variables or serverless functions are required.
 
 ### Any Static Host
+
 Build the static distribution:
+
 ```bash
 bun run build
 ```
+
 Deploy the generated `out/` directory to GitHub Pages, Cloudflare Pages, Netlify, or serve locally:
+
 ```bash
 bunx serve out
 ```

@@ -30,7 +30,14 @@
  *   - Graceful degradation — always returns *something* useful
  */
 
-import type { AnkaaMode, DeepAnalysis, DocumentRow, QuizQuestion, SceneDraft, StudyData } from "./types";
+import type {
+  AnkaaMode,
+  DeepAnalysis,
+  DocumentRow,
+  QuizQuestion,
+  SceneDraft,
+  StudyData,
+} from "./types";
 import { clamp } from "./utils";
 
 /* ═══════════════════════════════════════════════════
@@ -40,12 +47,45 @@ import { clamp } from "./utils";
 /** Stop-word set — common English function words filtered from frequency
  *  analysis. Kept conservative so literary keywords survive. */
 export const STOP = new Set(
-  ("the a an and or of to in was is are were be been being it its this that these those with for as had have has his her their them they he she we you i not but at by on from into over under again then than there here when while which who whom what why how all any both each few more most other some such no nor only own same so too very can will just should could would might must also about up out if because until against during before after above below between".split(" "))
+  "the a an and or of to in was is are were be been being it its this that these those with for as had have has his her their them they he she we you i not but at by on from into over under again then than there here when while which who whom what why how all any both each few more most other some such no nor only own same so too very can will just should could would might must also about up out if because until against during before after above below between".split(
+    " ",
+  ),
 );
 
 /** Abbreviations that should NOT end a sentence. */
 const ABBREVS = new Set([
-  "mr","mrs","ms","dr","prof","rev","hon","jr","sr","st","vs","etc","e.g","i.e","fig","no","vol","pp","ch","sec","p","op","ed","eds","trans","comp","dept","univ","inc","ltd","co","corp",
+  "mr",
+  "mrs",
+  "ms",
+  "dr",
+  "prof",
+  "rev",
+  "hon",
+  "jr",
+  "sr",
+  "st",
+  "vs",
+  "etc",
+  "e.g",
+  "i.e",
+  "fig",
+  "no",
+  "vol",
+  "pp",
+  "ch",
+  "sec",
+  "p",
+  "op",
+  "ed",
+  "eds",
+  "trans",
+  "comp",
+  "dept",
+  "univ",
+  "inc",
+  "ltd",
+  "co",
+  "corp",
 ]);
 
 /** Tokenize into lowercase words (Unicode-aware, handles apostrophes and hyphens). */
@@ -76,21 +116,28 @@ function segment(text: string): string[] {
       // Look ahead: is the next non-space char a capital letter or a quote?
       // If so, this is likely a sentence boundary.
       let j = i + 1;
-      while (j < text.length && /\s/.test(text[j])) j++;
+      while (j < text.length && /\s/.test(text.charAt(j))) j++;
       const next = text[j] ?? "";
       // Check for abbreviation: word before the period is a known abbrev
       const before = buf.trim().split(/\s+/).pop() ?? "";
       const wordBefore = before.toLowerCase().replace(/[^a-z.]/g, "");
-      const isAbbrev = ABBREVS.has(wordBefore) || (before.includes(".") && before.length <= 5);
+      const isAbbrev =
+        ABBREVS.has(wordBefore) || (before.includes(".") && before.length <= 5);
       // Don't break inside a decimal number (e.g. "3.14")
       const isDecimal = /\d\.\d/.test(buf.slice(-4));
       // Don't break if next char is lowercase (e.g., "Mr. smith")
       const nextIsLower = /[a-z]/.test(next);
       // Dialogue: if we're inside quotes, only break on the closing quote
-      const inQuotes = (buf.match(/["“]/g)?.length ?? 0) > (buf.match(/["”]/g)?.length ?? 0);
+      const inQuotes =
+        (buf.match(/["“]/g)?.length ?? 0) > (buf.match(/["”]/g)?.length ?? 0);
       if (!isAbbrev && !isDecimal && !nextIsLower && !inQuotes) {
         // Consume closing quote if present
-        if (text[i + 1] === '"' || text[i + 1] === "”" || text[i + 1] === "’" || text[i + 1] === ")") {
+        if (
+          text[i + 1] === '"' ||
+          text[i + 1] === "”" ||
+          text[i + 1] === "’" ||
+          text[i + 1] === ")"
+        ) {
           buf += text[i + 1];
           i += 2;
         } else {
@@ -154,7 +201,10 @@ export function freqMap(text: string): Map<string, number> {
 }
 
 export function topKeywords(text: string, n = 12): string[] {
-  return [...freqMap(text).entries()].sort((a, b) => b[1] - a[1]).slice(0, n).map(([w]) => w);
+  return [...freqMap(text).entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, n)
+    .map(([w]) => w);
 }
 
 /* ═══════════════════════════════════════════════════
@@ -171,11 +221,15 @@ export function extractiveSummary(text: string, n = 5): string {
     const ws = wordList(s).filter((w) => !STOP.has(w) && w.length >= 3);
     const density = ws.reduce((a, w) => a + (freq.get(w) ?? 0), 0);
     const lengthNorm = Math.pow(ws.length + 3, 0.62);
-    const positionBonus = i < 2 ? 0.4 : i < 4 ? 0.2 : i > sents.length - 2 ? 0.15 : 0;
+    const positionBonus =
+      i < 2 ? 0.4 : i < 4 ? 0.2 : i > sents.length - 2 ? 0.15 : 0;
     const score = density / lengthNorm + positionBonus;
     return { s, i, score };
   });
-  const top = scored.sort((a, b) => b.score - a.score).slice(0, n).sort((a, b) => a.i - b.i);
+  const top = scored
+    .sort((a, b) => b.score - a.score)
+    .slice(0, n)
+    .sort((a, b) => a.i - b.i);
   return top.map((t) => t.s).join(" ");
 }
 
@@ -183,10 +237,16 @@ export function extractiveSummary(text: string, n = 5): string {
    5. Character detection (proper-noun + dialogue-verb)
    ═══════════════════════════════════════════════════ */
 
-const CHAR_VERBS = /\b(said|asked|replied|whispered|answered|called|cried|murmured|shouted|told|watched|smiled|nodded|thought|remembered|wondered|noticed|turned|stood|sat|walked|ran|looked|gazed|stared|glanced|frowned|laughed|wept|sighed)\b/i;
+const CHAR_VERBS =
+  /\b(said|asked|replied|whispered|answered|called|cried|murmured|shouted|told|watched|smiled|nodded|thought|remembered|wondered|noticed|turned|stood|sat|walked|ran|looked|gazed|stared|glanced|frowned|laughed|wept|sighed)\b/i;
 
-export function findCharacters(text: string, n = 6): { name: string; note: string }[] {
-  return memo(CHAR_CACHE, `${n}\u0001${text}`, () => findCharactersScan(text, n));
+export function findCharacters(
+  text: string,
+  n = 6,
+): { name: string; note: string }[] {
+  return memo(CHAR_CACHE, `${n}\u0001${text}`, () =>
+    findCharactersScan(text, n),
+  );
 }
 
 /** Common words and possessives that are NEVER character names, regardless
@@ -194,31 +254,131 @@ export function findCharacters(text: string, n = 6): { name: string; note: strin
  *  affects weighting, never filter bypass. */
 const NEVER_CHARACTER = new Set([
   // Pronouns
-  "He", "She", "It", "They", "We", "You", "I", "Me", "Him", "Her", "Us", "Them",
+  "He",
+  "She",
+  "It",
+  "They",
+  "We",
+  "You",
+  "I",
+  "Me",
+  "Him",
+  "Her",
+  "Us",
+  "Them",
   // Possessives (the source of the "Hers" false positive)
-  "His", "Hers", "Its", "Theirs", "Ours", "Yours", "Mine",
+  "His",
+  "Hers",
+  "Its",
+  "Theirs",
+  "Ours",
+  "Yours",
+  "Mine",
   // Articles
-  "The", "A", "An",
+  "The",
+  "A",
+  "An",
   // Conjunctions
-  "But", "And", "Or", "Nor", "Yet", "So", "For",
+  "But",
+  "And",
+  "Or",
+  "Nor",
+  "Yet",
+  "So",
+  "For",
   // Prepositions
-  "In", "On", "At", "To", "Of", "With", "From", "By", "As", "Into", "Over", "Under", "Through", "Between", "Against", "During", "Before", "After", "Above", "Below",
+  "In",
+  "On",
+  "At",
+  "To",
+  "Of",
+  "With",
+  "From",
+  "By",
+  "As",
+  "Into",
+  "Over",
+  "Under",
+  "Through",
+  "Between",
+  "Against",
+  "During",
+  "Before",
+  "After",
+  "Above",
+  "Below",
   // Demonstratives
-  "This", "That", "These", "Those", "There", "Here",
+  "This",
+  "That",
+  "These",
+  "Those",
+  "There",
+  "Here",
   // Question words
-  "What", "Which", "Who", "Whom", "Whose", "Why", "How", "When", "Where",
+  "What",
+  "Which",
+  "Who",
+  "Whom",
+  "Whose",
+  "Why",
+  "How",
+  "When",
+  "Where",
   // Common sentence starters
-  "When", "Then", "Now", "Soon", "Later", "Today", "Tonight", "Yesterday", "Tomorrow",
+  "When",
+  "Then",
+  "Now",
+  "Soon",
+  "Later",
+  "Today",
+  "Tonight",
+  "Yesterday",
+  "Tomorrow",
   // Quantifiers
-  "All", "Some", "Many", "Most", "Few", "More", "Less", "Every", "Each", "Both", "Either", "Neither", "Other", "Such", "Another",
+  "All",
+  "Some",
+  "Many",
+  "Most",
+  "Few",
+  "More",
+  "Less",
+  "Every",
+  "Each",
+  "Both",
+  "Either",
+  "Neither",
+  "Other",
+  "Such",
+  "Another",
   // Negation
-  "No", "Not", "Never", "Nothing", "Nobody", "None",
+  "No",
+  "Not",
+  "Never",
+  "Nothing",
+  "Nobody",
+  "None",
   // Affirmation
-  "Yes", "Yeah",
+  "Yes",
+  "Yeah",
   // Modal verbs (capitalized at sentence start)
-  "Will", "Would", "Can", "Could", "Should", "Must", "May", "Might", "Shall",
+  "Will",
+  "Would",
+  "Can",
+  "Could",
+  "Should",
+  "Must",
+  "May",
+  "Might",
+  "Shall",
   // Common adverbs
-  "Only", "Even", "Still", "Also", "Just", "Quite", "Very", "Rather",
+  "Only",
+  "Even",
+  "Still",
+  "Also",
+  "Just",
+  "Quite",
+  "Very",
+  "Rather",
 ]);
 
 /** Words that, when they appear at a sentence start, are likely sentence-openers
@@ -226,13 +386,53 @@ const NEVER_CHARACTER = new Set([
  *  pattern like "Name said". These are filtered from `sentenceStarts` so they
  *  don't suppress real character detection. */
 const COMMON_SENTENCE_STARTERS = new Set([
-  "The", "A", "An", "It", "He", "She", "They", "But", "And", "When", "Then", "There",
-  "This", "That", "In", "On", "At", "For", "With", "His", "Her", "Its", "Their",
-  "What", "Why", "How", "No", "Yes", "Not", "I", "We", "You", "Some", "Every",
-  "All", "Many", "Most", "Other", "Such", "His", "Hers",
+  "The",
+  "A",
+  "An",
+  "It",
+  "He",
+  "She",
+  "They",
+  "But",
+  "And",
+  "When",
+  "Then",
+  "There",
+  "This",
+  "That",
+  "In",
+  "On",
+  "At",
+  "For",
+  "With",
+  "His",
+  "Her",
+  "Its",
+  "Their",
+  "What",
+  "Why",
+  "How",
+  "No",
+  "Yes",
+  "Not",
+  "I",
+  "We",
+  "You",
+  "Some",
+  "Every",
+  "All",
+  "Many",
+  "Most",
+  "Other",
+  "Such",
+  "His",
+  "Hers",
 ]);
 
-function findCharactersScan(text: string, n: number): { name: string; note: string }[] {
+function findCharactersScan(
+  text: string,
+  n: number,
+): { name: string; note: string }[] {
   const sents = sentences(text);
   const counts = new Map<string, number>();
   const firstMention = new Map<string, string>();
@@ -242,7 +442,8 @@ function findCharactersScan(text: string, n: number): { name: string; note: stri
   // should not make "The" a sentence-start candidate.
   for (const s of sents) {
     const first = s.match(/^["'“”‘’\s]*([A-Z][\p{L}'’-]*)/u)?.[1];
-    if (first && !COMMON_SENTENCE_STARTERS.has(first)) sentenceStarts.add(first);
+    if (first && !COMMON_SENTENCE_STARTERS.has(first))
+      sentenceStarts.add(first);
   }
 
   // Build a frequency map of lowercase word forms. A capitalized word whose
@@ -261,7 +462,9 @@ function findCharactersScan(text: string, n: number): { name: string; note: stri
   // Count capitalized occurrences from the raw tokens
   for (const s of sents) {
     for (const tok of s.split(/\s+/)) {
-      const clean = tok.replace(/^["'“”‘’([]+/, "").replace(/["'“”’”),.!?;:]+$/, "");
+      const clean = tok
+        .replace(/^["'“”‘’([]+/, "")
+        .replace(/["'“”’”),.!?;:]+$/, "");
       if (/^[A-Z][\p{L}'’-]{1,20}$/u.test(clean)) {
         const lower = clean.toLowerCase();
         capFreq.set(lower, (capFreq.get(lower) ?? 0) + 1);
@@ -272,7 +475,9 @@ function findCharactersScan(text: string, n: number): { name: string; note: stri
   for (const s of sents) {
     const tokens = s.split(/\s+/);
     for (let i = 0; i < tokens.length; i++) {
-      const raw = tokens[i].replace(/^["'“”‘’([]+/, "").replace(/["'“”’”),.!?;:]+$/, "");
+      const raw = (tokens[i] ?? "")
+        .replace(/^["'“”‘’([]+/, "")
+        .replace(/["'“”’”),.!?;:]+$/, "");
       // Must be a capitalized word, 2-20 chars
       if (!/^[A-Z][\p{L}'’-]{1,20}$/u.test(raw)) continue;
       // ALWAYS filter common words — they are never character names,
@@ -293,20 +498,35 @@ function findCharactersScan(text: string, n: number): { name: string; note: stri
       if (lowerCount >= 1 && capCount <= 1) continue;
       // Check if this is a plural/common noun by looking at the prev token:
       // if the previous token is an article ("the lamps"), skip it.
-      const prev = i > 0 ? tokens[i - 1] : "";
-      const prevIsArticle = /\b(the|a|an|some|many|these|those|all|both|each|every|his|her|its|their|our|your|my)\b/i.test(prev);
+      const prev = i > 0 ? (tokens[i - 1] ?? "") : "";
+      const prevIsArticle =
+        /\b(the|a|an|some|many|these|those|all|both|each|every|his|her|its|their|our|your|my)\b/i.test(
+          prev,
+        );
       if (prevIsArticle) continue;
       // Dialogue-verb adjacency: only words DIRECTLY ADJACENT to a dialogue
       // verb ("Ember said", "said Ember") get the 2× weight bonus. The old
       // sentence-level `mentionsVerb` flag gave "Lamps" (in `"Lamps don't
       // mind waiting," he said`) a 2× bonus even though "Lamps" is nowhere
       // near "said" — "he said" is the speaker, not "Lamps".
-      const nextRaw = i < tokens.length - 1 ? tokens[i + 1].replace(/^["'“”‘’([]+/, "").replace(/["'“”’”),.!?;:]+$/, "") : "";
-      const prevRaw = prev.replace(/^["'“”‘’([]+/, "").replace(/["'“”’”),.!?;:]+$/, "");
+      const nextRaw =
+        i < tokens.length - 1
+          ? (tokens[i + 1] ?? "")
+              .replace(/^["'“”‘’([]+/, "")
+              .replace(/["'“”’”),.!?;:]+$/, "")
+          : "";
+      const prevRaw = prev
+        .replace(/^["'“”‘’([]+/, "")
+        .replace(/["'“”’”),.!?;:]+$/, "");
       const adjacentVerb = CHAR_VERBS.test(nextRaw) || CHAR_VERBS.test(prevRaw);
       // If the word appears at sentence start AND is in the common-starters
       // set, skip it unless it's directly adjacent to a dialogue verb.
-      if (sentenceStarts.has(raw) && COMMON_SENTENCE_STARTERS.has(raw) && !adjacentVerb) continue;
+      if (
+        sentenceStarts.has(raw) &&
+        COMMON_SENTENCE_STARTERS.has(raw) &&
+        !adjacentVerb
+      )
+        continue;
       // Weight: a word directly adjacent to a dialogue verb ("Ember said")
       // gets 2× weight — this is the strongest character-name signal. A word
       // that only appears capitalized with no dialogue-verb adjacency gets 1×.
@@ -328,20 +548,176 @@ function findCharactersScan(text: string, n: number): { name: string; note: stri
    ═══════════════════════════════════════════════════ */
 
 const MOOD_LEXICON: [string, string[]][] = [
-  ["hushed anticipation", ["quiet", "still", "silence", "hush", "held", "waiting", "expect", "breath", "pause", "soft", "hush", "listening", "hovered"]],
-  ["ember warmth", ["fire", "warm", "hearth", "candle", "lamp", "glow", "gold", "amber", "tea", "bread", "kettle", "cozy", "wrapped"]],
-  ["cold unease", ["cold", "frost", "wind", "dark", "shadow", "fear", "dread", "empty", "iron", "grey", "gray", "sharp", "biting", "hollow"]],
-  ["wonder", ["light", "star", "sky", "wonder", "strange", "bright", "silver", "moon", "sea", "glass", "shimmer", "luminous", "glimmer"]],
-  ["tender sorrow", ["grief", "loss", "memory", "gone", "tears", "old", "forgotten", "farewell", "letter", "rain", "absence", "mourn", "lament"]],
-  ["tense resolve", ["grip", "steel", "edge", "set", "jaw", "fist", "ready", "stance", "watchful", "poised", "braced", "steady"]],
-  ["quiet joy", ["smile", "laugh", "warm", "glad", "bright", "light", "dance", "song", "music", "bloom", "sweet", "tender"]],
+  [
+    "hushed anticipation",
+    [
+      "quiet",
+      "still",
+      "silence",
+      "hush",
+      "held",
+      "waiting",
+      "expect",
+      "breath",
+      "pause",
+      "soft",
+      "hush",
+      "listening",
+      "hovered",
+    ],
+  ],
+  [
+    "ember warmth",
+    [
+      "fire",
+      "warm",
+      "hearth",
+      "candle",
+      "lamp",
+      "glow",
+      "gold",
+      "amber",
+      "tea",
+      "bread",
+      "kettle",
+      "cozy",
+      "wrapped",
+    ],
+  ],
+  [
+    "cold unease",
+    [
+      "cold",
+      "frost",
+      "wind",
+      "dark",
+      "shadow",
+      "fear",
+      "dread",
+      "empty",
+      "iron",
+      "grey",
+      "gray",
+      "sharp",
+      "biting",
+      "hollow",
+    ],
+  ],
+  [
+    "wonder",
+    [
+      "light",
+      "star",
+      "sky",
+      "wonder",
+      "strange",
+      "bright",
+      "silver",
+      "moon",
+      "sea",
+      "glass",
+      "shimmer",
+      "luminous",
+      "glimmer",
+    ],
+  ],
+  [
+    "tender sorrow",
+    [
+      "grief",
+      "loss",
+      "memory",
+      "gone",
+      "tears",
+      "old",
+      "forgotten",
+      "farewell",
+      "letter",
+      "rain",
+      "absence",
+      "mourn",
+      "lament",
+    ],
+  ],
+  [
+    "tense resolve",
+    [
+      "grip",
+      "steel",
+      "edge",
+      "set",
+      "jaw",
+      "fist",
+      "ready",
+      "stance",
+      "watchful",
+      "poised",
+      "braced",
+      "steady",
+    ],
+  ],
+  [
+    "quiet joy",
+    [
+      "smile",
+      "laugh",
+      "warm",
+      "glad",
+      "bright",
+      "light",
+      "dance",
+      "song",
+      "music",
+      "bloom",
+      "sweet",
+      "tender",
+    ],
+  ],
 ];
 
-const PLACE_WORDS = ["room", "hall", "street", "kitchen", "door", "threshold", "window", "house", "tower", "library", "stair", "floor", "table", "wall", "garden", "yard", "cellar", "attic"];
-const EXTERIOR_WORDS = ["street", "road", "field", "forest", "sea", "sky", "hill", "mountain", "valley", "river", "bridge", "garden", "yard", "market", "square"];
+const PLACE_WORDS = [
+  "room",
+  "hall",
+  "street",
+  "kitchen",
+  "door",
+  "threshold",
+  "window",
+  "house",
+  "tower",
+  "library",
+  "stair",
+  "floor",
+  "table",
+  "wall",
+  "garden",
+  "yard",
+  "cellar",
+  "attic",
+];
+const EXTERIOR_WORDS = [
+  "street",
+  "road",
+  "field",
+  "forest",
+  "sea",
+  "sky",
+  "hill",
+  "mountain",
+  "valley",
+  "river",
+  "bridge",
+  "garden",
+  "yard",
+  "market",
+  "square",
+];
 
 const TIME_WORDS: [string, string[]][] = [
-  ["dusk", ["dusk", "evening", "lamp", "candle", "sunset", "twilight", "gloaming"]],
+  [
+    "dusk",
+    ["dusk", "evening", "lamp", "candle", "sunset", "twilight", "gloaming"],
+  ],
   ["night", ["night", "midnight", "dark", "moon", "stars", "nocturnal"]],
   ["morning", ["morning", "dawn", "sunrise", "early", "breakfast", "rooster"]],
   ["noon", ["noon", "midday", "sun", "bright", "zenith"]],
@@ -354,29 +730,46 @@ export function moodOf(text: string): string {
 
 function classifyMood(text: string): string {
   const lower = text.toLowerCase();
-  const count = (list: string[]) => list.reduce((a, w) => a + (lower.split(w).length - 1), 0);
-  const mood = MOOD_LEXICON.map(([name, lex]) => [name, count(lex)] as const).sort((a, b) => b[1] - a[1])[0];
-  const time = TIME_WORDS.map(([name, lex]) => [name, count(lex)] as const).sort((a, b) => b[1] - a[1])[0];
+  const count = (list: string[]) =>
+    list.reduce((a, w) => a + (lower.split(w).length - 1), 0);
+  const moodName = MOOD_LEXICON.map(
+    ([name, lex]) => [name, count(lex)] as const,
+  ).sort((a, b) => b[1] - a[1])[0]?.[0];
+  const timeEntry = TIME_WORDS.map(
+    ([name, lex]) => [name, count(lex)] as const,
+  ).sort((a, b) => b[1] - a[1])[0];
   const interiorCount = count(PLACE_WORDS);
   const exteriorCount = count(EXTERIOR_WORDS);
   const interior = interiorCount >= exteriorCount;
-  return `${mood[0]} · ${time[1] > 0 ? time[0] : "unmarked time"} · ${interior ? "interior" : "exterior"}`;
+  return `${moodName ?? "hushed anticipation"} · ${timeEntry !== undefined && timeEntry[1] > 0 ? timeEntry[0] : "unmarked time"} · ${interior ? "interior" : "exterior"}`;
 }
 
 export function moodKey(text: string): string {
   const mood = moodOf(text);
-  return MOOD_LEXICON.map(([name]) => name).find((k) => mood.startsWith(k)) ?? "hushed anticipation";
+  return (
+    MOOD_LEXICON.map(([name]) => name).find((k) => mood.startsWith(k)) ??
+    "hushed anticipation"
+  );
 }
 
 /* ═══════════════════════════════════════════════════
    7. Theme extraction with chapter distribution
    ═══════════════════════════════════════════════════ */
 
-export function extractThemes(text: string, n = 4, chapters?: { title: string; text: string }[]): { name: string; note: string; distribution?: { chapter: string; count: number }[] }[] {
+export function extractThemes(
+  text: string,
+  n = 4,
+  chapters?: { title: string; text: string }[],
+): {
+  name: string;
+  note: string;
+  distribution?: { chapter: string; count: number }[];
+}[] {
   const kw = topKeywords(text, n + 2).slice(0, n);
   return kw.map((k) => {
     const relevant = sentences(text).filter((s) => s.toLowerCase().includes(k));
-    const note = extractiveSummary(relevant.join(" "), 1) || `Threads through the text.`;
+    const note =
+      extractiveSummary(relevant.join(" "), 1) || `Threads through the text.`;
     const distribution = chapters?.map((c) => ({
       chapter: c.title,
       count: c.text.toLowerCase().split(k).length - 1,
@@ -389,7 +782,10 @@ export function extractThemes(text: string, n = 4, chapters?: { title: string; t
    8. Vocabulary selection
    ═══════════════════════════════════════════════════ */
 
-export function extractVocab(text: string, n = 7): { term: string; context: string }[] {
+export function extractVocab(
+  text: string,
+  n = 7,
+): { term: string; context: string }[] {
   const sents = sentences(text);
   return [...freqMap(text).entries()]
     .filter(([w, c]) => w.length >= 7 && c >= 1 && c <= 4 && !STOP.has(w))
@@ -406,9 +802,13 @@ export function extractVocab(text: string, n = 7): { term: string; context: stri
    ═══════════════════════════════════════════════════ */
 
 export function clozeQuiz(text: string, n = 6): QuizQuestion[] {
-  const sents = sentences(text).filter((s) => wordList(s).length >= 6 && s.length < 280);
+  const sents = sentences(text).filter(
+    (s) => wordList(s).length >= 6 && s.length < 280,
+  );
   const freq = freqMap(text);
-  const candidates = [...freq.entries()].filter(([, c]) => c >= 2 && c <= 12).map(([w]) => w);
+  const candidates = [...freq.entries()]
+    .filter(([, c]) => c >= 2 && c <= 12)
+    .map(([w]) => w);
   const qs: QuizQuestion[] = [];
   const used = new Set<string>();
   for (const s of sents) {
@@ -416,15 +816,27 @@ export function clozeQuiz(text: string, n = 6): QuizQuestion[] {
     const words = s.split(/\s+/);
     const idx = words.findIndex((w, i) => {
       const clean = w.toLowerCase().replace(/[^a-z']/g, "");
-      return clean.length >= 5 && !STOP.has(clean) && freq.has(clean) && !used.has(clean) && i > 0 && i < words.length - 1;
+      return (
+        clean.length >= 5 &&
+        !STOP.has(clean) &&
+        freq.has(clean) &&
+        !used.has(clean) &&
+        i > 0 &&
+        i < words.length - 1
+      );
     });
     if (idx === -1) continue;
-    const answerWord = words[idx].replace(/[,.!?;:]+$/, "");
+    const answerWord = (words[idx] ?? "").replace(/[,.!?;:]+$/, "");
     const clean = answerWord.toLowerCase().replace(/[^a-z']/g, "");
     used.add(clean);
-    const distractors = candidates.filter((c) => c !== clean && Math.abs(c.length - clean.length) <= 2).sort(() => Math.random() - 0.5).slice(0, 3);
+    const distractors = candidates
+      .filter((c) => c !== clean && Math.abs(c.length - clean.length) <= 2)
+      .sort(() => Math.random() - 0.5)
+      .slice(0, 3);
     if (distractors.length < 3) continue;
-    const options = [answerWord, ...distractors].sort(() => Math.random() - 0.5);
+    const options = [answerWord, ...distractors].sort(
+      () => Math.random() - 0.5,
+    );
     qs.push({
       q: `Choose the word that completes the passage: “${words.slice(0, idx).join(" ")} ____ ${words.slice(idx + 1).join(" ")}”`,
       options,
@@ -439,11 +851,17 @@ export function clozeQuiz(text: string, n = 6): QuizQuestion[] {
    10. Flashcard generation
    ═══════════════════════════════════════════════════ */
 
-export function buildFlashcards(doc: DocumentRow, text: string): { front: string; back: string }[] {
+export function buildFlashcards(
+  doc: DocumentRow,
+  text: string,
+): { front: string; back: string }[] {
   const vocab = extractVocab(text, 4);
   const chars = findCharacters(text, 3);
   return [
-    ...vocab.map((v) => ({ front: v.term, back: v.context || `Appears in ${doc.title}.` })),
+    ...vocab.map((v) => ({
+      front: v.term,
+      back: v.context || `Appears in ${doc.title}.`,
+    })),
     ...chars.map((c) => ({ front: c.name, back: c.note })),
   ];
 }
@@ -498,11 +916,26 @@ const SCENE_CODAS: string[] = [
   "So the scene holds — not finished, not beginning, but paused in the particular way that {place}s pause when something has been decided and not yet said.",
 ];
 
-const SPEECH_TAGS = ["quietly", "at last", "without looking up", "from the doorway", "to no one in particular", "as if answering a question nobody asked", "almost too late", "with the weight of something long considered", "into the silence that had been holding its breath"];
+const SPEECH_TAGS = [
+  "quietly",
+  "at last",
+  "without looking up",
+  "from the doorway",
+  "to no one in particular",
+  "as if answering a question nobody asked",
+  "almost too late",
+  "with the weight of something long considered",
+  "into the silence that had been holding its breath",
+];
 
-export function offlineScenes(doc: DocumentRow, chapterIndex: number, salt = 0): SceneDraft[] {
+export function offlineScenes(
+  doc: DocumentRow,
+  chapterIndex: number,
+  salt = 0,
+): SceneDraft[] {
   const chapters = doc.contentJson.chapters;
   const ch = chapters[clamp(chapterIndex, 0, chapters.length - 1)];
+  if (!ch) return [];
   const text = ch.chunks.map((c) => c.text).join("\n\n");
   const sents = sentences(text);
   if (!sents.length) return [];
@@ -512,9 +945,14 @@ export function offlineScenes(doc: DocumentRow, chapterIndex: number, salt = 0):
   const mk = moodKey(text);
   const kw = topKeywords(text, 8);
   const rnd = seeded(chapterIndex * 1013 + salt * 31 + text.length);
-  const pick = <T,>(arr: T[]): T => arr[Math.floor(rnd() * arr.length)];
-  const quotes = (text.match(/[\u201C"]([^\u201D"\n]{6,180})[\u201D"]/g) ?? [])
-    .map((q) => q.replace(/^[\u201C"]|[\u201D"]$/g, "").trim());
+  const pick = <T>(arr: T[]): T => {
+    const v = arr[Math.floor(rnd() * arr.length)];
+    if (v === undefined) throw new Error("pick() called with an empty array");
+    return v;
+  };
+  const quotes = (
+    text.match(/[\u201C"]([^\u201D"\n]{6,180})[\u201D"]/g) ?? []
+  ).map((q) => q.replace(/^[\u201C"]|[\u201D"]$/g, "").trim());
 
   // Scale scene count with chapter length, matching the online path:
   // <2500 chars → 2 scenes, 5000-7500 → 3, 7500-10000 → 4, >10000 → 5.
@@ -522,34 +960,44 @@ export function offlineScenes(doc: DocumentRow, chapterIndex: number, salt = 0):
   const n = Math.min(sents.length, 12 * sceneCount);
   const sliceSize = Math.max(1, Math.ceil(n / sceneCount));
   const slices = Array.from({ length: sceneCount }, (_, i) =>
-    sents.slice(i * sliceSize, Math.min((i + 1) * sliceSize, n))
+    sents.slice(i * sliceSize, Math.min((i + 1) * sliceSize, n)),
   ).filter((t) => t.length > 0);
   const k0 = kw[0] ?? "light";
   const k1 = kw[1] ?? "room";
-  const fill = (s: string) => s.split("{thing}").join(k0).split("{place}").join(k1);
+  const fill = (s: string) =>
+    s.split("{thing}").join(k0).split("{place}").join(k1);
 
-  const titleSeed = ch.title !== "Opening" && ch.title !== "Full text" && !/^Part /.test(ch.title)
-    ? ch.title
-    : kw[salt % Math.max(1, kw.length)]
-      ? `The ${cap(kw[salt % kw.length])}`
-      : "The Threshold";
+  const saltedKw = kw[salt % Math.max(1, kw.length)];
+  const titleSeed =
+    ch.title !== "Opening" &&
+    ch.title !== "Full text" &&
+    !/^Part /.test(ch.title)
+      ? ch.title
+      : saltedKw
+        ? `The ${cap(saltedKw)}`
+        : "The Threshold";
 
   // Unique per-scene subtitle so no two scenes share the same title even
   // when sceneCount > 3 (the previous "the turn / coda" only covered 3).
   const SUBTITLES = ["opening", "the turn", "deepening", "the hinge", "coda"];
 
-  const bridges = SCENE_BRIDGES[mk] ?? SCENE_BRIDGES["hushed anticipation"];
+  const bridges =
+    SCENE_BRIDGES[mk] ?? SCENE_BRIDGES["hushed anticipation"] ?? [];
   const scenes: SceneDraft[] = [];
   slices.forEach((slice, i) => {
     const spineA = slice[0] ?? "";
     const spineB = slice[1] ?? slice[0] ?? "";
-    const closing = slice[slice.length - 1] && slice.length > 2 ? slice[slice.length - 1] : "";
-    const quote = quotes[i % Math.max(1, quotes.length)];
-    const speech = quote && characters.length
-      ? `\n\n\u201C${quote}\u201D \u2014 ${characters[i % characters.length]}, ${pick(SPEECH_TAGS)}.`
-      : quote
-        ? `\n\n\u201C${quote}\u201D`
+    const closing =
+      slice[slice.length - 1] && slice.length > 2
+        ? slice[slice.length - 1]
         : "";
+    const quote = quotes[i % Math.max(1, quotes.length)];
+    const speech =
+      quote && characters.length
+        ? `\n\n\u201C${quote}\u201D \u2014 ${characters[i % characters.length]}, ${pick(SPEECH_TAGS)}.`
+        : quote
+          ? `\n\n\u201C${quote}\u201D`
+          : "";
     const body = [
       `${spineA} ${fill(pick(bridges))}`,
       `${spineB}${closing ? ` ${closing}` : ""}${speech}`,
@@ -558,12 +1006,22 @@ export function offlineScenes(doc: DocumentRow, chapterIndex: number, salt = 0):
     const subtitle = SUBTITLES[i] ?? `movement ${i + 1}`;
     scenes.push({
       title: slices.length > 1 ? `${titleSeed} — ${subtitle}` : titleSeed,
-      mood: i === Math.floor(slices.length / 2) ? moodOf(slice.join(" ")) : mood,
+      mood:
+        i === Math.floor(slices.length / 2) ? moodOf(slice.join(" ")) : mood,
       characters: i === Math.floor(slices.length / 2) ? cast.slice(0, 2) : cast,
       body,
     });
   });
-  return scenes.length ? scenes : [{ title: titleSeed, mood, characters: cast, body: `${sents.slice(0, 2).join(" ")} ${fill(bridges[0])}` }];
+  return scenes.length
+    ? scenes
+    : [
+        {
+          title: titleSeed,
+          mood,
+          characters: cast,
+          body: `${sents.slice(0, 2).join(" ")} ${fill(bridges[0] ?? "")}`,
+        },
+      ];
 }
 
 /* ═══════════════════════════════════════════════════
@@ -571,8 +1029,12 @@ export function offlineScenes(doc: DocumentRow, chapterIndex: number, salt = 0):
    ═══════════════════════════════════════════════════ */
 
 const ANKAA_TITLES: Record<AnkaaMode, string> = {
-  continue: "What Followed", alternate: "The Other Door", chapter: "The Next Morning",
-  lore: "Notes from the Ledger", children: "The Lamp That Needed a Friend", whatif: "A Day Early",
+  continue: "What Followed",
+  alternate: "The Other Door",
+  chapter: "The Next Morning",
+  lore: "Notes from the Ledger",
+  children: "The Lamp That Needed a Friend",
+  whatif: "A Day Early",
 };
 
 export interface StoryAnchors {
@@ -586,17 +1048,37 @@ export function extractAnchors(prompt: string): StoryAnchors {
   // Common prompt command words that should NOT be treated as character names.
   // These are capitalized at the start of sentences but aren't proper nouns.
   const commandWords = new Set([
-    "Write", "A", "An", "The", "Tell", "Make", "Create", "Draft", "Compose",
-    "Generate", "Describe", "Imagine", "Picture", "Show", "Give", "Build",
-    "Continue", "Rewrite", "Retell", "Adapt", "Explore",
+    "Write",
+    "A",
+    "An",
+    "The",
+    "Tell",
+    "Make",
+    "Create",
+    "Draft",
+    "Compose",
+    "Generate",
+    "Describe",
+    "Imagine",
+    "Picture",
+    "Show",
+    "Give",
+    "Build",
+    "Continue",
+    "Rewrite",
+    "Retell",
+    "Adapt",
+    "Explore",
   ]);
   const starters = new Set(["The", "A", "An"]);
   const cast: string[] = [];
-  const seqs = trimmed.match(/[A-Z][\w'’]*(?:\s+(?:of|the|and|'s)?\s*[A-Z][\w'’]*)*/g) ?? [];
+  const seqs =
+    trimmed.match(/[A-Z][\w'’]*(?:\s+(?:of|the|and|'s)?\s*[A-Z][\w'’]*)*/g) ??
+    [];
   for (const seq of seqs) {
     const parts = seq.split(/\s+/).filter((p) => /^[A-Z]/.test(p));
     let cores = parts;
-    while (cores.length && starters.has(cores[0])) cores = cores.slice(1);
+    while (cores.length && starters.has(cores[0] ?? "")) cores = cores.slice(1);
     if (!cores.length) continue;
     // Filter out pure command words — "Write" from "Write a story..." is not a character.
     cores = cores.filter((c) => !commandWords.has(c));
@@ -608,15 +1090,29 @@ export function extractAnchors(prompt: string): StoryAnchors {
     const pretty = cap(tok.toLowerCase());
     if (!cast.includes(pretty)) cast.push(pretty);
   }
-  const keywords = [...new Set(wordList(trimmed).filter((w) => w.length > 3 && !STOP.has(w)))].slice(0, 6);
+  const keywords = [
+    ...new Set(wordList(trimmed).filter((w) => w.length > 3 && !STOP.has(w))),
+  ].slice(0, 6);
   return { cast: cast.slice(0, 4), hook: trimmed, keywords };
 }
 
-export function offlineAnkaaLong(mode: AnkaaMode, doc: DocumentRow | null, prompt: string, nonce = 0, depth: "short" | "medium" | "long" = "long"): { title: string; body: string } {
+export function offlineAnkaaLong(
+  mode: AnkaaMode,
+  doc: DocumentRow | null,
+  prompt: string,
+  nonce = 0,
+  depth: "short" | "medium" | "long" = "long",
+): { title: string; body: string } {
   const anchors = extractAnchors(prompt);
-  const text = doc ? docText(doc) : prompt || "a story about a lamp that needed a friend";
+  const text = doc
+    ? docText(doc)
+    : prompt || "a story about a lamp that needed a friend";
   const vBase = topKeywords(text, 10);
-  const v = doc ? vBase : [...anchors.keywords, ...vBase].filter((w, i, a) => a.indexOf(w) === i).slice(0, 10);
+  const v = doc
+    ? vBase
+    : [...anchors.keywords, ...vBase]
+        .filter((w, i, a) => a.indexOf(w) === i)
+        .slice(0, 10);
   const c = anchors.cast.length
     ? anchors.cast
     : doc
@@ -629,9 +1125,19 @@ export function offlineAnkaaLong(mode: AnkaaMode, doc: DocumentRow | null, promp
   const w2 = v[2] ?? "street";
   const w3 = v[3] ?? "window";
   const w4 = v[4] ?? "silence";
-  const mood = moodOf(text).split("·")[0].trim();
-  const rnd = seeded((mode.length * 7919 + text.length + prompt.length + (nonce % 1_000_003) * 9973) >>> 0);
-  const pick = <T,>(arr: T[]): T => arr[Math.floor(rnd() * arr.length)];
+  const mood = moodOf(text).split("·")[0]?.trim() ?? "";
+  const rnd = seeded(
+    (mode.length * 7919 +
+      text.length +
+      prompt.length +
+      (nonce % 1_000_003) * 9973) >>>
+      0,
+  );
+  const pick = <T>(arr: T[]): T => {
+    const v = arr[Math.floor(rnd() * arr.length)];
+    if (v === undefined) throw new Error("pick() called with an empty array");
+    return v;
+  };
 
   // Depth controls beat count + closing count so a short prompt yields ~400
   // words, medium ~600, long ~800 (the offline template's natural ceiling —
@@ -640,17 +1146,21 @@ export function offlineAnkaaLong(mode: AnkaaMode, doc: DocumentRow | null, promp
   const closingCount = depth === "short" ? 2 : depth === "medium" ? 2 : 4;
 
   const P: string[] = [];
-  P.push(pick([
-    `It began, as these things do, with the ${w0} — not the grand kind of beginning that histories prefer, but the small kind that actually happens: a ${w0} noticed, held, and refused to be put down. ${cap(A)} understood, perhaps before understanding anything else, that the ${mode === "whatif" ? "day" : "evening"} had made a decision and merely needed someone to witness it.`,
-    `Nobody later agreed on when it began, which is how you know it began early. The ${w2} had gone the color of cooling tea, and ${A} stood where the ${w1} made its nightly argument with the dark, counting breaths the way other people count coins.`,
-  ]));
-  P.push(pick([
-    `There is a grammar to waiting. ${cap(B)} had spent a lifetime conjugating it: the subjunctive of a kettle not yet boiled, the conditional of a chair kept empty. Tonight the grammar changed tense without asking, and the whole house leaned forward to hear the new verb.`,
-    `The house, for its part, kept its opinions to its beams. Houses do that. But the ${w3} gave the evening away — the way a ${w3} does at this hour, holding the last of the ${w0} like a secret it has already told to everyone who matters.`,
-  ]));
+  P.push(
+    pick([
+      `It began, as these things do, with the ${w0} — not the grand kind of beginning that histories prefer, but the small kind that actually happens: a ${w0} noticed, held, and refused to be put down. ${cap(A)} understood, perhaps before understanding anything else, that the ${mode === "whatif" ? "day" : "evening"} had made a decision and merely needed someone to witness it.`,
+      `Nobody later agreed on when it began, which is how you know it began early. The ${w2} had gone the color of cooling tea, and ${A} stood where the ${w1} made its nightly argument with the dark, counting breaths the way other people count coins.`,
+    ]),
+  );
+  P.push(
+    pick([
+      `There is a grammar to waiting. ${cap(B)} had spent a lifetime conjugating it: the subjunctive of a kettle not yet boiled, the conditional of a chair kept empty. Tonight the grammar changed tense without asking, and the whole house leaned forward to hear the new verb.`,
+      `The house, for its part, kept its opinions to its beams. Houses do that. But the ${w3} gave the evening away — the way a ${w3} does at this hour, holding the last of the ${w0} like a secret it has already told to everyone who matters.`,
+    ]),
+  );
   if (!doc && anchors.cast.length && depth !== "short") {
     P.push(
-      `${cap(A)} and ${cap(B)} arrived the way such figures always arrive in the telling: announced by the weather, preceded by rumor, and followed by a ${w4} that had opinions of its own. Whatever else happened next, it happened to them first.`
+      `${cap(A)} and ${cap(B)} arrived the way such figures always arrive in the telling: announced by the weather, preceded by rumor, and followed by a ${w4} that had opinions of its own. Whatever else happened next, it happened to them first.`,
     );
   }
   const beats: [string, string][] = [
@@ -675,7 +1185,12 @@ export function offlineAnkaaLong(mode: AnkaaMode, doc: DocumentRow | null, promp
       `What followed was not loud. Real turns rarely are. The ${w0} simply changed owners, the ${w4} simply changed its mind, and ${A} stepped from the ${mode === "lore" ? "footnote into the text" : "threshold into the sentence"}, where the verbs are.`,
     ],
   ];
-  for (let i = 0; i < beatCount; i++) { P.push(beats[i][0]); P.push(beats[i][1]); }
+  for (let i = 0; i < beatCount; i++) {
+    const beat = beats[i];
+    if (!beat) break;
+    P.push(beat[0]);
+    P.push(beat[1]);
+  }
   const closings = [
     pick([
       `Years later — because there is always a years-later, stories insist on one — someone would ask ${A} what the ${mood} felt like from the inside, and ${A} would answer honestly: like being read. Like the room was a page and the page was warm, and the hand turning it was neither cruel nor kind, only attentive, which is the only kindness that lasts.`,
@@ -694,9 +1209,14 @@ export function offlineAnkaaLong(mode: AnkaaMode, doc: DocumentRow | null, promp
       `So the ledger closes, though it leaves the last line unfinished on purpose. Some books end; this one merely lowers its voice. Listen — the ${w4} is still textured, the ${w0} is still borrowed, and the next chapter is already standing on the third stair, deciding.`,
     ]),
   ];
-  for (let i = 0; i < closingCount; i++) P.push(closings[i]);
+  for (let i = 0; i < closingCount; i++) {
+    const closing = closings[i];
+    if (closing !== undefined) P.push(closing);
+  }
 
-  const customTitle = anchors.cast.length ? `${anchors.cast[0]} — ${ANKAA_TITLES[mode]}` : ANKAA_TITLES[mode];
+  const customTitle = anchors.cast.length
+    ? `${anchors.cast[0]} — ${ANKAA_TITLES[mode]}`
+    : ANKAA_TITLES[mode];
   const title = doc ? `${doc.title} — ${customTitle}` : customTitle;
   return { title, body: P.join("\n\n") };
 }
@@ -715,7 +1235,7 @@ export function offlineAnalysis(doc: DocumentRow): DeepAnalysis {
     criticism:
       `"${doc.title}" moves by ${topKeywords(text, 3).join(", ") || "its images"} more than by event. ` +
       `The prose is ${doc.warnings.length === 0 ? "clean and well-preserved" : "somewhat degraded — refinement would help close reading"}. ` +
-      `Its recurring vocabulary (${topKeywords(text, 6).slice(0, 4).join(", ")}) gives the piece a ${moodOf(text).split("·")[0].trim()} register, and the pacing — ${doc.wordCount.toLocaleString()} words across ${doc.chapterCount} chapter${doc.chapterCount === 1 ? "" : "s"} — rewards slow re-reading.`,
+      `Its recurring vocabulary (${topKeywords(text, 6).slice(0, 4).join(", ")}) gives the piece a ${moodOf(text).split("·")[0]?.trim() ?? ""} register, and the pacing — ${doc.wordCount.toLocaleString()} words across ${doc.chapterCount} chapter${doc.chapterCount === 1 ? "" : "s"} — rewards slow re-reading.`,
   };
 }
 
@@ -723,9 +1243,16 @@ export function offlineAnalysis(doc: DocumentRow): DeepAnalysis {
    14. Study set builder (LOA Ouro)
    ═══════════════════════════════════════════════════ */
 
-export function buildStudy(doc: DocumentRow, chapterIndex: number | null): StudyData {
-  const text = chapterIndex === null ? docText(doc) : chapterText(doc, chapterIndex);
-  const scope = chapterIndex === null ? "the whole text" : `"${doc.contentJson.chapters[chapterIndex].title}"`;
+export function buildStudy(
+  doc: DocumentRow,
+  chapterIndex: number | null,
+): StudyData {
+  const text =
+    chapterIndex === null ? docText(doc) : chapterText(doc, chapterIndex);
+  const scope =
+    chapterIndex === null
+      ? "the whole text"
+      : `"${doc.contentJson.chapters[chapterIndex]?.title ?? "the selected chapter"}"`;
   const summary = extractiveSummary(text, chapterIndex === null ? 6 : 4);
   const chars = findCharacters(text, 4);
   const kw = topKeywords(text, 10);
@@ -733,7 +1260,13 @@ export function buildStudy(doc: DocumentRow, chapterIndex: number | null): Study
   const cards = buildFlashcards(doc, text);
   const themes = kw.slice(0, 4).map((k) => ({
     name: cap(k),
-    note: extractiveSummary(sentences(text).filter((s) => s.toLowerCase().includes(k)).join(" "), 2) || `Threads through ${scope}.`,
+    note:
+      extractiveSummary(
+        sentences(text)
+          .filter((s) => s.toLowerCase().includes(k))
+          .join(" "),
+        2,
+      ) || `Threads through ${scope}.`,
   }));
   return {
     summary,
@@ -741,14 +1274,16 @@ export function buildStudy(doc: DocumentRow, chapterIndex: number | null): Study
       `Scope: ${scope} of "${doc.title}" by ${doc.author}.`,
       `Central movements: ${kw.slice(0, 5).join(", ") || "— none extracted —"}.`,
       `Key passage: ${sentences(text)[0] ?? ""}`,
-      chars.length ? `Figures to track: ${chars.map((c) => c.name).join(", ")}.` : "No recurring figures detected — this passage is mostly landscape or reflection.",
+      chars.length
+        ? `Figures to track: ${chars.map((c) => c.name).join(", ")}.`
+        : "No recurring figures detected — this passage is mostly landscape or reflection.",
       `Ask yourself: why does ${kw[0] ?? "the opening image"} return when it does?`,
     ],
     objectives: [
       `Identify how ${kw[0] ?? "the central image"} functions as a motif across ${scope}.`,
       `Trace the shift in register from the opening to the closing sentences, citing two passages.`,
       chars.length
-        ? `Compare what ${chars[0].name} says with what ${chars[0].name} does — locate the gap on the page.`
+        ? `Compare what ${chars[0]?.name ?? "the protagonist"} says with what ${chars[0]?.name ?? "the protagonist"} does — locate the gap on the page.`
         : `Explain how setting performs the work usually assigned to character.`,
       `Formulate one question the text answers and one it deliberately withholds.`,
     ],
@@ -756,7 +1291,7 @@ export function buildStudy(doc: DocumentRow, chapterIndex: number | null): Study
       `"${themes[0]?.name ?? "The recurring image"} is less a symbol than a habit of attention." Discuss with reference to ${scope}.`,
       `Analyze the pacing of ${scope}: where does the prose accelerate, where does it wait — and what does the reader learn in the waiting?`,
       chars.length >= 2
-        ? `Compare ${chars[0].name} and ${chars[1].name} as competing definitions of the same virtue.`
+        ? `Compare ${chars[0]?.name ?? "the first figure"} and ${chars[1]?.name ?? "the second figure"} as competing definitions of the same virtue.`
         : `What does the narrator refuse to say? Argue from silence, syntax and omission.`,
     ],
     themes,
@@ -772,11 +1307,16 @@ export function buildStudy(doc: DocumentRow, chapterIndex: number | null): Study
    ═══════════════════════════════════════════════════ */
 
 export function docText(doc: DocumentRow): string {
-  return doc.contentJson.chapters.flatMap((c) => c.chunks.map((k) => k.text)).join("\n\n");
+  return doc.contentJson.chapters
+    .flatMap((c) => c.chunks.map((k) => k.text))
+    .join("\n\n");
 }
 
 export function chapterText(doc: DocumentRow, chapterIndex: number): string {
-  const ch = doc.contentJson.chapters[clamp(chapterIndex, 0, doc.contentJson.chapters.length - 1)];
+  const ch =
+    doc.contentJson.chapters[
+      clamp(chapterIndex, 0, doc.contentJson.chapters.length - 1)
+    ];
   return ch ? ch.chunks.map((c) => c.text).join("\n\n") : "";
 }
 

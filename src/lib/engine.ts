@@ -186,12 +186,12 @@ function smartenQuotes(s: string): string {
   for (let i = 0; i < s.length; i++) {
     const c = s[i];
     if (c === '"') {
-      const prev = i > 0 ? s[i - 1] : " ";
-      const next = i < s.length - 1 ? s[i + 1] : " ";
+      const prev = i > 0 ? (s[i - 1] ?? " ") : " ";
+      const next = i < s.length - 1 ? (s[i + 1] ?? " ") : " ";
       out += /\s/.test(prev) && /\S/.test(next) ? "\u201C" : "\u201D";
     } else if (c === "'") {
-      const prev = i > 0 ? s[i - 1] : " ";
-      const next = i < s.length - 1 ? s[i + 1] : " ";
+      const prev = i > 0 ? (s[i - 1] ?? " ") : " ";
+      const next = i < s.length - 1 ? (s[i + 1] ?? " ") : " ";
       if (/[a-zA-Z]/.test(prev) && /[a-zA-Z]/.test(next)) out += "\u2019";
       else if (/\s/.test(prev) && /\S/.test(next)) out += "\u2018";
       else out += "\u2019";
@@ -427,7 +427,7 @@ export function buildChapters(
     const totalWords = ch.paras.reduce((a, p) => a + wordCount(p), 0);
     const tooSmall = ch.paras.length <= 2 && totalWords < 50;
     if (tooSmall && merged.length > 0) {
-      merged[merged.length - 1].paras.push(...ch.paras);
+      merged[merged.length - 1]?.paras.push(...ch.paras);
     } else {
       merged.push(ch);
     }
@@ -487,7 +487,7 @@ export function fallbackSplit(
   // the previous part rather than creating an orphan.
   if (cur.length) {
     if (parts.length > 0 && count < target * 0.3) {
-      parts[parts.length - 1].paras.push(...cur);
+      parts[parts.length - 1]?.paras.push(...cur);
     } else {
       parts.push({ title: `Part ${roman(parts.length + 1)}`, paras: cur });
     }
@@ -528,11 +528,22 @@ export function metaFromFilename(name: string): {
     .replace(/[_]+/g, " ")
     .trim();
   const dash = base.split(/\s+[-–—]\s+/);
-  if (dash.length === 2 && dash[0].length > 1 && dash[1].length > 1) {
-    return { author: titleCase(dash[0]), title: titleCase(dash[1]) };
+  const dashAuthor = dash[0];
+  const dashTitle = dash[1];
+  if (
+    dashAuthor !== undefined &&
+    dashTitle !== undefined &&
+    dashAuthor.length > 1 &&
+    dashTitle.length > 1
+  ) {
+    return { author: titleCase(dashAuthor), title: titleCase(dashTitle) };
   }
   const paren = base.match(/^(.*?)\s*\(([^)]+)\)\s*$/);
-  if (paren) return { title: titleCase(paren[1]), author: titleCase(paren[2]) };
+  if (paren)
+    return {
+      title: titleCase(paren[1] ?? ""),
+      author: titleCase(paren[2] ?? ""),
+    };
   return { title: titleCase(base) || "Untitled", author: "Unknown author" };
 }
 
@@ -656,7 +667,7 @@ export function markdownToLines(raw: string): RawLine[] {
     }
     const h = line.match(/^\s{0,3}(#{1,3})\s+(.*)$/);
     if (h) {
-      out.push({ text: stripMd(h[2]), heading: true });
+      out.push({ text: stripMd(h[2] ?? ""), heading: true });
       continue;
     }
     if (/^\s*([-*_])\s*(\1\s*){2,}$/.test(line)) {
@@ -799,7 +810,7 @@ export async function ingestFile(
   const wordCount = allText.split(/\s+/).filter(Boolean).length;
 
   if (sections.length === 1)
-    sections = fallbackSplit(sections[0].paras, wordCount);
+    sections = fallbackSplit(sections[0]?.paras ?? [], wordCount);
 
   const chapters = toChapters(sections);
   const fallback = metaFromFilename(file.name);
@@ -831,7 +842,7 @@ export function chapterAtChunk(
 ): { chapterIndex: number; localIndex: number } {
   let acc = 0;
   for (let i = 0; i < chapters.length; i++) {
-    const len = chapters[i].chunks.length;
+    const len = chapters[i]?.chunks.length ?? 0;
     if (globalIdx < acc + len)
       return { chapterIndex: i, localIndex: globalIdx - acc };
     acc += len;

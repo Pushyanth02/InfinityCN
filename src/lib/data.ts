@@ -28,12 +28,18 @@ import {
   STORES,
   type StoreName,
 } from "./db";
+import { cachePurgeDoc } from "./cache";
 import { coverGradient, uid } from "./utils";
 import { toChapters } from "./engine";
 import type { Fileish } from "./ingest-types";
 
 let version = 0;
 const bus = new EventTarget();
+
+/** In-memory read-event throttle: documentId → timestamp of the last
+ *  "read" activity row written. Replaces a full activity-table scan on
+ *  every debounced progress save with an O(1) Map lookup. */
+const lastReadEventAt = new Map<string, number>();
 
 /* ────────────────────────────────────────────────────────────
    Per-store version counters — race-free scoped refetches.
@@ -471,18 +477,19 @@ export async function updateProgress(
     lastReadAt: Date.now(),
     updatedAt: Date.now(),
   });
-  // Throttle read events: at most one per document per 10 minutes.
-  const recent = await idbAll<ActivityRow>("activity");
+  // Throttle read events: at most one per document per 10 minutes. Kept in
+  // memory instead of scanning the whole activity table on every debounced
+  // progress save (~every 900ms while reading) — an O(1) check instead of
+  // an O(N) full-store read that grows with library history.
   const cutoff = Date.now() - 10 * 60 * 1000;
-  const hasRecent = recent.some(
-    (a) => a.documentId === id && a.type === "read" && a.createdAt > cutoff,
-  );
-  if (!hasRecent)
+  if ((lastReadEventAt.get(id) ?? 0) < cutoff) {
+    lastReadEventAt.set(id, Date.now());
     await logActivity(
       "read",
       `Reading “${row.title}” — ${Math.round(progress)}%`,
       id,
     );
+  }
   if (finishedNow) await logActivity("finish", `Finished “${row.title}”`, id);
   // Scoped bump: only the documents store changed. This prevents the reader's
   // debounced progress save (every 900ms) from triggering useActivity,
@@ -493,6 +500,7 @@ export async function updateProgress(
 
 export async function deleteDocument(id: string): Promise<void> {
   const row = await idbGet<DocumentRow>("documents", id);
+  lastReadEventAt.delete(id);
   await idbDelete("documents", id);
   const cleanup = async (store: StoreName, key: "documentId") => {
     const rows = await idbAll<{ id: string; documentId: string }>(store);
@@ -506,6 +514,9 @@ export async function deleteDocument(id: string): Promise<void> {
   const jobs = await idbAll<AnalysisJob>("jobs");
   for (const j of jobs.filter((j) => j.documentId === id))
     await idbDelete("jobs", j.id);
+  // Purge cached AI artifacts (study sets, analyses, scenes, Ouro outputs)
+  // keyed by this document so they don't linger until TTL expiry.
+  await cachePurgeDoc(id);
   if (row)
     await logActivity(
       "delete",

@@ -34,12 +34,21 @@ export function coverGradient(seed: string): string {
   const h = hashStr(seed);
   const fam = COVER_FAMILIES[h % COVER_FAMILIES.length];
   const angle = 115 + (h % 90);
-  return `linear-gradient(${angle}deg, ${fam[0]} 0%, ${fam[1]} 58%, ${fam[2]} 130%)`;
+  return `linear-gradient(${angle}deg, ${fam?.[0] ?? "#0a1e24"} 0%, ${fam?.[1] ?? "#1e4d5a"} 58%, ${fam?.[2] ?? "#8fd0c6"} 130%)`;
 }
 
 export function coverInitial(title: string): string {
-  const word = title.trim().split(/\s+/).find((w) => /[a-zA-Z0-9]/.test(w)) ?? "L";
-  return word.replace(/^[^a-zA-Z0-9]+/, "").charAt(0).toUpperCase() || "L";
+  const word =
+    title
+      .trim()
+      .split(/\s+/)
+      .find((w) => /[a-zA-Z0-9]/.test(w)) ?? "L";
+  return (
+    word
+      .replace(/^[^a-zA-Z0-9]+/, "")
+      .charAt(0)
+      .toUpperCase() || "L"
+  );
 }
 
 /* ---------------- formatting ---------------- */
@@ -71,7 +80,10 @@ export function timeAgo(ts: number): string {
   if (d < 7) return `${d}d ago`;
   const w = Math.floor(d / 7);
   if (w < 5) return `${w}w ago`;
-  return new Date(ts).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return new Date(ts).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
 }
 
 export function fmtClock(totalSec: number): string {
@@ -109,10 +121,16 @@ export function sortDocs(rows: DocumentRow[], mode: string): DocumentRow[] {
     }
   };
   /* starred documents stay pinned at the top of every ordering until unstarred */
-  return arr.sort((a, b) => Number(b.favorite) - Number(a.favorite) || byMode(a, b));
+  return arr.sort(
+    (a, b) => Number(b.favorite) - Number(a.favorite) || byMode(a, b),
+  );
 }
 
-export function download(filename: string, text: string, type = "application/json"): void {
+export function download(
+  filename: string,
+  text: string,
+  type = "application/json",
+): void {
   const blob = new Blob([text], { type });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");

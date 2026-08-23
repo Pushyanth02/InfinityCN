@@ -60,6 +60,11 @@ import {
   streamChat,
   chat as openRouterChatOnce,
 } from "./openrouter";
+// Single source of truth for the raw catalog shape — defined in ./openrouter
+// (the layer that actually parses the API response) and re-exported here for
+// mapModelRaw consumers and tests.
+import type { RawCatalogModel } from "./openrouter";
+export type { RawCatalogModel };
 import {
   STOP,
   sentences,
@@ -291,6 +296,11 @@ export function aiConfigured(): boolean {
 export function activeModelFor(bot: BotId): string {
   const prefs = getPrefs();
   const configured = prefs.aiModels[bot] ?? DEFAULT_MODELS[bot];
+  // Router presets ("meridian/*", "openrouter/auto") must pass through
+  // untouched — ensureFree() would append ":free" and corrupt the ID, so
+  // resolveModelFor()'s isRouterPreset() check would never match and the
+  // live catalog resolution would silently never run.
+  if (isRouterPreset(configured)) return configured;
   // ALWAYS return a :free model — even if the user somehow saved a paid
   // model ID (e.g. from an older version of the app), we transparently
   // convert it to its free variant. This is the synchronous peek used by
@@ -412,7 +422,7 @@ export function rankFreeModels(
   const free = models.filter((m) => m.id.endsWith(":free"));
   const paramsB = (id: string): number => {
     const m = id.match(/(\d+(?:\.\d+)?)\s?b\b/i);
-    return m ? parseFloat(m[1]) : 0;
+    return m ? parseFloat(m[1] ?? "0") : 0;
   };
   const providerTier = (id: string): number =>
     /^(openai|anthropic|google)\//.test(id)
@@ -536,7 +546,7 @@ let queued = 0;
 
 function prune(): void {
   const now = Date.now();
-  while (stamps.length && now - stamps[0] > WINDOW_MS) stamps.shift();
+  while (stamps.length && now - (stamps[0] ?? 0) > WINDOW_MS) stamps.shift();
 }
 
 export function rateInfo(): {
@@ -555,7 +565,7 @@ async function rateWait(): Promise<void> {
     stamps.push(Date.now());
     return;
   }
-  const waitMs = stamps[0] + WINDOW_MS - Date.now() + 60;
+  const waitMs = (stamps[0] ?? Date.now()) + WINDOW_MS - Date.now() + 60;
   if (waitMs > 25_000) {
     throw new AiUnavailable(
       `The request queue is saturated — Lemniscate paces AI calls at 15/minute and ${queued} call${queued === 1 ? " is" : "s are"} already queued. Give it a breath and try again; the Anchor engine remains available in the meantime.`,
@@ -819,18 +829,11 @@ async function aiRequest(
    returned immediately while a background refresh fires. On network failure
    the last good cache is returned instead of throwing. */
 
-export interface RawCatalogModel {
-  id: string;
-  name?: string;
-  context_length?: number;
-  pricing?: { prompt?: string; completion?: string };
-}
-
 /** Pure mapping — unit-tested. Keeps `:free` variants; drops per-user fine-tunes (`model:user/ft`). */
 export function mapModelRaw(raw: RawCatalogModel[]): AiModelInfo[] {
   return raw
     .filter((m) => m.id && m.id.endsWith(":free")) // ONLY free-tier models — no paid models ever enter the catalog
-    .filter((m) => !(m.id.includes(":") && m.id.split(":")[1].includes("/"))) // drop per-user fine-tunes
+    .filter((m) => !(m.id.includes(":") && m.id.split(":")[1]?.includes("/"))) // drop per-user fine-tunes
     .map((m) => ({
       id: m.id,
       name: m.name ?? m.id,
@@ -1107,7 +1110,7 @@ function offlineLuma(
 
   if (/summar/.test(q)) {
     const whole = /whole|book|entire|document|story/.test(q);
-    return `${pre}**${whole ? doc.title : ch.title} — in brief:**\n\n${extractiveSummary(whole ? all : chText, whole ? 6 : 4)}`;
+    return `${pre}**${whole ? doc.title : (ch?.title ?? doc.title)} — in brief:**\n\n${extractiveSummary(whole ? all : chText, whole ? 6 : 4)}`;
   }
   if (/character|who|people|cast/.test(q)) {
     const chars = findCharacters(chText, 5).length
@@ -1157,6 +1160,8 @@ function offlineLuma(
   }
   if (/scene|cinemat|film|movie|visual/.test(q)) {
     const s = offlineScenes(doc, chapterIndex)[0];
+    if (!s)
+      return `${pre}No scene could be drawn from this passage yet — try another chapter.`;
     return `${pre}**Scene card**\n\n**${s.title}**\nMood: ${s.mood}\nCast: ${s.characters.join(", ")}\n\n${s.body}`;
   }
   // retrieval-grounded fallback
@@ -1498,7 +1503,7 @@ function offlineOuroTask(
         n: c.chunks.filter((ch) => ch.text.toLowerCase().includes(k)).length,
       }));
       const strongest = [...per].sort((a, b) => b.n - a.n)[0];
-      return `- **${cap(k)}** — strongest in “${chapters[strongest?.i ?? 0].title}”; ${extractiveSummary(
+      return `- **${cap(k)}** — strongest in “${chapters[strongest?.i ?? 0]?.title ?? label}”; ${extractiveSummary(
         sentences(text)
           .filter((s) => s.toLowerCase().includes(k))
           .join(" "),
@@ -1533,7 +1538,7 @@ function offlineOuroTask(
         `**Essay prompts**\n- 1. “${cap(kw[0] ?? "The central image")} is less a symbol than a habit of attention.” Discuss with reference to ${label}.\n` +
         `- 2. Analyze the pacing of ${label}: where does the prose accelerate, where does it wait — and what is learned in the waiting?\n` +
         (chars.length >= 2
-          ? `- 3. Compare ${chars[0].name} and ${chars[1].name} as competing definitions of the same virtue.`
+          ? `- 3. Compare ${chars[0]?.name ?? "the first figure"} and ${chars[1]?.name ?? "the second figure"} as competing definitions of the same virtue.`
           : `- 3. What does the narrator refuse to say? Argue from silence, syntax and omission.`),
     };
   }
@@ -1935,13 +1940,15 @@ export function dedupeSceneTitles(scenes: SceneDraft[]): SceneDraft[] {
     "X",
   ];
   return scenes.map((s) => {
-    const key = s.title.trim().toLowerCase();
+    // Normalize BEFORE counting: strip any pre-existing roman-numeral
+    // suffix so a model that already emitted "Title — II" doesn't slip
+    // past the duplicate check under a different key.
+    const base = s.title.replace(/\s+—\s+[IVXLC]+$/, "").trim();
+    const key = base.toLowerCase();
     const n = (seen.get(key) ?? 0) + 1;
     seen.set(key, n);
     if (n > 1) {
       const suffix = numerals[n - 1] ?? String(n);
-      // Strip a previously-applied suffix if the model already added one.
-      const base = s.title.replace(/\s+—\s+[IVXLC]+$/, "").trim();
       return { ...s, title: `${base} — ${suffix}` };
     }
     return s;
@@ -2169,7 +2176,8 @@ export async function runDeepAnalysis(
   let offline = true;
   if (aiConfigured()) {
     try {
-      onStep(ANALYSIS_STEPS[2].label, ANALYSIS_STEPS[2].pct);
+      const step2 = ANALYSIS_STEPS[2];
+      if (step2) onStep(step2.label, step2.pct);
       const text = docText(doc).slice(0, 10000);
       const raw = await aiRequest(
         "ouro",
@@ -2213,7 +2221,8 @@ export async function runDeepAnalysis(
       doc.id,
     );
   } else {
-    onStep(ANALYSIS_STEPS[4].label, 100);
+    const step4 = ANALYSIS_STEPS[4];
+    if (step4) onStep(step4.label, 100);
   }
   if (!doc.summary) void patchDocument(doc.id, { summary: data.summary });
   const result = { data, offline };

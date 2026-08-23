@@ -267,7 +267,7 @@ export default function Create() {
       {/* ─── header ─── */}
       <div className="flex flex-wrap items-end justify-between gap-6 mb-9 sm:mb-10">
         <div className="min-w-0 flex-1">
-          <Eyebrow className="mb-3 !text-ankaa-400">
+          <Eyebrow className="mb-3 text-ankaa-400!">
             Ankaa · the long-form agent
           </Eyebrow>
           <h1 className="font-display font-semibold text-3xl sm:text-4xl lg:text-5xl text-mist-100 tracking-tight leading-[1.05]">
@@ -354,7 +354,7 @@ export default function Create() {
               "e.g. A cold harbor town the morning the lighthouse goes dark. The keeper's daughter walks the breakwater and finds the light has moved into the sea. Slow, salt-heavy prose; end on a door left open."
             }
             aria-label="What should Ankaa write?"
-            className="w-full rounded-xl border border-ink-600 bg-ink-875 px-4 sm:px-5 py-4 sm:py-5 text-[15px] sm:text-base font-literata leading-relaxed text-mist-100 placeholder:text-mist-600 hover:border-ink-500 focus:border-ankaa-500 focus:shadow-[0_0_24px_-12px_var(--acc-glow)] outline-none transition-all resize-y min-h-[120px] sm:min-h-[140px]"
+            className="w-full rounded-xl border border-ink-600 bg-ink-875 px-4 sm:px-5 py-4 sm:py-5 text-[15px] sm:text-base font-literata leading-relaxed text-mist-100 placeholder:text-mist-600 hover:border-ink-500 focus:border-ankaa-500 focus:shadow-[0_0_24px_-12px_var(--acc-glow)] outline-none transition-all resize-y min-h-30 sm:min-h-35"
           />
           <span className="absolute right-3 bottom-3 pointer-events-none text-[10px] font-display uppercase tracking-[0.14em] text-mist-700">
             ⌘ + ↵
@@ -733,7 +733,7 @@ export default function Create() {
               className="max-h-[55vh] overflow-y-auto pr-2 -mr-2 reader-scope"
               data-rtheme="dark"
             >
-              <div className="reader-prose font-literata text-[15px] leading-[1.85] text-[var(--r-fg)] space-y-4">
+              <div className="reader-prose font-literata text-[15px] leading-[1.85] text-(--r-fg) space-y-4">
                 {preview.body.split(/\n{2,}/).map((p, i) => (
                   <p key={i} className={i === 0 ? "dropcap" : undefined}>
                     {p}

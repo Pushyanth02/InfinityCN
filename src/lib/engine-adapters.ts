@@ -50,7 +50,9 @@ export async function parseDocx(file: File): Promise<RawDoc> {
     .filter((c) => c.size > 0 && c.text.trim())
     .map((c) => c.size)
     .sort((a, b) => a - b);
-  const medianSize = sizes.length ? sizes[Math.floor(sizes.length / 2)] : 0;
+  const medianSize = sizes.length
+    ? (sizes[Math.floor(sizes.length / 2)] ?? 0)
+    : 0;
 
   const lines: RawLine[] = collected.map((c) => {
     const t = c.text.trim();
@@ -365,9 +367,9 @@ function clusterHeights(heights: number[]): {
   const uniq = [...buckets.keys()].sort((a, b) => a - b);
   let headingThreshold: number;
   if (uniq.length >= 4) {
-    headingThreshold = uniq[Math.floor(uniq.length * 0.75)];
+    headingThreshold = uniq[Math.floor(uniq.length * 0.75)] ?? bodyH * 1.15;
   } else if (uniq.length >= 2) {
-    headingThreshold = uniq[uniq.length - 1]; // largest bucket
+    headingThreshold = uniq[uniq.length - 1] ?? bodyH * 1.15; // largest bucket
   } else {
     headingThreshold = bodyH * 1.15;
   }
@@ -426,10 +428,10 @@ export async function parsePdf(file: File): Promise<RawDoc> {
         height?: number;
       };
       if (!item.str || !item.transform) continue;
-      const y = Math.round(item.transform[5]);
-      const h = item.height || Math.abs(item.transform[3]) || 10;
+      const y = Math.round(item.transform[5] ?? 0);
+      const h = item.height || Math.abs(item.transform[3] ?? 0) || 10;
       const row = rows.get(y) ?? [];
-      row.push({ x: item.transform[4], str: item.str, h });
+      row.push({ x: item.transform[4] ?? 0, str: item.str, h });
       rows.set(y, row);
     }
     const ys = [...rows.keys()].sort((a, b) => b - a); // top→bottom (PDF y grows upward)
@@ -495,7 +497,9 @@ export async function parsePdf(file: File): Promise<RawDoc> {
     .map((l) => l.gap)
     .filter((g) => g > 0)
     .sort((a, b) => a - b);
-  const medianGap = gaps.length ? gaps[Math.floor(gaps.length / 2)] : 12;
+  const medianGap = gaps.length
+    ? (gaps[Math.floor(gaps.length / 2)] ?? 12)
+    : 12;
 
   // 5. Heading predicate: top-quartile font + short + no sentence punctuation,
   //    OR all-caps short line, OR title-case short line.
@@ -546,6 +550,7 @@ export async function parsePdf(file: File): Promise<RawDoc> {
   const lines: RawLine[] = [];
   for (let i = 0; i < filtered.length; i++) {
     const l = filtered[i];
+    if (!l) continue;
     const prev = i > 0 ? filtered[i - 1] : null;
     const tocTitle = chapterStarts.get(l.page);
     const isPageFirstLine = firstRealLinePerPage.get(l.page) === l;
@@ -673,7 +678,7 @@ export async function parsePptx(file: File): Promise<RawDoc> {
         if (shape) {
           const shapeTexts = shape.getElementsByTagName("a:t");
           if (shapeTexts.length > 0) {
-            slideTitle = (shapeTexts[0].textContent ?? "").trim();
+            slideTitle = (shapeTexts[0]?.textContent ?? "").trim();
             break;
           }
         }

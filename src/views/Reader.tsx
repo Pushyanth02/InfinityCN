@@ -231,7 +231,7 @@ export default function Reader() {
     (idx: number) => {
       if (!chapters.length) return;
       const target = clamp(idx, 0, chapters.length - 1);
-      const gi = chapters[target].startChunk;
+      const gi = chapters[target]?.startChunk ?? 0;
       setChunkIdx(gi);
       setFocusIdx(gi);
       if (scenesModeRef.current) {
@@ -447,9 +447,7 @@ export default function Reader() {
               className="text-[12px] sm:text-[13px] font-display truncate leading-tight"
               style={{ color: "var(--r-muted)" }}
             >
-              <span className="text-[var(--r-fg)] font-medium">
-                {doc.title}
-              </span>
+              <span className="text-(--r-fg) font-medium">{doc.title}</span>
               <span className="mx-1.5 opacity-40">·</span>
               <span className="hidden sm:inline">{chapter?.title}</span>
               <span className="sm:hidden">Ch. {chapterIndex + 1}</span>
@@ -513,7 +511,7 @@ export default function Reader() {
 
         {/* sleeker progress bar — gradient with subtle glow */}
         <div
-          className="relative h-[3px] w-full overflow-hidden"
+          className="relative h-0.75 w-full overflow-hidden"
           style={{
             background: "color-mix(in srgb, var(--r-border) 60%, transparent)",
           }}
@@ -662,7 +660,7 @@ export default function Reader() {
                   style={{ color: "var(--r-muted)" }}
                   aria-label="Bookmark this passage"
                 >
-                  <Bookmark className="w-4 h-4 group-hover:text-[var(--r-accent)] transition-colors" />
+                  <Bookmark className="w-4 h-4 group-hover:text-(--r-accent) transition-colors" />
                   <span className="hidden sm:inline">Bookmark</span>
                 </button>
               </div>
@@ -981,7 +979,7 @@ function DocSearch({
                     onJump(r.gi);
                     onClose();
                   }}
-                  className="w-full text-left px-3 py-2 rounded-lg transition-colors hover:bg-[var(--r-mark)]"
+                  className="w-full text-left px-3 py-2 rounded-lg transition-colors hover:bg-(--r-mark)"
                 >
                   <span className="block text-[10px] font-display uppercase tracking-[0.14em] opacity-60">
                     {r.chapter}
@@ -1020,7 +1018,7 @@ function AnnotationPopover({
 
   return (
     <div
-      className="fixed z-[60] w-[min(92vw,360px)] panel p-4 sm:p-5 shadow-lift rounded-xl animate-[rise_0.3s_cubic-bezier(0.22,1,0.36,1)_both]"
+      className="fixed z-60 w-[min(92vw,360px)] panel p-4 sm:p-5 shadow-lift rounded-xl animate-[rise_0.3s_cubic-bezier(0.22,1,0.36,1)_both]"
       style={{ left: "50%", transform: "translateX(-50%)", top }}
       role="dialog"
       aria-label="New annotation"

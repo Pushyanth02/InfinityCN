@@ -33,7 +33,7 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
 /** Same as cacheGet, but also returns the cache row's createdAt (epoch ms)
  *  so callers can implement stale-while-revalidate. */
 export async function cacheGetWithMeta<T>(
-  key: string
+  key: string,
 ): Promise<{ value: T; createdAt: number; expiresAt: number } | null> {
   try {
     const row = await idbGet<CacheRow>("aiCache", P + key);
@@ -42,27 +42,66 @@ export async function cacheGetWithMeta<T>(
       void idbDelete("aiCache", row.id);
       return null;
     }
-    return { value: row.value as T, createdAt: row.createdAt, expiresAt: row.expiresAt };
+    return {
+      value: row.value as T,
+      createdAt: row.createdAt,
+      expiresAt: row.expiresAt,
+    };
   } catch {
     return null;
   }
 }
 
-export async function cacheSet(key: string, value: unknown, ttlMs: number): Promise<void> {
+export async function cacheSet(
+  key: string,
+  value: unknown,
+  ttlMs: number,
+): Promise<void> {
   try {
-    await idbPut("aiCache", { id: P + key, value, expiresAt: Date.now() + ttlMs, createdAt: Date.now() });
-  } catch { /* cache is best-effort */ }
+    await idbPut("aiCache", {
+      id: P + key,
+      value,
+      expiresAt: Date.now() + ttlMs,
+      createdAt: Date.now(),
+    });
+  } catch {
+    /* cache is best-effort */
+  }
 }
 
 export async function cacheDel(key: string): Promise<void> {
-  try { await idbDelete("aiCache", P + key); } catch { /* ignore */ }
+  try {
+    await idbDelete("aiCache", P + key);
+  } catch {
+    /* ignore */
+  }
 }
 
 export async function cacheClearAll(): Promise<void> {
-  try { await idbClear("aiCache"); } catch { /* ignore */ }
+  try {
+    await idbClear("aiCache");
+  } catch {
+    /* ignore */
+  }
 }
 
-export async function cacheStats(): Promise<{ entries: number; bytes: number }> {
+/** Purge every cached artifact belonging to a document (study sets, deep
+ *  analyses, scene cards, Ouro artifacts). Called by `deleteDocument` so
+ *  orphaned entries don't linger until their TTL expires. Best-effort. */
+export async function cachePurgeDoc(docId: string): Promise<void> {
+  try {
+    const rows = await idbAll<CacheRow>("aiCache");
+    const doomed = rows.filter((r) => r.id.includes(`:${docId}:`));
+    for (const d of doomed) await idbDelete("aiCache", d.id);
+  } catch {
+    /* cache is best-effort */
+  }
+}
+
+export async function cacheStats(): Promise<{
+  entries: number;
+  bytes: number;
+}> {
   try {
     const rows = await idbAll<CacheRow>("aiCache");
     const bytes = rows.reduce((a, r) => a + JSON.stringify(r.value).length, 0);
@@ -77,8 +116,11 @@ export async function cacheStats(): Promise<{ entries: number; bytes: number }> 
 export const HOUR = 3_600_000;
 export const DAY = 24 * HOUR;
 
-export const studyKey = (docId: string, scope: string, updatedAt: number): string =>
-  `study:v2:${docId}:${scope}:${updatedAt}`;
+export const studyKey = (
+  docId: string,
+  scope: string,
+  updatedAt: number,
+): string => `study:v2:${docId}:${scope}:${updatedAt}`;
 
 export const analysisKey = (docId: string, updatedAt: number): string =>
   `analysis:v2:${docId}:${updatedAt}`;

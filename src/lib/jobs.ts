@@ -63,14 +63,16 @@ export interface JobSpec<R> {
 
 /** Errors that will never succeed on retry — fail fast instead of burning time. */
 function isFatal(e: unknown): boolean {
-  return e instanceof Error && /quota|api key|rejected|unavailable/i.test(e.message);
+  return (
+    e instanceof Error && /quota|api key|rejected|unavailable/i.test(e.message)
+  );
 }
 
 async function withRetry<R>(
   fn: () => Promise<R>,
   retries: number,
   onAttempt: (n: number) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<R> {
   let last: unknown;
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -126,9 +128,17 @@ function effectivePriority<R>(spec: JobSpec<R>): number {
 
 /** Stable priority insertion: highest priority first, FIFO within a tier. */
 function enqueueEntry<R>(spec: JobSpec<R>, fn: () => Promise<void>): void {
-  const entry: QueueEntry = { priority: effectivePriority(spec), seq: seqCounter++, fn };
+  const entry: QueueEntry = {
+    priority: effectivePriority(spec),
+    seq: seqCounter++,
+    fn,
+  };
   let i = queue.length;
-  while (i > 0 && queue[i - 1].priority < entry.priority) i--;
+  while (
+    i > 0 &&
+    (queue[i - 1]?.priority ?? Number.NEGATIVE_INFINITY) < entry.priority
+  )
+    i--;
   queue.splice(i, 0, entry);
 }
 
@@ -160,7 +170,12 @@ export async function recoverStaleJobs(): Promise<void> {
       else recent.push(j);
     }
     for (const j of stale) {
-      await idbPut("jobs", { ...j, status: "failed", error: "Interrupted — the app reloaded mid-job.", updatedAt: Date.now() });
+      await idbPut("jobs", {
+        ...j,
+        status: "failed",
+        error: "Interrupted — the app reloaded mid-job.",
+        updatedAt: Date.now(),
+      });
     }
     // Recently-updated jobs MIGHT still be running in another tab. Use a
     // BroadcastChannel to ask: "is anyone actually running this job?" If no
@@ -185,7 +200,10 @@ export async function recoverStaleJobs(): Promise<void> {
    job ID. Jobs that get no response within the probe window are presumed
    abandoned and marked as interrupted.
    ──────────────────────────────────────────────────────────── */
-const JOB_CHANNEL = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel("lemniscate-jobs") : null;
+const JOB_CHANNEL =
+  typeof BroadcastChannel !== "undefined"
+    ? new BroadcastChannel("lemniscate-jobs")
+    : null;
 
 /** Set of job IDs that this tab is actively running (populated by enqueueJob). */
 const activeJobIds = new Set<string>();
@@ -207,7 +225,12 @@ async function probeAndRecoverRecent(recent: AnalysisJob[]): Promise<void> {
     // No BroadcastChannel support (older browsers) — fall back to marking
     // them all as interrupted, since we have no way to verify cross-tab.
     for (const j of recent) {
-      await idbPut("jobs", { ...j, status: "failed", error: "Interrupted — the app reloaded mid-job.", updatedAt: Date.now() });
+      await idbPut("jobs", {
+        ...j,
+        status: "failed",
+        error: "Interrupted — the app reloaded mid-job.",
+        updatedAt: Date.now(),
+      });
     }
     return;
   }
@@ -222,7 +245,8 @@ async function probeAndRecoverRecent(recent: AnalysisJob[]): Promise<void> {
       if (msg?.type === "alive" && msg.jobId) aliveIds.add(msg.jobId);
     };
     JOB_CHANNEL.addEventListener("message", handler);
-    for (const id of probeIds) JOB_CHANNEL.postMessage({ type: "probe", jobId: id });
+    for (const id of probeIds)
+      JOB_CHANNEL.postMessage({ type: "probe", jobId: id });
     // Wait a short window for responses. 800ms is long enough for an
     // idle tab to respond to a BroadcastChannel message, short enough to
     // not noticeably delay boot.
@@ -237,7 +261,12 @@ async function probeAndRecoverRecent(recent: AnalysisJob[]): Promise<void> {
   for (const j of recent) {
     if (!aliveIds.has(j.id)) {
       // No tab claimed this job — it was abandoned by a crashed/closed tab.
-      await idbPut("jobs", { ...j, status: "failed", error: "Interrupted — the app reloaded mid-job.", updatedAt: Date.now() });
+      await idbPut("jobs", {
+        ...j,
+        status: "failed",
+        error: "Interrupted — the app reloaded mid-job.",
+        updatedAt: Date.now(),
+      });
     }
   }
 }
@@ -283,7 +312,10 @@ export function startJobReaper(): void {
   setInterval(() => void reapTerminalJobs(), 5 * 60 * 1000);
 }
 
-export function enqueueJob<R>(spec: JobSpec<R>): { id: string; row: AnalysisJob } {
+export function enqueueJob<R>(spec: JobSpec<R>): {
+  id: string;
+  row: AnalysisJob;
+} {
   const row: AnalysisJob = {
     id: uid("job"),
     documentId: spec.documentId ?? "",
@@ -324,7 +356,12 @@ export function enqueueJob<R>(spec: JobSpec<R>): { id: string; row: AnalysisJob 
 
     const report = (r: JobReport): void => {
       const stepIdx = Math.min(r.step, spec.steps.length - 1);
-      const progress = Math.min(99, Math.round(((stepIdx + Math.min(1, r.fraction)) / spec.steps.length) * 100));
+      const progress = Math.min(
+        99,
+        Math.round(
+          ((stepIdx + Math.min(1, r.fraction)) / spec.steps.length) * 100,
+        ),
+      );
       const elapsed = (performance.now() - startedAt) / 1000;
 
       // Smoothed ETA: rolling window of (elapsed, progress) samples.
@@ -340,19 +377,24 @@ export function enqueueJob<R>(spec: JobSpec<R>): { id: string; row: AnalysisJob 
       if (samples.length >= 2) {
         const first = samples[0];
         const last = samples[samples.length - 1];
-        const dProgress = last.progress - first.progress;
-        const dElapsed = last.elapsed - first.elapsed;
-        if (dElapsed > 0 && dProgress > 0) {
-          const rate = dProgress / dElapsed; // progress points / second
-          etaSec = Math.max(1, Math.round((100 - progress) / rate));
+        if (first && last) {
+          const dProgress = last.progress - first.progress;
+          const dElapsed = last.elapsed - first.elapsed;
+          if (dElapsed > 0 && dProgress > 0) {
+            const rate = dProgress / dElapsed; // progress points / second
+            etaSec = Math.max(1, Math.round((100 - progress) / rate));
+          }
         }
       }
       // Early single-point fallback so the ETA shows before the window fills.
       if (etaSec === null && progress > 4) {
-        etaSec = Math.max(1, Math.round((elapsed / (progress / 100)) * (1 - progress / 100)));
+        etaSec = Math.max(
+          1,
+          Math.round((elapsed / (progress / 100)) * (1 - progress / 100)),
+        );
       }
 
-      state.step = spec.steps[stepIdx];
+      state.step = spec.steps[stepIdx] ?? state.step;
       state.progress = progress;
       state.etaSec = etaSec;
       state.words = r.words ?? state.words;
@@ -376,7 +418,7 @@ export function enqueueJob<R>(spec: JobSpec<R>): { id: string; row: AnalysisJob 
           state.updatedAt = Date.now();
           void idbPut("jobs", { ...state }).then(() => bump("jobs"));
         },
-        signal
+        signal,
       );
       state.status = "done";
       state.progress = 100;
@@ -387,13 +429,21 @@ export function enqueueJob<R>(spec: JobSpec<R>): { id: string; row: AnalysisJob 
       bump("jobs");
       if (spec.onDone) await spec.onDone(result, { ...state });
     } catch (e) {
-      const cancelled = signal.aborted || (e instanceof Error && /abort/i.test(e.message));
+      const cancelled =
+        signal.aborted || (e instanceof Error && /abort/i.test(e.message));
       state.status = "failed";
-      state.error = cancelled ? "Cancelled by user." : e instanceof Error ? e.message : "Job failed.";
+      state.error = cancelled
+        ? "Cancelled by user."
+        : e instanceof Error
+          ? e.message
+          : "Job failed.";
       state.updatedAt = Date.now();
       await idbPut("jobs", { ...state });
       bump("jobs");
-      if (spec.onError) await spec.onError(e instanceof Error ? e : new Error("Job failed."), { ...state });
+      if (spec.onError)
+        await spec.onError(e instanceof Error ? e : new Error("Job failed."), {
+          ...state,
+        });
       // failures are surfaced via the persisted row + onError; the queue itself keeps pumping
     } finally {
       controllers.delete(row.id);
@@ -428,7 +478,12 @@ export function cancelJob(id: string): boolean {
       const rows = await idbAll<AnalysisJob>("jobs");
       const j = rows.find((r) => r.id === id);
       if (j && (j.status === "running" || j.status === "queued")) {
-        await idbPut("jobs", { ...j, status: "failed", error: "Cancelled by user.", updatedAt: Date.now() });
+        await idbPut("jobs", {
+          ...j,
+          status: "failed",
+          error: "Cancelled by user.",
+          updatedAt: Date.now(),
+        });
         bump("jobs");
       }
     } catch {

@@ -37,14 +37,26 @@ export function BrandMark({
       aria-hidden
     >
       <defs>
-        <linearGradient id="lemniscate-gold-flow" x1="0%" y1="0%" x2="100%" y2="100%">
+        <linearGradient
+          id="lemniscate-gold-flow"
+          x1="0%"
+          y1="0%"
+          x2="100%"
+          y2="100%"
+        >
           <stop offset="0%" stopColor="var(--color-gold-200, #f8eac2)" />
           <stop offset="35%" stopColor="var(--color-gold-400, #e6c270)" />
           <stop offset="70%" stopColor="var(--color-gold-500, #d9ad52)" />
           <stop offset="100%" stopColor="var(--color-gold-700, #946d2e)" />
         </linearGradient>
 
-        <filter id="lemniscate-mark-glow" x="-20%" y="-40%" width="140%" height="180%">
+        <filter
+          id="lemniscate-mark-glow"
+          x="-20%"
+          y="-40%"
+          width="140%"
+          height="180%"
+        >
           <feGaussianBlur stdDeviation="1.5" result="blur" />
           <feComposite in="SourceGraphic" in2="blur" operator="over" />
         </filter>
@@ -54,7 +66,9 @@ export function BrandMark({
       {(variant === "glow" || animated) && (
         <path
           d={pathD}
-          stroke={variant === "gold" ? "url(#lemniscate-gold-flow)" : "currentColor"}
+          stroke={
+            variant === "gold" ? "url(#lemniscate-gold-flow)" : "currentColor"
+          }
           strokeWidth={strokeWidth + 2.5}
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -66,7 +80,9 @@ export function BrandMark({
       {/* Primary Lemniscate Stroke */}
       <path
         d={pathD}
-        stroke={variant === "gold" ? "url(#lemniscate-gold-flow)" : "currentColor"}
+        stroke={
+          variant === "gold" ? "url(#lemniscate-gold-flow)" : "currentColor"
+        }
         strokeWidth={strokeWidth}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -96,7 +112,7 @@ export function BrandBadge({
     <div
       className={cx(
         "relative rounded-xl flex items-center justify-center bg-ink-950 border border-gold-500/20 shadow-card overflow-hidden shrink-0 group",
-        className
+        className,
       )}
       style={{ width: size, height: size }}
     >
@@ -141,7 +157,9 @@ export function Wordmark({
   }[size];
 
   return (
-    <span className={cx("inline-flex items-center gap-2.5 select-none", className)}>
+    <span
+      className={cx("inline-flex items-center gap-2.5 select-none", className)}
+    >
       <BrandMark
         size={sizeMap.mark}
         animated={animated || size === "lg" || size === "xl"}
@@ -152,7 +170,7 @@ export function Wordmark({
           className={cx(
             "font-display font-semibold uppercase text-mist-100 leading-none",
             sizeMap.text,
-            sizeMap.track
+            sizeMap.track,
           )}
         >
           Lemniscate
@@ -181,13 +199,15 @@ export function BrandLogo({
   const titleSize = { sm: "text-sm", md: "text-base", lg: "text-lg" }[size];
 
   return (
-    <div className={cx("inline-flex items-center gap-3 select-none", className)}>
+    <div
+      className={cx("inline-flex items-center gap-3 select-none", className)}
+    >
       <BrandBadge size={badgeSize} />
       <div className="flex flex-col">
         <span
           className={cx(
             "font-display font-semibold uppercase tracking-[0.22em] text-mist-100 leading-tight",
-            titleSize
+            titleSize,
           )}
         >
           Lemniscate
@@ -218,7 +238,9 @@ export function ParticleField({
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    const reduceOs = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const reduceOs = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
     if (motionOff || reduceOs) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       return;
@@ -248,7 +270,9 @@ export function ParticleField({
       canvas.height = h * dpr;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       const colors =
-        tint === "gold" ? ["217,173,82"] : ["217,173,82", "146,164,244", "232,225,216"];
+        tint === "gold"
+          ? ["217,173,82"]
+          : ["217,173,82", "146,164,244", "232,225,216"];
       parts = Array.from({ length: density }, () => ({
         x: Math.random() * w,
         y: Math.random() * h,
@@ -256,7 +280,7 @@ export function ParticleField({
         vy: -0.04 - Math.random() * 0.14,
         r: 0.6 + Math.random() * 1.6,
         a: 0.12 + Math.random() * 0.4,
-        c: colors[Math.floor(Math.random() * colors.length)],
+        c: colors[Math.floor(Math.random() * colors.length)] ?? "217,173,82",
         tw: Math.random() * Math.PI * 2,
       }));
     };
@@ -301,7 +325,10 @@ export function ParticleField({
   return (
     <canvas
       ref={ref}
-      className={cx("absolute inset-0 w-full h-full pointer-events-none", className)}
+      className={cx(
+        "absolute inset-0 w-full h-full pointer-events-none",
+        className,
+      )}
       aria-hidden
     />
   );
@@ -322,13 +349,15 @@ export function AppAmbient() {
       <div
         className="absolute top-[36%] left-[-16%] w-170 h-140 rounded-full"
         style={{
-          background: "radial-gradient(ellipse, rgba(109,132,232,0.07), transparent 62%)",
+          background:
+            "radial-gradient(ellipse, rgba(109,132,232,0.07), transparent 62%)",
         }}
       />
       <div
         className="absolute bottom-[-24%] right-[16%] w-140 h-115 rounded-full"
         style={{
-          background: "radial-gradient(ellipse, rgba(219,129,76,0.05), transparent 60%)",
+          background:
+            "radial-gradient(ellipse, rgba(219,129,76,0.05), transparent 60%)",
         }}
       />
       <ParticleField density={26} tint="mixed" />
@@ -348,43 +377,58 @@ export function AppAmbient() {
 }
 
 /** Soft cinematic glows used behind hero & dashboard surfaces. */
-export function GlowLayer({ variant = "landing" }: { variant?: "landing" | "noir" }) {
+export function GlowLayer({
+  variant = "landing",
+}: {
+  variant?: "landing" | "noir";
+}) {
   if (variant === "landing") {
     return (
-      <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden>
+      <div
+        className="absolute inset-0 overflow-hidden pointer-events-none"
+        aria-hidden
+      >
         <div
           className="absolute -top-40 right-[-10%] w-180 h-180 rounded-full"
           style={{
-            background: "radial-gradient(circle, rgba(91,91,214,0.12), transparent 65%)",
+            background:
+              "radial-gradient(circle, rgba(91,91,214,0.12), transparent 65%)",
           }}
         />
         <div
           className="absolute top-[30%] left-[-14%] w-155 h-155 rounded-full"
           style={{
-            background: "radial-gradient(circle, rgba(217,173,82,0.11), transparent 62%)",
+            background:
+              "radial-gradient(circle, rgba(217,173,82,0.11), transparent 62%)",
           }}
         />
         <div
           className="absolute bottom-[-30%] right-[20%] w-140 h-140 rounded-full"
           style={{
-            background: "radial-gradient(circle, rgba(219,129,76,0.07), transparent 60%)",
+            background:
+              "radial-gradient(circle, rgba(219,129,76,0.07), transparent 60%)",
           }}
         />
       </div>
     );
   }
   return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden>
+    <div
+      className="absolute inset-0 overflow-hidden pointer-events-none"
+      aria-hidden
+    >
       <div
         className="absolute -top-32 left-[8%] w-160 h-105 rounded-full"
         style={{
-          background: "radial-gradient(ellipse, rgba(217,173,82,0.07), transparent 65%)",
+          background:
+            "radial-gradient(ellipse, rgba(217,173,82,0.07), transparent 65%)",
         }}
       />
       <div
         className="absolute top-[10%] right-[-8%] w-140 h-115 rounded-full"
         style={{
-          background: "radial-gradient(ellipse, rgba(109,132,232,0.08), transparent 62%)",
+          background:
+            "radial-gradient(ellipse, rgba(109,132,232,0.08), transparent 62%)",
         }}
       />
     </div>

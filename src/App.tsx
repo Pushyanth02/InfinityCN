@@ -92,7 +92,7 @@ export default function App() {
     >
       <a
         href="#main"
-        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[99] focus:px-4 focus:py-2 focus:bg-gold-500 focus:text-[var(--acc-ink)] focus:rounded font-display text-sm"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-99 focus:px-4 focus:py-2 focus:bg-gold-500 focus:text-(--acc-ink) focus:rounded font-display text-sm"
       >
         Skip to content
       </a>

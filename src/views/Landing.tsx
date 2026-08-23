@@ -372,7 +372,7 @@ function HeroBook() {
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => setRedirectOpen(false)}
-              className="inline-flex items-center justify-center gap-2 rounded-lg font-display tracking-wide transition-all duration-200 select-none whitespace-nowrap press w-full sm:w-auto text-sm px-4 py-2.5 bg-gold-500 text-[var(--acc-ink)] border border-gold-400/50 hover:bg-gold-400 active:bg-gold-600 shadow-[0_4px_20px_-6px_var(--acc-glow),0_1px_0_0_rgb(255_255_255_/_0.2)_inset] font-semibold"
+              className="inline-flex items-center justify-center gap-2 rounded-lg font-display tracking-wide transition-all duration-200 select-none whitespace-nowrap press w-full sm:w-auto text-sm px-4 py-2.5 bg-gold-500 text-(--acc-ink) border border-gold-400/50 hover:bg-gold-400 active:bg-gold-600 shadow-[0_4px_20px_-6px_var(--acc-glow),0_1px_0_0_rgb(255_255_255/0.2)_inset] font-semibold"
             >
               <ExternalLink className="w-4 h-4" />
               Open in a new tab
@@ -471,7 +471,7 @@ export default function Landing() {
                   onClick={run}
                   aria-current={active ? "true" : undefined}
                   className={cx(
-                    "relative px-3 py-2 text-[13px] font-display tracking-wide transition-colors min-h-[40px] inline-flex items-center",
+                    "relative px-3 py-2 text-[13px] font-display tracking-wide transition-colors min-h-10 inline-flex items-center",
                     active
                       ? "text-gold-300"
                       : "text-mist-400 hover:text-gold-300",
@@ -506,7 +506,7 @@ export default function Landing() {
               variant="gold"
               size="sm"
               onClick={() => go("dashboard")}
-              className="min-h-[40px]"
+              className="min-h-10"
             >
               Enter the room
               <ArrowRight className="w-3.5 h-3.5" />
@@ -550,7 +550,7 @@ export default function Landing() {
                       }}
                       aria-current={active ? "true" : undefined}
                       className={cx(
-                        "text-left px-3 py-3 text-sm font-display tracking-wide transition-colors border-b border-ink-700/40 last:border-0 min-h-[44px] inline-flex items-center gap-3",
+                        "text-left px-3 py-3 text-sm font-display tracking-wide transition-colors border-b border-ink-700/40 last:border-0 min-h-11 inline-flex items-center gap-3",
                         active
                           ? "text-gold-300"
                           : "text-mist-300 hover:text-gold-300",
@@ -571,7 +571,7 @@ export default function Landing() {
                     go("library");
                     setMobileMenuOpen(false);
                   }}
-                  className="text-left px-3 py-3 text-sm font-display tracking-wide text-mist-300 hover:text-gold-300 transition-colors min-h-[44px] inline-flex items-center gap-3"
+                  className="text-left px-3 py-3 text-sm font-display tracking-wide text-mist-300 hover:text-gold-300 transition-colors min-h-11 inline-flex items-center gap-3"
                 >
                   <span className="w-1 h-4 rounded-full bg-ink-600" />
                   Library
@@ -622,7 +622,7 @@ export default function Landing() {
                     variant="gold"
                     size="lg"
                     onClick={() => fileInputRef.current?.click()}
-                    className="min-h-[44px]"
+                    className="min-h-11"
                   >
                     <Upload className="w-4 h-4" />
                     Bring a document
@@ -632,14 +632,14 @@ export default function Landing() {
                   variant="outline"
                   size="lg"
                   onClick={() => go("dashboard")}
-                  className="min-h-[44px]"
+                  className="min-h-11"
                 >
                   <LayoutDashboard className="w-4 h-4" />
                   Open the dashboard
                 </Button>
                 <button
                   onClick={() => go("create")}
-                  className="text-sm font-display text-gold-400 hover:text-gold-300 inline-flex items-center gap-1.5 transition-colors min-h-[44px] px-2"
+                  className="text-sm font-display text-gold-400 hover:text-gold-300 inline-flex items-center gap-1.5 transition-colors min-h-11 px-2"
                 >
                   <PenLine className="w-4 h-4" />
                   Create a story
@@ -933,7 +933,7 @@ export default function Landing() {
             <Button
               variant="outline"
               onClick={() => go("settings")}
-              className="min-h-[44px]"
+              className="min-h-11"
             >
               <Settings className="w-4 h-4" />
               Tune it in Settings
@@ -1029,7 +1029,7 @@ export default function Landing() {
                   <ArrowRight className="w-4 h-4 text-gold-500" />
                 </div>
                 <div
-                  className="w-px h-12 bg-gradient-to-b from-gold-700/40 to-transparent"
+                  className="w-px h-12 bg-linear-to-b from-gold-700/40 to-transparent"
                   aria-hidden
                 />
               </div>
@@ -1152,7 +1152,7 @@ export default function Landing() {
                   variant="gold"
                   size="lg"
                   onClick={() => fileInputRef.current?.click()}
-                  className="min-h-[44px] mt-5"
+                  className="min-h-11 mt-5"
                 >
                   <BookOpen className="w-4 h-4" />
                   Bring your own document
@@ -1228,7 +1228,7 @@ export default function Landing() {
                     <li key={label}>
                       <button
                         onClick={run}
-                        className="text-[13px] text-mist-400 hover:text-gold-300 transition-colors inline-flex items-center gap-1.5 min-h-[28px] group"
+                        className="text-[13px] text-mist-400 hover:text-gold-300 transition-colors inline-flex items-center gap-1.5 min-h-7 group"
                       >
                         <span
                           className="w-0 group-hover:w-3 h-px bg-gold-500 transition-all duration-200"

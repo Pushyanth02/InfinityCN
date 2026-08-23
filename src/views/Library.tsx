@@ -279,7 +279,7 @@ export default function Library() {
         <button
           onClick={() => setFiltersOpen((v) => !v)}
           aria-expanded={filtersOpen}
-          className="mt-3 w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-lg border border-ink-600 bg-ink-850/60 text-xs font-display text-mist-300 hover:text-gold-300 hover:border-gold-700 transition-colors min-h-[44px]"
+          className="mt-3 w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-lg border border-ink-600 bg-ink-850/60 text-xs font-display text-mist-300 hover:text-gold-300 hover:border-gold-700 transition-colors min-h-11"
         >
           <SlidersHorizontal className="w-3.5 h-3.5" />
           Filters
@@ -335,7 +335,7 @@ export default function Library() {
               onClick={() => setFavOnly((f) => !f)}
               aria-pressed={favOnly}
               className={cx(
-                "inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-lg border text-xs font-display transition-colors min-h-[44px]",
+                "inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-lg border text-xs font-display transition-colors min-h-11",
                 favOnly
                   ? "border-gold-600 text-gold-300 bg-gold-500/10"
                   : "border-ink-600 text-mist-400 hover:text-gold-300",
@@ -364,7 +364,7 @@ export default function Library() {
             onClick={() => (selectMode ? exitSelect() : setSelectMode(true))}
             aria-pressed={selectMode}
             className={cx(
-              "flex-1 inline-flex items-center justify-center gap-1.5 px-3.5 py-3 rounded-lg border text-xs font-display transition-colors min-h-[44px]",
+              "flex-1 inline-flex items-center justify-center gap-1.5 px-3.5 py-3 rounded-lg border text-xs font-display transition-colors min-h-11",
               selectMode
                 ? "border-gold-600 text-gold-300 bg-gold-500/10"
                 : "border-ink-600 text-mist-400 hover:text-gold-300",
@@ -676,7 +676,7 @@ export default function Library() {
                   key={d.id}
                   className={cx(
                     "flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-4 transition-colors cursor-pointer group",
-                    selected ? "bg-gold-500/[0.07]" : "hover:bg-ink-800/50",
+                    selected ? "bg-gold-500/7" : "hover:bg-ink-800/50",
                   )}
                   onClick={() => (selectMode ? toggleSel(d.id) : openDoc(d.id))}
                 >
@@ -695,7 +695,7 @@ export default function Library() {
                   )}
                   <CoverArt
                     doc={d}
-                    className="w-10 h-14 sm:w-11 sm:h-[3.75rem] shrink-0"
+                    className="w-10 h-14 sm:w-11 sm:h-15 shrink-0"
                     showInitial={false}
                   />
                   <div className="min-w-0 flex-1">
@@ -869,7 +869,7 @@ export default function Library() {
         onClose={() => setBulkDeleteOpen(false)}
         title={`Delete ${selIds.size} document${selIds.size === 1 ? "" : "s"}?`}
       >
-        <div className="flex items-start gap-3 mb-4 p-3 rounded-xl border border-danger-500/30 bg-danger-500/[0.06]">
+        <div className="flex items-start gap-3 mb-4 p-3 rounded-xl border border-danger-500/30 bg-danger-500/6">
           <AlertTriangle className="w-5 h-5 text-danger-400 shrink-0 mt-0.5" />
           <p className="text-sm text-mist-300 leading-relaxed">
             <span className="text-mist-200">
@@ -994,7 +994,7 @@ export function AnalyzeDialog({
       // invisible to useJobs(), which filters by the session identity.
       userId: getUserId(),
       status: "running",
-      step: ANALYZE_STEPS[0],
+      step: ANALYZE_STEPS[0] ?? "Analyzing",
       progress: 0,
       etaSec: 8,
       results: null,

@@ -153,20 +153,20 @@ describe("buildChapters", () => {
     ];
     const chapters = buildChapters(lines);
     expect(chapters.length).toBe(2);
-    expect(chapters[0].title).toBe("Chapter One");
-    expect(chapters[1].paras.length).toBeGreaterThan(0);
+    expect(chapters[0]!.title).toBe("Chapter One");
+    expect(chapters[1]!.paras.length).toBeGreaterThan(0);
   });
   it("creates an Opening section when no headings exist", () => {
     const chapters = buildChapters([{ text: "Just some prose here." }]);
     expect(chapters.length).toBe(1);
-    expect(chapters[0].title).toBe("Opening");
+    expect(chapters[0]!.title).toBe("Opening");
   });
 });
 
 describe("fallbackSplit", () => {
   it("keeps short texts whole", () => {
     const paras = ["one two three"];
-    expect(fallbackSplit(paras, 3)[0].title).toBe("Full text");
+    expect(fallbackSplit(paras, 3)[0]!.title).toBe("Full text");
   });
   it("splits long texts on paragraph boundaries only", () => {
     const para = "word ".repeat(120).trim(); // ~120 words
@@ -184,9 +184,9 @@ describe("toChapters", () => {
       { title: "A", paras: ["x", "y"] },
       { title: "B", paras: ["z"] },
     ]);
-    expect(chapters[0].startChunk).toBe(0);
-    expect(chapters[1].startChunk).toBe(2);
-    expect(chapters[1].chunks[0].id).toBe("ch1:0");
+    expect(chapters[0]!.startChunk).toBe(0);
+    expect(chapters[1]!.startChunk).toBe(2);
+    expect(chapters[1]!.chunks[0]!.id).toBe("ch1:0");
     expect(globalChunkCount(chapters)).toBe(3);
   });
 });
