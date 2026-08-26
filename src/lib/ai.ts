@@ -84,6 +84,7 @@ import {
   offlineAnalysis,
   buildStudy,
   extractAnchors,
+  retrievePassages,
   docText,
   chapterText,
   wordCount,
@@ -91,6 +92,11 @@ import {
   truncateWords,
   type StoryAnchors,
 } from "./loa";
+import {
+  healthBoost,
+  observeModel,
+  warmModelHealth,
+} from "./modelHealth";
 
 /* ────────────────────────────────────────────────────────────
    Re-export the Anchor engine surface so views and other libs that
@@ -125,6 +131,7 @@ export {
   offlineAnalysis,
   buildStudy,
   extractAnchors,
+  retrievePassages,
   docText,
   chapterText,
   wordCount,
@@ -175,23 +182,26 @@ export async function refineStructure(
       .map((c) => `# ${c.title}\n${c.chunks.map((k) => k.text).join("\n\n")}`)
       .join("\n\n")
       .slice(0, 30000);
-    const raw = await aiRequest(
-      "ouro",
-      "refine",
-      [
-        {
-          role: "system",
-          content:
-            `You are a book-structure engine. Fix chapter boundaries and paragraphing ONLY — preserve every word of the text (no abridging, no rewriting, no translation). ` +
-            `Recognize chapter numbering in all forms (Arabic "7.", Roman "IV.", "Chapter", "Part"). Start a new paragraph whenever a new speaker's dialogue begins. ` +
-            `Merge lines that are one broken paragraph; never merge separate paragraphs. Respond ONLY with JSON: {"chapters":[{"title":string,"paragraphs":string[]}]}.`,
-        },
-        { role: "user", content: plain },
-      ],
-      null,
-      4000,
+    const msgs: Msg[] = [
+      {
+        role: "system",
+        content:
+          `You are a book-structure engine. Fix chapter boundaries and paragraphing ONLY — preserve every word of the text (no abridging, no rewriting, no translation). ` +
+          `Recognize chapter numbering in all forms (Arabic "7.", Roman "IV.", "Chapter", "Part"). Start a new paragraph whenever a new speaker's dialogue begins. ` +
+          `Merge lines that are one broken paragraph; never merge separate paragraphs. Respond ONLY with JSON: {"chapters":[{"title":string,"paragraphs":string[]}]}.`,
+      },
+      { role: "user", content: plain },
+    ];
+    const data = StructureSchema.parse(
+      await requestValidatedJson(
+        "ouro",
+        "refine",
+        msgs,
+        (r) => StructureSchema.parse(extractJson(r)),
+        null,
+        4000,
+      ),
     );
-    const data = StructureSchema.parse(extractJson(raw));
     const chapters = toChapters(
       data.chapters.map((c) => ({ title: c.title, paras: c.paragraphs })),
     );
@@ -522,14 +532,25 @@ export async function resolveModelFor(bot: BotId): Promise<string> {
 }
 
 async function chainFor(bot: BotId): Promise<string[]> {
+  // Warm the health loop from the persisted ledger at most once/hour —
+  // never blocks the chain (fire-and-forget).
+  void warmModelHealth();
   const head = await resolveModelFor(bot);
   // Defense in depth: filter EVERY model in the chain to `:free` only.
   // Even if a default or fallback somehow got a paid ID, it never reaches
   // the user's API key. The user is NEVER silently upgraded to a paid model.
   const all = [head, DEFAULT_MODELS[bot], ...FALLBACKS];
-  return all.filter(
+  const free = all.filter(
     (m, i, a) => !!m && m.endsWith(":free") && a.indexOf(m) === i,
   );
+  // Adaptive reorder: observed success/latency EWMAs (from ./modelHealth)
+  // nudge the static family order. Models without observations score 0 and
+  // keep their exact position via the stable index tie-break — with no
+  // history this is byte-for-byte the old ordering.
+  return free
+    .map((m, i) => ({ m, i, b: healthBoost(bot, m) }))
+    .sort((a, b) => b.b - a.b || a.i - b.i)
+    .map((x) => x.m);
 }
 
 /* ---------- rate limiter: sliding window that queues instead of failing ----------
@@ -543,6 +564,36 @@ const WINDOW_MS = 60_000;
 const LIMIT = 15;
 const stamps: number[] = [];
 let queued = 0;
+
+/** Cross-tab window sync (best-effort): every stamped call is announced on a
+ *  BroadcastChannel so two side-by-side tabs share one effective 15/min
+ *  budget instead of doubling it to 30 (the gap AUDIT.md flagged as L4).
+ *  Silent no-op where BroadcastChannel is unavailable. */
+let rateChan: BroadcastChannel | null = null;
+try {
+  if (typeof BroadcastChannel !== "undefined") {
+    rateChan = new BroadcastChannel("lemniscate:rate");
+    rateChan.onmessage = (e: MessageEvent) => {
+      const t = (e.data as { t?: number } | null)?.t;
+      if (typeof t === "number" && Date.now() - t < WINDOW_MS) {
+        stamps.push(t);
+        stamps.sort((a, b) => a - b);
+      }
+    };
+  }
+} catch {
+  rateChan = null; // hardened contexts — per-tab limiting still applies
+}
+
+function stamp(): void {
+  const t = Date.now();
+  stamps.push(t);
+  try {
+    rateChan?.postMessage({ t });
+  } catch {
+    /* channel closed mid-flight — ignore */
+  }
+}
 
 function prune(): void {
   const now = Date.now();
@@ -562,7 +613,7 @@ export function rateInfo(): {
 async function rateWait(): Promise<void> {
   prune();
   if (stamps.length < LIMIT) {
-    stamps.push(Date.now());
+    stamp();
     return;
   }
   const waitMs = (stamps[0] ?? Date.now()) + WINDOW_MS - Date.now() + 60;
@@ -575,7 +626,7 @@ async function rateWait(): Promise<void> {
   try {
     await new Promise((r) => setTimeout(r, waitMs));
     prune();
-    stamps.push(Date.now());
+    stamp();
   } finally {
     queued = Math.max(0, queued - 1);
   }
@@ -725,8 +776,11 @@ async function openRouterChat(
   model: string,
   timeoutMs = 45_000,
   maxTokens?: number,
+  temperature?: number,
 ): Promise<{ text: string; tokens: number | null }> {
-  return openRouterChatOnce(messages, model, timeoutMs, maxTokens);
+  return openRouterChatOnce(messages, model, timeoutMs, maxTokens, {
+    temperature,
+  });
 }
 
 function isAuthFailure(msg: string): boolean {
@@ -736,10 +790,29 @@ function isRateFailure(msg: string): boolean {
   return /429|rate limit|quota exceeded|insufficient/i.test(msg);
 }
 
+/**
+ * Task-appropriate sampling profiles (A3): one global temperature served
+ * factual extraction and literary generation equally poorly. Pure + exported
+ * for tests.
+ */
+export function samplingFor(kind: string): { temperature: number } {
+  if (/repair$/.test(kind)) return { temperature: 0.2 }; // repairs want precision
+  if (/^cinema|^section|^outline/.test(kind)) return { temperature: 0.85 };
+  if (/^study/.test(kind)) return { temperature: 0.4 };
+  if (/^analysis$/.test(kind)) return { temperature: 0.45 };
+  if (/^refine/.test(kind)) return { temperature: 0.35 };
+  return { temperature: 0.55 }; // chat & everything else
+}
+
 /** Core request: rate-wait → quota → model chain with retry + backoff.
  *  On a 429 (rate limit) the remaining attempts on that model are skipped
  *  and the chain moves immediately to the next model — never waste a retry
  *  on a model that has just told us to back off.
+ *
+ *  Every attempt feeds the adaptive health loop (`observeModel`) with its
+ *  own per-model outcome and latency, and successful calls persist the
+ *  serving model in the usage ledger so `warmModelHealth()` can rebuild
+ *  EWMAs across sessions.
  *
  *  Auth failures (no key set, or the key was rejected) are thrown as a
  *  PLAIN `Error` — not `AiUnavailable` — so callers' catch blocks
@@ -758,31 +831,38 @@ async function aiRequest(
   await rateWait();
   await quotaCheck();
   const t0 = performance.now();
+  const { temperature } = samplingFor(kind);
   let lastErr = "Provider unreachable";
   let sawRateLimit = false;
   let sawAuthFailure = false;
   for (const model of await chainFor(bot)) {
     let rateLimited = false;
     for (let attempt = 0; attempt < 2 && !rateLimited; attempt++) {
+      const at = performance.now();
       try {
         const { text, tokens } = await openRouterChat(
           messages,
           model,
           45_000,
           maxTokens,
+          temperature,
         );
+        const ms = Math.round(performance.now() - at);
+        observeModel(bot, model, true, ms);
         void logUsage(
           bot,
           kind,
           tokens ?? Math.round(text.length / 4) + 200,
-          Math.round(performance.now() - t0),
+          ms,
           "ok",
           docId,
+          model,
         );
         incrementDailyCount();
         return text;
       } catch (e) {
         lastErr = e instanceof Error ? e.message : "request failed";
+        observeModel(bot, model, false, Math.round(performance.now() - at));
         if (isAuthFailure(lastErr)) {
           // No key set (or key rejected) — don't waste retries; break out
           // of the chain and let the caller fall back to Anchor.
@@ -821,6 +901,54 @@ async function aiRequest(
       ? "The provider is rate-limiting this key right now. Lemniscate will retry on the next request — the Anchor engine remains available meanwhile."
       : `The AI provider couldn’t be reached (${lastErr}). The Anchor engine remains fully available.`,
   );
+}
+
+/**
+ * Structured-output request with ONE self-repair round-trip (A2). The first
+ * malformed response is fed back to the model together with the validation
+ * error and a strict correction instruction — this rescues the common
+ * failure modes (prose preamble, truncated tail, wrong field shape) that
+ * previously sent every structured task straight to the offline engine.
+ *
+ * `validate` parses+validates a raw completion and throws on any problem;
+ * it is invoked on the original reply and, if needed, on the repair. If the
+ * repair also fails, its error propagates and callers fall back to Anchor
+ * exactly as before.
+ */
+async function requestValidatedJson(
+  bot: BotId,
+  kind: string,
+  msgs: Msg[],
+  validate: (raw: string) => unknown,
+  docId: string | null,
+  maxTokens?: number,
+): Promise<unknown> {
+  const raw = await aiRequest(bot, kind, msgs, docId, maxTokens);
+  try {
+    return validate(raw);
+  } catch (firstErr) {
+    if (firstErr instanceof AiUnavailable) throw firstErr;
+    const issue =
+      firstErr instanceof Error ? firstErr.message : "invalid JSON output";
+    const repair: Msg[] = [
+      ...msgs,
+      { role: "assistant", content: raw },
+      {
+        role: "user",
+        content:
+          `Your previous reply was not valid output (${issue}). ` +
+          "Return ONLY the corrected JSON object in exactly the requested shape — no prose, no markdown fences, no trailing commentary.",
+      },
+    ];
+    const fixed = await aiRequest(
+      bot,
+      `${kind}:repair`,
+      repair,
+      docId,
+      maxTokens,
+    );
+    return validate(fixed);
+  }
 }
 
 /* ---------- model catalog ----------
@@ -921,6 +1049,126 @@ export const LUMA_QUESTIONS = [
   "Paint this as a scene",
 ];
 
+/* ---------- context assembly & conversation memory (pure, unit-tested) --- */
+
+/** Verbatim history turns kept intact before compaction kicks in. */
+const HISTORY_VERBATIM = 4;
+/** Word budget for the condensed digest of older turns. */
+const HISTORY_SUMMARY_WORDS = 90;
+/** Character budget for the assembled chapter context. */
+const CONTEXT_BUDGET = 9_000;
+
+/**
+ * Compact older seminar history so long conversations stay in budget (A5):
+ * the most recent `HISTORY_VERBATIM` turns stay verbatim; everything older
+ * is folded into one short extractive digest carried as a system note.
+ * Replaces the blind `history.slice(-6)` cap, which silently forgot the
+ * seminar's beginnings without summarizing them.
+ */
+export function compactHistory(
+  history: { role: "user" | "assistant"; text: string }[],
+): Msg[] {
+  if (history.length <= HISTORY_VERBATIM)
+    return history.map((h) => ({ role: h.role, content: h.text }));
+  const older = history.slice(0, -HISTORY_VERBATIM);
+  const digest = truncateWords(
+    older.map((h) => `${h.role === "user" ? "Q" : "A"}: ${h.text}`).join(" "),
+    HISTORY_SUMMARY_WORDS,
+  );
+  return [
+    { role: "system", content: `Earlier conversation (condensed): ${digest}` },
+    ...history
+      .slice(-HISTORY_VERBATIM)
+      .map((h) => ({ role: h.role, content: h.text })),
+  ];
+}
+
+export interface LumaContext {
+  prev: string;
+  cur: string;
+  next: string;
+  /** true when BM25 passage retrieval shaped `cur` around the question */
+  augmented: boolean;
+}
+
+/**
+ * Question-aware context assembly (A1). The old path always sent the FIRST
+ * ~7.5k chars of the chapter regardless of what was asked — questions about
+ * material deeper into a long chapter were answered blind. Now, when the
+ * chapter exceeds the budget and a question exists, BM25 retrieval (the same
+ * grounded engine the offline path uses) selects the most relevant passages;
+ * they are framed by the chapter's opening as an orientation anchor. Total
+ * size never exceeds CONTEXT_BUDGET. Falls back to the legacy prefix slices
+ * whenever retrieval adds nothing.
+ */
+export function buildLumaContext(
+  doc: DocumentRow,
+  chapterIndex: number,
+  question: string,
+): LumaContext {
+  const idx = clamp(chapterIndex, 0, doc.contentJson.chapters.length - 1);
+  const prev = idx > 0 ? chapterText(doc, idx - 1).slice(-1200) : "";
+  const next =
+    idx < doc.contentJson.chapters.length - 1
+      ? chapterText(doc, idx + 1).slice(0, 900)
+      : "";
+  const ch = chapterText(doc, idx);
+  // Short chapters or empty questions — the prefix slice already covers it.
+  if (!question.trim() || ch.length <= CONTEXT_BUDGET)
+    return { prev, cur: ch.slice(0, 7500), next, augmented: false };
+
+  const OPENING = 1200;
+  const opening = ch.slice(0, OPENING);
+  let budget = CONTEXT_BUDGET - OPENING;
+  // Retrieval runs on the post-opening remainder, so passages can't overlap
+  // the orientation anchor.
+  const picked: string[] = [];
+  for (const h of retrievePassages(ch.slice(OPENING), question, 6)) {
+    if (picked.length >= 4) break;
+    if (h.text.length > budget) continue;
+    picked.push(h.text.trim());
+    budget -= h.text.length + 8;
+  }
+  if (picked.length === 0)
+    return { prev, cur: ch.slice(0, 7500), next, augmented: false };
+  return {
+    prev,
+    next,
+    augmented: true,
+    cur: `${opening}\n\n[…]\n\n${picked.map((p) => `« ${p} »`).join("\n\n[…]\n\n")}`,
+  };
+}
+
+/**
+ * Chapter-aware suggested questions (A8): seeded from LOA's statistical
+ * reading of THIS chapter — its dominant motifs and detected cast — instead
+ * of five static strings identical for every book. Statics remain as filler
+ * so the list always has five entries.
+ */
+export function lumaSuggestions(
+  doc: DocumentRow,
+  chapterIndex: number,
+): string[] {
+  const out: string[] = [];
+  try {
+    const t = chapterText(doc, clamp(chapterIndex, 0, doc.contentJson.chapters.length - 1));
+    const kw = topKeywords(t, 4);
+    if (kw[0]) out.push(`Why does "${kw[0]}" keep recurring here?`);
+    const chars = findCharacters(t, 2).map((c) => c.name);
+    if (chars[0] && chars[1])
+      out.push(`What is the dynamic between ${chars[0]} and ${chars[1]}?`);
+    else if (chars[0]) out.push(`What drives ${chars[0]} in this chapter?`);
+    if (kw[1]) out.push(`How does "${kw[1]}" connect to the wider story?`);
+  } catch {
+    /* unusual document shape — fall through to static suggestions */
+  }
+  for (const q of LUMA_QUESTIONS) {
+    if (out.length >= 5) break;
+    if (!out.includes(q)) out.push(q);
+  }
+  return out.slice(0, 5);
+}
+
 export interface LumaResult {
   text: string;
   offline: boolean;
@@ -952,13 +1200,11 @@ export async function askLumaStream(
       doc.contentJson.chapters[
         clamp(chapterIndex, 0, doc.contentJson.chapters.length - 1)
       ];
-    const prev =
-      chapterIndex > 0 ? chapterText(doc, chapterIndex - 1).slice(-1200) : "";
-    const ctx = chapterText(doc, chapterIndex).slice(0, 7500);
-    const next =
-      chapterIndex < doc.contentJson.chapters.length - 1
-        ? chapterText(doc, chapterIndex + 1).slice(0, 900)
-        : "";
+    const { prev, cur: ctx, next, augmented } = buildLumaContext(
+      doc,
+      chapterIndex,
+      question,
+    );
     const sys =
       `You are Luma, Lemniscate's warm, fast, literary reading companion. Answer in medium length (3-7 sentences, or short bullets when listing). ` +
       `Be direct, helpful and text-grounded; quote briefly when it helps. For general questions, answer knowledgeably and tie back to the text when relevant. ` +
@@ -967,10 +1213,12 @@ export async function askLumaStream(
       `DOCUMENT: "${doc.title}" by ${doc.author} (${doc.wordCount.toLocaleString()} words, ${doc.chapterCount} chapters).\n` +
       (prev ? `END OF PREVIOUS CHAPTER:\n<<<\n${prev}\n>>>\n\n` : "") +
       `CURRENT CHAPTER "${ch?.title}":\n<<<\n${ctx}\n>>>\n` +
+      (augmented
+        ? `(Note: the excerpt above pairs the chapter's opening with the passages most relevant to the reader's current question — they are selected excerpts, not the whole chapter.)\n`
+        : "") +
       (next ? `\nSTART OF NEXT CHAPTER:\n<<<\n${next}\n>>>` : "");
     const msgs: Msg[] = [{ role: "system", content: sys }];
-    for (const h of history.slice(-6))
-      msgs.push({ role: h.role, content: h.text });
+    msgs.push(...compactHistory(history));
     msgs.push({ role: "user", content: question });
 
     const tap = (chunk: string) => {
@@ -997,13 +1245,16 @@ export async function askLumaStream(
           Math.round(performance.now() - t0),
           "ok",
           docId,
+          model,
         );
+        observeModel("luma", model, true, Math.round(performance.now() - t0));
         incrementDailyCount();
         return { text, offline: false, model };
       } catch (e) {
         if (signal?.aborted) throw new AiUnavailable("Stopped.");
         lastErr = e instanceof Error ? e.message : "stream failed";
         lastModel = model;
+        observeModel("luma", model, false, Math.round(performance.now() - t0));
         // If we already streamed partial content, do NOT retry the next model
         // (its output would append to the partial, garbling the UI) — return
         // what we have so the user keeps the partial answer.
@@ -1136,12 +1387,18 @@ function offlineLuma(
       .join("\n")}\n\nMood: ${moodOf(chText)}.`;
   }
   if (/define|meaning of|vocab|word/.test(q)) {
+    // Target selection: prefer an explicitly quoted phrase, else the most
+    // corpus-frequent content word in the question. The old `.pop()` took
+    // the LAST >4-char token regardless of whether it even occurs in the
+    // document — often an artifact of phrasing rather than the word meant.
+    const docFreq = freqMap(all);
     const quoted =
       question.match(/["'“”]([^"'“”]+)["'“”]/)?.[1] ??
       question
         .split(/\s+/)
-        .filter((w) => w.length > 4)
-        .pop() ??
+        .map((w) => w.toLowerCase().replace(/[^a-z']/g, ""))
+        .filter((w) => w.length > 4 && !STOP.has(w) && docFreq.has(w))
+        .sort((a, b) => (docFreq.get(b) ?? 0) - (docFreq.get(a) ?? 0))[0] ??
       "";
     const ctx = sentences(all).find((s) =>
       s.toLowerCase().includes(quoted.toLowerCase()),
@@ -1164,18 +1421,17 @@ function offlineLuma(
       return `${pre}No scene could be drawn from this passage yet — try another chapter.`;
     return `${pre}**Scene card**\n\n**${s.title}**\nMood: ${s.mood}\nCast: ${s.characters.join(", ")}\n\n${s.body}`;
   }
-  // retrieval-grounded fallback
-  const qWords = new Set(
-    wordList(q).filter((w) => !STOP.has(w) && w.length > 3),
-  );
-  const paras = chText.split("\n\n").filter(Boolean);
-  const scored = paras.map((p) => ({
-    p,
-    s: wordList(p).filter((w) => qWords.has(w)).length,
-  }));
-  const best = scored.sort((a, b) => b.s - a.s)[0];
-  if (best && best.s > 0) {
-    return `${pre}The closest thread in your text:\n\n> ${sentences(best.p).slice(0, 2).join(" ")}\n\nIt matters because ${extractiveSummary(best.p, 1)} — ask me to summarize or analyze it further.`;
+  // retrieval-grounded fallback — BM25 over sentence-triplet passages
+  // (IDF-weighted, length-normalized), quoting its evidence so every answer
+  // is traceable to the text. Chapter scope first, whole-document second.
+  let hits = retrievePassages(chText, question, 2);
+  if (hits.length === 0 && all !== chText)
+    hits = retrievePassages(all, question, 2);
+  if (hits.length > 0) {
+    const quotes = hits
+      .map((h) => `> ${truncateWords(h.text, 60)}`)
+      .join("\n\n");
+    return `${pre}Closest threads in your text:\n\n${quotes}\n\nIt matters because ${extractiveSummary(hits[0]?.text ?? "", 1)} — ask me to summarize or analyze it further.`;
   }
   return `${pre}I stayed inside the document and came up short on that one. Try “Summarize this chapter”, “Who are the characters here?” or select a passage and ask about it.`;
 }
@@ -1582,20 +1838,21 @@ export async function getOuroArtifact(
       const sys =
         `You are Ouro, Lemniscate's rigorous academic study companion — a seminar tutor, not a summary bot. Work ONLY from the provided text; quote briefly when useful; never invent. ` +
         `Scope: ${label} of "${doc.title}" by ${doc.author}.${chapterTitle ? ` Chapter: "${chapterTitle}".` : ""} Respond ONLY with JSON. ${TASK_PROMPT[task]}`;
-      const raw = await aiRequest(
+      const msgs: Msg[] = [
+        { role: "system", content: sys },
+        { role: "user", content: `Text:\n<<<${text}>>>` },
+      ];
+      const parsed = await requestValidatedJson(
         "ouro",
         `study:${task}`,
-        [
-          { role: "system", content: sys },
-          { role: "user", content: `Text:\n<<<${text}>>>` },
-        ],
+        msgs,
+        (r) => {
+          const s = TASK_SCHEMA[task];
+          return s ? s.parse(extractJson(r)) : extractJson(r);
+        },
         doc.id,
         task === "full" ? 2200 : 1100,
       );
-      const schema = TASK_SCHEMA[task];
-      const parsed = schema
-        ? schema.parse(extractJson(raw))
-        : (extractJson(raw) as Record<string, unknown>);
       out = renderOuroBody(task, parsed as Record<string, unknown>, label);
       offline = false;
       model = await resolveModelFor("ouro");
@@ -1786,23 +2043,26 @@ export async function runAnkaaLong(
       const canon = prompt.trim()
         ? `WRITER'S DIRECTION (private — never quote or reference this in the output): "${prompt.trim()}". Use its characters, places, events and tone as creative direction to shape the plot and atmosphere. Derive the beats from this direction. The final story must read as if this direction was never written down — no meta-commentary, no "as you asked", no breaking the fourth wall.`
         : "";
-      const outlineRaw = await aiRequest(
-        "ankaa",
-        `outline:${mode}`,
-        [
-          {
-            role: "system",
-            content: `You are Ankaa, a literary long-form agent. Respond ONLY with JSON: {"title": string, "logline": string, "beats": string[${sections}]} — exactly ${sections} beats, each one sentence. The title must be evocative and specific to THIS story (not generic like "A New Beginning"); draw it from the writer's direction. ${canon}`,
-          },
-          {
-            role: "user",
-            content: `Mode: ${modeBrief[mode]}. ${doc ? `Source text (ending shown last):\n<<<${ctx}>>>` : "No source text — write an original story."}`,
-          },
-        ],
-        docId,
-        700,
+      const outlineMsgs: Msg[] = [
+        {
+          role: "system",
+          content: `You are Ankaa, a literary long-form agent. Respond ONLY with JSON: {"title": string, "logline": string, "beats": string[${sections}]} — exactly ${sections} beats, each one sentence. The title must be evocative and specific to THIS story (not generic like "A New Beginning"); draw it from the writer's direction. ${canon}`,
+        },
+        {
+          role: "user",
+          content: `Mode: ${modeBrief[mode]}. ${doc ? `Source text (ending shown last):\n<<<${ctx}>>>` : "No source text — write an original story."}`,
+        },
+      ];
+      const outline = OutlineSchema.parse(
+        await requestValidatedJson(
+          "ankaa",
+          `outline:${mode}`,
+          outlineMsgs,
+          (r) => OutlineSchema.parse(extractJson(r)),
+          docId,
+          700,
+        ),
       );
-      const outline = OutlineSchema.parse(extractJson(outlineRaw));
       const beats = outline.beats.slice(0, sections);
       while (beats.length < sections)
         beats.push(`Deepen the consequences of what came before.`);
@@ -2032,20 +2292,22 @@ export async function cinematizeChapter(
       const buffered: (SceneDraft | null)[] = new Array(sceneCount).fill(null);
       let nextToEmit = 0;
       const calls = Array.from({ length: sceneCount }, (_, i) =>
-        aiRequest(
-          "ankaa",
-          `cinema:${chapterIndex}:${i}`,
-          [
-            { role: "system", content: CINEMA_SYS },
-            {
-              role: "user",
-              content: `Chapter "${chTitle}" of "${doc.title}" by ${doc.author}:\n<<<${text}>>>\n${CINEMA_ANGLES[i] ?? CINEMA_ANGLES[CINEMA_ANGLES.length - 1]}${salt > 0 ? ` Variation seed ${salt} — find a different angle than before.` : ""}`,
-            },
-          ],
-          doc.id,
-          850,
-        ).then((raw) => {
-          const one = ScenesSchema.parse(extractJson(raw)).scenes[0] ?? null;
+        (async () => {
+          const parsedScenes = (await requestValidatedJson(
+            "ankaa",
+            `cinema:${chapterIndex}:${i}`,
+            [
+              { role: "system", content: CINEMA_SYS },
+              {
+                role: "user",
+                content: `Chapter "${chTitle}" of "${doc.title}" by ${doc.author}:\n<<<${text}>>>\n${CINEMA_ANGLES[i] ?? CINEMA_ANGLES[CINEMA_ANGLES.length - 1]}${salt > 0 ? ` Variation seed ${salt} — find a different angle than before.` : ""}`,
+              },
+            ],
+            (r) => ScenesSchema.parse(extractJson(r)),
+            doc.id,
+            850,
+          )) as z.infer<typeof ScenesSchema>;
+          const one = parsedScenes.scenes[0] ?? null;
           buffered[i] = one;
           // Emit all buffered scenes that are now contiguous from nextToEmit.
           // This guarantees onScene fires in narrative order 0,1,2,... even
@@ -2057,7 +2319,7 @@ export async function cinematizeChapter(
             }
           }
           return one;
-        }),
+        })(),
       );
       const settled = await Promise.allSettled(calls);
       onStep(2, 0.9);
@@ -2122,21 +2384,24 @@ export async function regenerateScene(
 
   if (aiConfigured()) {
     try {
-      const raw = await aiRequest(
-        "ankaa",
-        `cinema:${chapterIndex}:${ordinal}`,
-        [
-          { role: "system", content: CINEMA_SYS },
-          {
-            role: "user",
-            content: `Chapter "${chTitle}" of "${doc.title}" by ${doc.author}:\n<<<${text}>>>\n${angle} Variation seed ${salt} — find a different angle than before.`,
-          },
-        ],
-        doc.id,
-        850,
-      );
-      const one = ScenesSchema.parse(extractJson(raw)).scenes[0];
-      if (one) return one;
+      const one = (
+        await requestValidatedJson(
+          "ankaa",
+          `cinema:${chapterIndex}:${ordinal}`,
+          [
+            { role: "system", content: CINEMA_SYS },
+            {
+              role: "user",
+              content: `Chapter "${chTitle}" of "${doc.title}" by ${doc.author}:\n<<<${text}>>>\n${angle} Variation seed ${salt} — find a different angle than before.`,
+            },
+          ],
+          (r) => ScenesSchema.parse(extractJson(r)),
+          doc.id,
+          850,
+        )
+      ) as z.infer<typeof ScenesSchema>;
+      const scene = one.scenes[0];
+      if (scene) return scene;
     } catch (e) {
       if (e instanceof AiUnavailable) throw e;
       // model hiccup → fall through to the Anchor engine
@@ -2179,19 +2444,13 @@ export async function runDeepAnalysis(
       const step2 = ANALYSIS_STEPS[2];
       if (step2) onStep(step2.label, step2.pct);
       const text = docText(doc).slice(0, 10000);
-      const raw = await aiRequest(
-        "ouro",
-        "analysis",
-        [
-          {
-            role: "system",
-            content: `You are a literary analyst in Lemniscate. Respond ONLY with JSON: {"summary": string, "themes": [{name,note}], "characters": [{name,note}], "criticism": string}. Criticism should be 150-250 words of substantive close reading.`,
-          },
-          { role: "user", content: `Analyze:\n<<<${text}>>>` },
-        ],
-        doc.id,
-        1600,
-      );
+      const analysisMsgs: Msg[] = [
+        {
+          role: "system",
+          content: `You are a literary analyst in Lemniscate. Respond ONLY with JSON: {"summary": string, "themes": [{name,note}], "characters": [{name,note}], "criticism": string}. Criticism should be 150-250 words of substantive close reading.`,
+        },
+        { role: "user", content: `Analyze:\n<<<${text}>>>` },
+      ];
       data = z
         .object({
           summary: z.string(),
@@ -2199,7 +2458,28 @@ export async function runDeepAnalysis(
           characters: z.array(z.object({ name: z.string(), note: z.string() })),
           criticism: z.string(),
         })
-        .parse(extractJson(raw));
+        .parse(
+          await requestValidatedJson(
+            "ouro",
+            "analysis",
+            analysisMsgs,
+            (r) =>
+              z
+                .object({
+                  summary: z.string(),
+                  themes: z.array(
+                    z.object({ name: z.string(), note: z.string() }),
+                  ),
+                  characters: z.array(
+                    z.object({ name: z.string(), note: z.string() }),
+                  ),
+                  criticism: z.string(),
+                })
+                .parse(extractJson(r)),
+            doc.id,
+            1600,
+          ),
+        );
       offline = false;
     } catch (e) {
       if (e instanceof AiUnavailable) throw e;

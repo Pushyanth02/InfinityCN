@@ -37,7 +37,7 @@
 
 **Lemniscate** transforms static books, papers, slides, and stories into chapter-aware, interactive reading rooms. Built from first principles as a **local-first** engine, your library, reading positions, highlights, and study sets live strictly within your browser's IndexedDB storage.
 
-When connected to an API key, three dedicated AI companions operate directly in the margins — answering questions, crafting seminar-grade study sets, and generating long-form writing desks. When offline or without an API key, the built-in **Anchor** engine executes extractive NLP entirely on-device, ensuring uninterrupted reading flow.
+When connected to an API key, three dedicated AI companions operate directly in the margins — answering questions, crafting seminar-grade study sets, and generating long-form writing desks. The online layer routes intelligently: question-relevant context is assembled by BM25 passage retrieval rather than blind text slices, structured outputs self-repair once before falling back, sampling temperature adapts to the task (literary generation runs hot, JSON extraction cold), and an adaptive health loop reorders model fallback chains from your own observed success/latency history. When offline or without an API key, the built-in **Anchor** engine executes grounded NLP entirely on-device — true TextRank summarization (sentence-graph PageRank + MMR redundancy control), BM25 passage retrieval with quoted evidence for offline Q&A, YAKE-inspired keyword extraction with bigram motif detection, morphological stemming, word-boundary mood classification and fully deterministic quiz generation — ensuring uninterrupted reading flow with zero network calls.
 
 ---
 

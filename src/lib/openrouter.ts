@@ -316,6 +316,14 @@ export async function streamChat(
   return { text, tokens };
 }
 
+/** Per-request sampling controls — task-appropriate creativity instead of a
+ *  single global temperature (factual extraction wants low, literary
+ *  generation wants high). OpenRouter forwards these to the provider. */
+export interface SamplingOpts {
+  temperature?: number;
+  topP?: number;
+}
+
 /** Non-streaming chat completion. Bounded by `timeoutMs` (default 45s)
  *  via AbortController. */
 export async function chat(
@@ -323,6 +331,7 @@ export async function chat(
   model: string,
   timeoutMs: number = CHAT_TIMEOUT_MS,
   maxTokens?: number,
+  sampling?: SamplingOpts,
 ): Promise<{ text: string; tokens: number | null }> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -331,8 +340,9 @@ export async function chat(
       model,
       messages,
       stream: false,
-      temperature: 0.55,
+      temperature: sampling?.temperature ?? 0.55,
     };
+    if (sampling?.topP !== undefined) body.top_p = sampling.topP;
     if (maxTokens) body.max_tokens = maxTokens;
     const res = await fetch(`${API}/chat/completions`, {
       method: "POST",

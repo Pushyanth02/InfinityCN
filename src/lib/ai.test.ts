@@ -268,3 +268,190 @@ describe("ankaaSectionsFor / ankaaSteps", () => {
     }
   });
 });
+
+/* ---------- AI system upgrade: context, memory, sampling, health ---------- */
+
+import { buildLumaContext, compactHistory, lumaSuggestions, samplingFor } from "./ai";
+import { healthBoost, observeModel, resetModelHealth } from "./modelHealth";
+import type { DocumentRow } from "./types";
+
+/** Minimal DocumentRow factory (mirrors loa.test.ts's helper). */
+const ragDoc = (title: string, chapters: string[][]): DocumentRow => ({
+  id: "doc-rag",
+  userId: "user-1",
+  title,
+  author: "A. Writer",
+  sourceType: "txt",
+  mimeType: "text/plain",
+  byteSize: 1024,
+  status: "ready",
+  error: null,
+  warnings: [],
+  summary: null,
+  language: "en",
+  coverGradient: "",
+  contentJson: {
+    chapters: chapters.map((chunks, ci) => ({
+      id: `ch-${ci}`,
+      title: `Chapter ${ci + 1}`,
+      startChunk: 0,
+      chunks: chunks.map((t, i) => ({
+        id: `k-${ci}-${i}`,
+        kind: "p" as const,
+        text: t,
+      })),
+    })),
+  },
+  chapterCount: chapters.length,
+  wordCount: 0,
+  charCount: 0,
+  createdAt: 0,
+  updatedAt: 0,
+  lastReadAt: null,
+  readingProgress: 0,
+  lastChunkIndex: 0,
+  favorite: false,
+  tags: [],
+  collection: null,
+});
+
+const fillerSentence =
+  "The harbor kept its usual noises, gulls arguing over nothing in particular.";
+
+describe("buildLumaContext", () => {
+  it("uses legacy prefix slices for short chapters", () => {
+    const doc = ragDoc("T", [[fillerSentence]]);
+    const c = buildLumaContext(doc, 0, "what about the lighthouse?");
+    expect(c.augmented).toBe(false);
+    expect(c.cur).toBe(fillerSentence);
+  });
+
+  it("retrieves question-relevant passages from deep in long chapters", () => {
+    // Build a chapter >9000 chars where the distinctive content sits at the END.
+    const tail =
+      "The alabaster compass spun wildly whenever the fog thickened beyond reason.";
+    const body: string[] = [];
+    for (let i = 0; i < 110; i++)
+      body.push(
+        `${fillerSentence} Wave ${i} broke against the seawall and retreated.`,
+      );
+    const doc = ragDoc("Long Book", [[[...body, tail].join(" ")]]);
+    const c = buildLumaContext(doc, 0, "alabaster compass fog");
+    expect(c.augmented).toBe(true);
+    // The retrieved passage containing the distinctive terms must be present.
+    expect(c.cur).toContain("alabaster compass");
+    // …and the whole assembly must respect the context budget.
+    expect(c.cur.length).toBeLessThanOrEqual(9200);
+  });
+
+  it("falls back to legacy slices when retrieval finds nothing", () => {
+    const body: string[] = [];
+    for (let i = 0; i < 60; i++) body.push(`${fillerSentence} Line ${i}.`);
+    const doc = ragDoc("Long Book", [[body.join(" ")]]);
+    const c = buildLumaContext(doc, 0, "quantum entanglement protocol xyzzy");
+    expect(c.augmented).toBe(false);
+  });
+});
+
+describe("compactHistory", () => {
+  it("passes short histories through verbatim", () => {
+    const h = [
+      { role: "user" as const, text: "q1" },
+      { role: "assistant" as const, text: "a1" },
+    ];
+    expect(compactHistory(h)).toEqual([
+      { role: "user", content: "q1" },
+      { role: "assistant", content: "a1" },
+    ]);
+  });
+
+  it("condenses older turns and keeps the last four verbatim", () => {
+    const h = [
+      { role: "user" as const, text: "first question about motifs" },
+      { role: "assistant" as const, text: "first answer" },
+      { role: "user" as const, text: "second question" },
+      { role: "assistant" as const, text: "second answer" },
+      { role: "user" as const, text: "recent question A" },
+      { role: "assistant" as const, text: "recent answer B" },
+    ];
+    const out = compactHistory(h);
+    expect(out[0]?.role).toBe("system");
+    expect(out[0]?.content).toContain("Earlier conversation (condensed)");
+    expect(out[0]?.content).toContain("first question");
+    // Last four turns survive verbatim, in order.
+    expect(out.slice(1).map((m) => m.content)).toEqual([
+      "second question",
+      "second answer",
+      "recent question A",
+      "recent answer B",
+    ]);
+  });
+});
+
+describe("samplingFor", () => {
+  it("assigns creativity by task family", () => {
+    expect(samplingFor("cinema:3:1").temperature).toBe(0.85);
+    expect(samplingFor("outline:continue").temperature).toBe(0.85);
+    expect(samplingFor("study:quiz").temperature).toBe(0.4);
+    expect(samplingFor("analysis").temperature).toBe(0.45);
+    expect(samplingFor("refine").temperature).toBe(0.35);
+    expect(samplingFor("chat").temperature).toBe(0.55);
+  });
+
+  it("gives repair round-trips maximum precision regardless of base task", () => {
+    expect(samplingFor("study:full:repair").temperature).toBe(0.2);
+    expect(samplingFor("outline:whatif:repair").temperature).toBe(0.2);
+  });
+});
+
+describe("lumaSuggestions", () => {
+  it("derives chapter-specific starters from motifs and characters", () => {
+    const doc = ragDoc("Motifs", [[
+      "Marisol carried the brass lantern everywhere. The brass lantern lit the ledger. " +
+        "Marisol wrote nightly. The brass lantern flickered. Marisol smiled.",
+    ]]);
+    const s = lumaSuggestions(doc, 0);
+    expect(s.length).toBeGreaterThan(0);
+    expect(s.some((q) => q.includes("brass") || q.includes("Marisol"))).toBe(
+      true,
+    );
+  });
+
+  it("always returns five suggestions (statics as fallback)", () => {
+    const doc = ragDoc("Tiny", [["One quiet sentence."]]);
+    expect(lumaSuggestions(doc, 0)).toHaveLength(5);
+  });
+});
+
+describe("modelHealth", () => {
+  it("scores unobserved models neutrally", () => {
+    resetModelHealth();
+    expect(healthBoost("luma", "never/seen:free")).toBe(0);
+  });
+
+  it("rewards consistent fast successes above the neutral band", () => {
+    resetModelHealth();
+    for (let i = 0; i < 6; i++)
+      observeModel("luma", "fast/good:free", true, 1500);
+    expect(healthBoost("luma", "fast/good:free")).toBeGreaterThan(0);
+  });
+
+  it("penalizes models that keep failing", () => {
+    resetModelHealth();
+    for (let i = 0; i < 8; i++)
+      observeModel("ouro", "flaky/bad:free", false, 40_000);
+    expect(healthBoost("ouro", "flaky/bad:free")).toBeLessThan(0);
+  });
+
+  it("is deterministic and bounded", () => {
+    resetModelHealth();
+    observeModel("ankaa", "mid/model:free", true, 9_000);
+    observeModel("ankaa", "mid/model:free", false, 9_000);
+    const a = healthBoost("ankaa", "mid/model:free");
+    const b = healthBoost("ankaa", "mid/model:free");
+    expect(a).toBe(b);
+    expect(a).toBeGreaterThanOrEqual(-90);
+    expect(a).toBeLessThanOrEqual(60);
+  });
+});
+

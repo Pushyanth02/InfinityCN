@@ -9,12 +9,17 @@
  *
  * Capabilities:
  *   - Sentence segmentation (abbreviation-aware, dialogue-aware)
- *   - Word frequency analysis with stop-word filtering
- *   - Extractive summarization (TextRank-style sentence scoring with position
- *     and keyword-density bonuses)
+ *   - Word frequency analysis (stop-word filtered, morphologically merged via
+ *     a conservative light stemmer)
+ *   - Keyword extraction (YAKE-inspired position/frequency/spread scoring
+ *     with bigram motif detection)
+ *   - Extractive summarization (true TextRank: sentence-similarity graph +
+ *     PageRank power iteration, with MMR redundancy control)
+ *   - BM25 passage retrieval (IDF-weighted grounding for offline Q&A)
  *   - Character detection (proper-noun + dialogue-verb heuristics, with
  *     first-mention context)
  *   - Mood / atmosphere / setting / time-of-day classification
+ *     (word-boundary token matching — no substring false positives)
  *   - Theme extraction with chapter-distribution mapping
  *   - Vocabulary selection (uncommon + load-bearing words)
  *   - Cloze-deletion quiz generation with sourced distractors
@@ -45,12 +50,49 @@ import { clamp } from "./utils";
    ═══════════════════════════════════════════════════ */
 
 /** Stop-word set — common English function words filtered from frequency
- *  analysis. Kept conservative so literary keywords survive. */
+ *  analysis. Kept conservative so literary keywords survive. Contractions are
+ *  listed in straight-apostrophe form; `isStop()` normalizes curly apostrophes
+ *  before lookup (the tokenizer preserves ’ as-is). */
 export const STOP = new Set(
-  "the a an and or of to in was is are were be been being it its this that these those with for as had have has his her their them they he she we you i not but at by on from into over under again then than there here when while which who whom what why how all any both each few more most other some such no nor only own same so too very can will just should could would might must also about up out if because until against during before after above below between".split(
+  "the a an and or of to in was is are were be been being it its this that these those with for as had have has his her their them they he she we you i not but at by on from into over under again then than there here when while which who whom what why how all any both each few more most other some such no nor only own same so too very can will just should could would might must also about up out if because until against during before after above below between don't doesn't didn't won't wouldn't couldn't shouldn't wasn't weren't isn't aren't hasn't haven't hadn't can't cannot it's that's he's she's there's what's let's i'm you're we're they're upon among among within without whose himself herself itself myself yourself ourselves themselves something nothing everything anything someone everyone anyone nobody everybody somebody anybody always never still yet toward towards per via etc".split(
     " ",
   ),
 );
+
+/** Stop check with curly-apostrophe normalization ("don’t" ≡ "don't"). */
+export function isStop(w: string): boolean {
+  return STOP.has(w) || (w.includes("’") && STOP.has(w.replace(/’/g, "'")));
+}
+
+/**
+ * Conservative light stemmer — groups obvious inflectional variants
+ * (ember/embers, walk/walked/walking) without a dictionary. Deliberately NOT
+ * aggressive: it never stems below ~4 remaining chars and leaves irregulars
+ * ("came", "went") untouched, so worst case two variants stay separate —
+ * never that two unrelated words merge.
+ */
+export function stem(w: string): string {
+  let s = w.toLowerCase();
+  if (s.length <= 3) return s;
+  s = s.replace(/'(s|re|ve|ll|d|m)$/, "");
+  if (s.endsWith("ies") && s.length > 4) return `${s.slice(0, -3)}y`;
+  if (s.endsWith("sses")) return s.slice(0, -2);
+  if (s.endsWith("ss") || s.endsWith("us") || s.endsWith("is")) return s;
+  if (s.endsWith("s") && s.length > 3) s = s.slice(0, -1);
+  if (s.endsWith("ing") && s.length > 5) {
+    const base = s.slice(0, -3);
+    // running → runn → run (collapse doubled final consonant)
+    if (/(.)\1$/.test(base)) return base.slice(0, -1);
+    return base;
+  }
+  if (s.endsWith("ed") && s.length > 4) {
+    const base = s.slice(0, -2);
+    if (/(.)\1$/.test(base)) return base.slice(0, -1);
+    return base;
+  }
+  return s;
+}
+
 
 /** Abbreviations that should NOT end a sentence. */
 const ABBREVS = new Set([
@@ -118,13 +160,23 @@ function segment(text: string): string[] {
       let j = i + 1;
       while (j < text.length && /\s/.test(text.charAt(j))) j++;
       const next = text[j] ?? "";
-      // Check for abbreviation: word before the period is a known abbrev
+      // Check for abbreviation / initialism: known abbrev list (with or
+      // without its trailing dot), or a token that IS an initialism ("J.",
+      // "U.S.", "e.g."). Two older bugs lived here: the lookup kept the dot
+      // so "mr." never matched "mr", and the old length-based fallback
+      // misfired on ordinary short words like "in." or "he.", silently
+      // merging sentences.
       const before = buf.trim().split(/\s+/).pop() ?? "";
       const wordBefore = before.toLowerCase().replace(/[^a-z.]/g, "");
       const isAbbrev =
-        ABBREVS.has(wordBefore) || (before.includes(".") && before.length <= 5);
-      // Don't break inside a decimal number (e.g. "3.14")
-      const isDecimal = /\d\.\d/.test(buf.slice(-4));
+        ABBREVS.has(wordBefore) ||
+        ABBREVS.has(wordBefore.replace(/\.+$/, "")) ||
+        /^([a-z]\.)+$/i.test(before);
+      // Don't break inside a decimal number ("3.14"): the dot must be
+      // sandwiched between digits — checking AHEAD (next non-space char)
+      // because the buffer only extends up to the dot itself.
+      const isDecimal =
+        /\d/.test(text[i - 1] ?? "") && /\d/.test(next);
       // Don't break if next char is lowercase (e.g., "Mr. smith")
       const nextIsLower = /[a-z]/.test(next);
       // Dialogue: if we're inside quotes, only break on the closing quote
@@ -136,7 +188,8 @@ function segment(text: string): string[] {
           text[i + 1] === '"' ||
           text[i + 1] === "”" ||
           text[i + 1] === "’" ||
-          text[i + 1] === ")"
+          text[i + 1] === ")" ||
+          text[i + 1] === "]"
         ) {
           buf += text[i + 1];
           i += 2;
@@ -172,11 +225,30 @@ const MOOD_CACHE = new Map<string, string>();
 const CACHE_MAX = 8;
 const CACHE_TEXT_LIMIT = 400_000;
 
-function memo<T>(map: Map<string, T>, key: string, compute: () => T): T {
+/** FNV-1a 32-bit hash run twice with independent multipliers, rendered as a
+ *  compact pair — a low-collision fingerprint of arbitrarily long text.
+ *  Used both for cache keys (so we never retain whole documents as Map keys)
+ *  and as a deterministic RNG seed for quiz generation. */
+export function textHash(s: string): string {
+  let h1 = 0x811c9dc5;
+  let h2 = 0x01000193;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 16777619) >>> 0;
+    h2 = Math.imul(h2 ^ (c + i), 2246822519) >>> 0;
+  }
+  return `${h1.toString(36)}${h2.toString(36)}${s.length.toString(36)}`;
+}
+
+/** Short keys pass through unchanged; long ones are replaced by their
+ *  fingerprint so cached entries don't pin entire document strings in memory.
+ *  The CACHE_TEXT_LIMIT bypass now correctly checks the RAW key length. */
+function memo<T>(map: Map<string, T>, rawKey: string, compute: () => T): T {
+  const key = rawKey.length > 256 ? textHash(rawKey) : rawKey;
   const hit = map.get(key);
   if (hit) return hit;
   const val = compute();
-  if (key.length > CACHE_TEXT_LIMIT) return val;
+  if (rawKey.length > CACHE_TEXT_LIMIT) return val;
   if (map.size >= CACHE_MAX) {
     const oldest = map.keys().next().value;
     if (oldest !== undefined) map.delete(oldest);
@@ -185,52 +257,243 @@ function memo<T>(map: Map<string, T>, key: string, compute: () => T): T {
   return val;
 }
 
+
 /* ═══════════════════════════════════════════════════
    3. Frequency analysis & keyword extraction
    ═══════════════════════════════════════════════════ */
 
 export function freqMap(text: string): Map<string, number> {
   return memo(FREQ_CACHE, text, () => {
-    const m = new Map<string, number>();
+    // Surface-form counts first, then merge morphological variants
+    // (ember/embers, walk/walked/walking) under their most frequent surface
+    // form so motifs register their true weight. Purely numeric tokens are
+    // skipped — page numbers and dates are never literary keywords.
+    const surface = new Map<string, number>();
     for (const w of wordList(text)) {
-      if (w.length < 3 || STOP.has(w)) continue;
-      m.set(w, (m.get(w) ?? 0) + 1);
+      if (w.length < 3 || isStop(w) || /^\d+$/.test(w)) continue;
+      surface.set(w, (surface.get(w) ?? 0) + 1);
     }
+    const groups = new Map<
+      string,
+      { rep: string; repCount: number; count: number }
+    >();
+    for (const [w, c] of surface) {
+      const st = stem(w);
+      const g = groups.get(st);
+      if (!g) groups.set(st, { rep: w, repCount: c, count: c });
+      else {
+        g.count += c;
+        if (c > g.repCount) {
+          g.rep = w;
+          g.repCount = c;
+        }
+      }
+    }
+    const m = new Map<string, number>();
+    for (const g of groups.values()) m.set(g.rep, g.count);
     return m;
   });
 }
 
-export function topKeywords(text: string, n = 12): string[] {
-  return [...freqMap(text).entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, n)
-    .map(([w]) => w);
+/** Count occurrences of a (possibly multi-word) keyword inside text using
+ *  stemmed token windows — accurate where naive substring splitting counted
+ *  matches inside unrelated words ("art" inside "particular"). */
+export function keywordHits(text: string, key: string): number {
+  const words = wordList(text).map(stem);
+  const target = key.split(/\s+/).map(stem);
+  if (!target.length || words.length < target.length) return 0;
+  let hits = 0;
+  outer: for (let i = 0; i <= words.length - target.length; i++) {
+    for (let j = 0; j < target.length; j++) {
+      if (words[i + j] !== target[j]) continue outer;
+    }
+    hits++;
+  }
+  return hits;
 }
 
+/**
+ * YAKE-inspired keyword extraction (Campos et al., ECIR 2018 — simplified for
+ * zero-dependency use): unigrams scored by frequency × sentence-spread ×
+ * early-position × length, deduplicated through the stemmer; recurring
+ * adjacent pairs (bigram motifs like "dark tower") claim reserved slots ahead
+ * of their component words so genuine phrases are never fragmented away.
+ */
+export function topKeywords(text: string, n = 12): string[] {
+  const sents = sentences(text);
+  const tf = new Map<string, number>();
+  const spread = new Map<string, number>();
+  const posSum = new Map<string, number>();
+  const bigrams = new Map<string, number>();
+  for (let si = 0; si < sents.length; si++) {
+    const ws = wordList(sents[si] ?? "");
+    const seen = new Set<string>();
+    for (let i = 0; i < ws.length; i++) {
+      const w = ws[i] ?? "";
+      if (w.length < 3 || isStop(w) || /^\d+$/.test(w)) continue;
+      seen.add(w);
+      tf.set(w, (tf.get(w) ?? 0) + 1);
+      posSum.set(w, (posSum.get(w) ?? 0) + si);
+      const next = ws[i + 1] ?? "";
+      if (next.length >= 3 && !isStop(next) && !/^\d+$/.test(next) && next !== w) {
+        const bg = `${w} ${next}`;
+        bigrams.set(bg, (bigrams.get(bg) ?? 0) + 1);
+      }
+    }
+    for (const w of seen) spread.set(w, (spread.get(w) ?? 0) + 1);
+  }
+  // Unigram scores, stem-deduplicated (keep the best-scoring surface form).
+  const ranked = [...tf.entries()]
+    .map(([w]) => {
+      const f = tf.get(w) ?? 1;
+      const sp = spread.get(w) ?? 1;
+      const meanPos = (posSum.get(w) ?? 0) / f;
+      const positionFactor = 1 + 1 / (1 + meanPos);
+      const lengthBoost = w.length >= 7 ? 1.15 : w.length >= 5 ? 1.05 : 1;
+      return {
+        k: w,
+        s:
+          Math.sqrt(f) *
+          Math.sqrt(sp / Math.max(1, sents.length) + 0.25) *
+          positionFactor *
+          lengthBoost,
+      };
+    })
+    .sort((a, b) => b.s - a.s || (a.k < b.k ? -1 : 1));
+  const usedStems = new Set<string>();
+  const uni: string[] = [];
+  for (const item of ranked) {
+    const st = stem(item.k);
+    if (usedStems.has(st)) continue;
+    usedStems.add(st);
+    uni.push(item.k);
+  }
+  // Reserve slots for recurring bigram motifs first.
+  const bigramBudget = Math.floor(n / 3);
+  const out: string[] = [];
+  const bigramRanked = [...bigrams.entries()]
+    .filter(([, c]) => c >= 2)
+    .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1));
+  const phraseStems = new Set<string>();
+  for (const [bg] of bigramRanked) {
+    if (out.length >= bigramBudget) break;
+    const parts = bg.split(" ");
+    const sts = parts.map((p) => stem(p));
+    if (sts.some((st) => phraseStems.has(st))) continue;
+    for (const st of sts) phraseStems.add(st);
+    out.push(bg);
+  }
+  for (const k of uni) {
+    if (out.length >= n) break;
+    if (phraseStems.has(stem(k))) continue;
+    out.push(k);
+  }
+  return out;
+}
+
+
 /* ═══════════════════════════════════════════════════
-   4. Extractive summarization (TextRank-style)
+   4. Extractive summarization (true TextRank)
    ═══════════════════════════════════════════════════ */
 
-/** Produce an extractive summary of `n` sentences, scored by keyword density,
- *  position bonus, and sentence length normalization. */
+/**
+ * Mihalcea–Tarau TextRank (2004), adapted for single-document use:
+ *   1. content-word sets per sentence (stemmed, stop-filtered),
+ *   2. weighted undirected similarity graph — overlap / (log|Sa|+log|Sb|),
+ *   3. PageRank power iteration (d=0.85, ε=1e-4, ≤40 iters),
+ *   4. greedy MMR selection with a Jaccard redundancy ceiling so near-
+ *      duplicate sentences can't monopolize the summary.
+ * Long inputs are pre-filtered to a density-ranked candidate pool (≤140
+ * sentences) so graph construction stays comfortably O(pool²).
+ */
 export function extractiveSummary(text: string, n = 5): string {
   const sents = sentences(text);
   if (sents.length <= n) return sents.join(" ");
-  const freq = freqMap(text);
-  const scored = sents.map((s, i) => {
-    const ws = wordList(s).filter((w) => !STOP.has(w) && w.length >= 3);
-    const density = ws.reduce((a, w) => a + (freq.get(w) ?? 0), 0);
-    const lengthNorm = Math.pow(ws.length + 3, 0.62);
-    const positionBonus =
-      i < 2 ? 0.4 : i < 4 ? 0.2 : i > sents.length - 2 ? 0.15 : 0;
-    const score = density / lengthNorm + positionBonus;
-    return { s, i, score };
+  const sets = sents.map((s) => {
+    const ws = wordList(s).filter((w) => w.length >= 3 && !isStop(w));
+    return new Set(ws.map(stem));
   });
-  const top = scored
-    .sort((a, b) => b.score - a.score)
-    .slice(0, n)
-    .sort((a, b) => a.i - b.i);
-  return top.map((t) => t.s).join(" ");
+  const POOL = 140;
+  let pool: number[] = sents.map((_, i) => i);
+  if (sents.length > POOL) {
+    const tf = new Map<string, number>();
+    for (const set of sets) for (const w of set) tf.set(w, (tf.get(w) ?? 0) + 1);
+    pool = sets
+      .map((set, i) => [
+        [...set].reduce((a, w) => a + (tf.get(w) ?? 0), 0),
+        i,
+      ] as const)
+      .sort((a, b) => b[0] - a[0] || a[1] - b[1])
+      .slice(0, POOL)
+      .map(([, i]) => i)
+      .sort((a, b) => a - b);
+  }
+  // Similarity graph over pool-local indices: adj[i] = Map<neighbor, weight>.
+  const N = pool.length;
+  const sim: Map<number, number>[] = [];
+  for (let a = 0; a < N; a++) sim.push(new Map());
+  for (let a = 0; a < N; a++) {
+    const sa = sets[pool[a] ?? 0];
+    if (!sa || sa.size === 0) continue;
+    for (let b = a + 1; b < N; b++) {
+      const sb = sets[pool[b] ?? 0];
+      if (!sb || sb.size === 0) continue;
+      let overlap = 0;
+      for (const w of sa) if (sb.has(w)) overlap++;
+      if (overlap === 0) continue;
+      const weight = overlap / (Math.log(sa.size + 1) + Math.log(sb.size + 1));
+      sim[a]?.set(b, weight);
+      sim[b]?.set(a, weight);
+    }
+  }
+  // PageRank power iteration.
+  const D = 0.85;
+  let rank: number[] = new Array(N).fill(1 / N);
+  for (let it = 0; it < 40; it++) {
+    const next: number[] = new Array(N).fill((1 - D) / N);
+    for (let a = 0; a < N; a++) {
+      const neighbors = sim[a];
+      if (!neighbors) continue;
+      let outSum = 0;
+      for (const w of neighbors.values()) outSum += w;
+      if (outSum === 0) {
+        // dangling node — distribute rank evenly
+        for (let b = 0; b < N; b++) next[b] = (next[b] ?? 0) + (D * (rank[a] ?? 0)) / N;
+        continue;
+      }
+      for (const [b, w] of neighbors)
+        next[b] = (next[b] ?? 0) + (D * (rank[a] ?? 0) * w) / outSum;
+    }
+    let delta = 0;
+    for (let a = 0; a < N; a++) delta += Math.abs((next[a] ?? 0) - (rank[a] ?? 0));
+    rank = next;
+    if (delta < 1e-4) break;
+  }
+  // Greedy MMR selection with a progressively relaxing Jaccard ceiling.
+  const cand = pool
+    .map((si, local) => ({ si, set: sets[si] ?? new Set<string>(), r: rank[local] ?? 0 }))
+    .sort((a, b) => b.r - a.r || a.si - b.si);
+  const jac = (x: Set<string>, y: Set<string>): number => {
+    if (!x.size || !y.size) return 0;
+    let inter = 0;
+    for (const w of x) if (y.has(w)) inter++;
+    return inter / (x.size + y.size - inter);
+  };
+  const chosen: { si: number; set: Set<string> }[] = [];
+  let ceiling = 0.55;
+  while (chosen.length < n && ceiling <= 1.01) {
+    for (const c of cand) {
+      if (chosen.length >= n) break;
+      if (chosen.some((k) => k.si === c.si)) continue;
+      if (!chosen.some((k) => jac(c.set, k.set) > ceiling)) chosen.push(c);
+    }
+    ceiling += 0.15;
+  }
+  return chosen
+    .sort((a, b) => a.si - b.si)
+    .map((c) => sents[c.si] ?? "")
+    .join(" ")
+    .trim();
 }
 
 /* ═══════════════════════════════════════════════════
@@ -729,19 +992,39 @@ export function moodOf(text: string): string {
 }
 
 function classifyMood(text: string): string {
-  const lower = text.toLowerCase();
-  const count = (list: string[]) =>
-    list.reduce((a, w) => a + (lower.split(w).length - 1), 0);
-  const moodName = MOOD_LEXICON.map(
-    ([name, lex]) => [name, count(lex)] as const,
-  ).sort((a, b) => b[1] - a[1])[0]?.[0];
-  const timeEntry = TIME_WORDS.map(
-    ([name, lex]) => [name, count(lex)] as const,
-  ).sort((a, b) => b[1] - a[1])[0];
-  const interiorCount = count(PLACE_WORDS);
-  const exteriorCount = count(EXTERIOR_WORDS);
-  const interior = interiorCount >= exteriorCount;
-  return `${moodName ?? "hushed anticipation"} · ${timeEntry !== undefined && timeEntry[1] > 0 ? timeEntry[0] : "unmarked time"} · ${interior ? "interior" : "exterior"}`;
+  // Token-level tally keyed by stem: immune to substring false positives
+  // ("beholden" no longer trips the "old" lexicon entry) and a single
+  // O(words) pass instead of one full-text scan per lexicon word.
+  const stemCounts = new Map<string, number>();
+  for (const w of wordList(text)) {
+    const st = stem(w);
+    stemCounts.set(st, (stemCounts.get(st) ?? 0) + 1);
+  }
+  const tally = (list: string[]) =>
+    list.reduce((a, w) => a + (stemCounts.get(stem(w)) ?? 0), 0);
+  let moodName = "";
+  let moodCount = 0;
+  for (const [name, lex] of MOOD_LEXICON) {
+    const c = tally(lex);
+    if (c > moodCount) {
+      moodName = name;
+      moodCount = c;
+    }
+  }
+  // Honesty guard: below a minimal signal floor, report "unmarked" rather
+  // than confidently inventing an atmosphere the text doesn't support.
+  if (!moodName || moodCount < 2) moodName = "unmarked atmosphere";
+  let timeName = "unmarked time";
+  let timeCount = 0;
+  for (const [name, lex] of TIME_WORDS) {
+    const c = tally(lex);
+    if (c > timeCount) {
+      timeName = name;
+      timeCount = c;
+    }
+  }
+  const interior = tally(PLACE_WORDS) >= tally(EXTERIOR_WORDS);
+  return `${moodName} · ${timeName} · ${interior ? "interior" : "exterior"}`;
 }
 
 export function moodKey(text: string): string {
@@ -767,12 +1050,14 @@ export function extractThemes(
 }[] {
   const kw = topKeywords(text, n + 2).slice(0, n);
   return kw.map((k) => {
-    const relevant = sentences(text).filter((s) => s.toLowerCase().includes(k));
+    const relevant = sentences(text).filter(
+      (s) => keywordHits(s, k) > 0,
+    );
     const note =
       extractiveSummary(relevant.join(" "), 1) || `Threads through the text.`;
     const distribution = chapters?.map((c) => ({
       chapter: c.title,
-      count: c.text.toLowerCase().split(k).length - 1,
+      count: keywordHits(c.text, k),
     }));
     return { name: cap(k), note, distribution };
   });
@@ -787,14 +1072,41 @@ export function extractVocab(
   n = 7,
 ): { term: string; context: string }[] {
   const sents = sentences(text);
-  return [...freqMap(text).entries()]
-    .filter(([w, c]) => w.length >= 7 && c >= 1 && c <= 4 && !STOP.has(w))
-    .sort((a, b) => b[0].length - a[0].length)
+  // Raw surface counts (not stem-merged): vocab entries must be real words
+  // a learner can look up, and rarity is judged per surface form.
+  const tf = new Map<string, number>();
+  for (const w of wordList(text)) {
+    if (w.length < 3 || isStop(w)) continue;
+    tf.set(w, (tf.get(w) ?? 0) + 1);
+  }
+  // Score = length ÷ log-frequency: long, genuinely rare, load-bearing words
+  // first (replaces the old "longest wins" sort that favored freak long
+  // tokens regardless of how common they were).
+  return [...tf.entries()]
+    .filter(([w, c]) => w.length >= 7 && c <= 4)
+    .sort(
+      (a, b) =>
+        b[0].length / Math.log(2 + b[1]) - a[0].length / Math.log(2 + a[1]),
+    )
     .slice(0, n)
-    .map(([w]) => ({
-      term: w,
-      context: sents.find((s) => s.toLowerCase().includes(w)) ?? "",
-    }));
+    .map(([w]) => {
+      // Context = the sentence containing the term that carries the most
+      // total content-word weight — the most representative usage.
+      let context = "";
+      let bestScore = -1;
+      for (const s of sents) {
+        if (!s.toLowerCase().includes(w)) continue;
+        const sc = wordList(s).reduce(
+          (a, x) => a + (x === w ? 0 : (tf.get(x) ?? 0)),
+          0,
+        );
+        if (sc > bestScore) {
+          bestScore = sc;
+          context = s;
+        }
+      }
+      return { term: w, context };
+    });
 }
 
 /* ═══════════════════════════════════════════════════
@@ -809,6 +1121,15 @@ export function clozeQuiz(text: string, n = 6): QuizQuestion[] {
   const candidates = [...freq.entries()]
     .filter(([, c]) => c >= 2 && c <= 12)
     .map(([w]) => w);
+  // Deterministic per (text, n): the RNG is seeded from the text fingerprint,
+  // so a retry reproduces the identical quiz (the previous Math.random()
+  // calls violated the module's own determinism contract).
+  let seedStr = `${textHash(text)}:${n}`;
+  let h = 2166136261;
+  for (let i = 0; i < seedStr.length; i++)
+    h = Math.imul(h ^ seedStr.charCodeAt(i), 16777619) >>> 0;
+  const rnd = seeded(h);
+  seedStr = ""; // release the builder string early
   const qs: QuizQuestion[] = [];
   const used = new Set<string>();
   for (const s of sents) {
@@ -818,7 +1139,7 @@ export function clozeQuiz(text: string, n = 6): QuizQuestion[] {
       const clean = w.toLowerCase().replace(/[^a-z']/g, "");
       return (
         clean.length >= 5 &&
-        !STOP.has(clean) &&
+        !isStop(clean) &&
         freq.has(clean) &&
         !used.has(clean) &&
         i > 0 &&
@@ -829,14 +1150,24 @@ export function clozeQuiz(text: string, n = 6): QuizQuestion[] {
     const answerWord = (words[idx] ?? "").replace(/[,.!?;:]+$/, "");
     const clean = answerWord.toLowerCase().replace(/[^a-z']/g, "");
     used.add(clean);
-    const distractors = candidates
-      .filter((c) => c !== clean && Math.abs(c.length - clean.length) <= 2)
-      .sort(() => Math.random() - 0.5)
-      .slice(0, 3);
+    const answerFreq = freq.get(clean) ?? 1;
+    // Distractors: real corpus words that (a) never share a stem with the
+    // answer — an inflection gives the answer away — and (b) sit close in
+    // frequency, then length, so elimination isn't trivial. A seeded shuffle
+    // over the top band keeps variety without sacrificing determinism.
+    const pool = candidates
+      .filter((c) => c !== clean && stem(c) !== stem(clean))
+      .sort(
+        (a, b) =>
+          Math.abs((freq.get(a) ?? 1) - answerFreq) -
+            Math.abs((freq.get(b) ?? 1) - answerFreq) ||
+          Math.abs(a.length - clean.length) -
+            Math.abs(b.length - clean.length),
+      )
+      .slice(0, 9);
+    const distractors = seededShuffle(pool, rnd).slice(0, 3);
     if (distractors.length < 3) continue;
-    const options = [answerWord, ...distractors].sort(
-      () => Math.random() - 0.5,
-    );
+    const options = seededShuffle([answerWord, ...distractors], rnd);
     qs.push({
       q: `Choose the word that completes the passage: “${words.slice(0, idx).join(" ")} ____ ${words.slice(idx + 1).join(" ")}”`,
       options,
@@ -845,6 +1176,19 @@ export function clozeQuiz(text: string, n = 6): QuizQuestion[] {
     });
   }
   return qs;
+}
+
+/** In-place Fisher-Yates driven by an injected RNG (deterministic when `rnd`
+ *  is deterministic — unlike `Array.sort(() => Math.random() - 0.5)`, which
+ *  was both biased and non-reproducible). */
+function seededShuffle<T>(arr: T[], rnd: () => number): T[] {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(rnd() * (i + 1));
+    const tmp = arr[i] as T;
+    arr[i] = arr[j] as T;
+    arr[j] = tmp;
+  }
+  return arr;
 }
 
 /* ═══════════════════════════════════════════════════
@@ -1150,12 +1494,14 @@ export function offlineAnkaaLong(
     pick([
       `It began, as these things do, with the ${w0} — not the grand kind of beginning that histories prefer, but the small kind that actually happens: a ${w0} noticed, held, and refused to be put down. ${cap(A)} understood, perhaps before understanding anything else, that the ${mode === "whatif" ? "day" : "evening"} had made a decision and merely needed someone to witness it.`,
       `Nobody later agreed on when it began, which is how you know it began early. The ${w2} had gone the color of cooling tea, and ${A} stood where the ${w1} made its nightly argument with the dark, counting breaths the way other people count coins.`,
+      `Long before anything happened, the ${w0} had already chosen its side of the room, and ${cap(A)} — punctual to disasters, late to everything else — arrived just in time to witness the choice being made without supervision.`,
     ]),
   );
   P.push(
     pick([
       `There is a grammar to waiting. ${cap(B)} had spent a lifetime conjugating it: the subjunctive of a kettle not yet boiled, the conditional of a chair kept empty. Tonight the grammar changed tense without asking, and the whole house leaned forward to hear the new verb.`,
       `The house, for its part, kept its opinions to its beams. Houses do that. But the ${w3} gave the evening away — the way a ${w3} does at this hour, holding the last of the ${w0} like a secret it has already told to everyone who matters.`,
+      `${cap(B)} kept a private ledger of unfinished evenings, and this one, entered under the day's date, was already accruing interest. The ${w3} burned steadily. Steadiness, ${B} knew from long practice, is the loudest kind of warning.`,
     ]),
   );
   if (!doc && anchors.cast.length && depth !== "short") {
@@ -1195,18 +1541,23 @@ export function offlineAnkaaLong(
     pick([
       `Years later — because there is always a years-later, stories insist on one — someone would ask ${A} what the ${mood} felt like from the inside, and ${A} would answer honestly: like being read. Like the room was a page and the page was warm, and the hand turning it was neither cruel nor kind, only attentive, which is the only kindness that lasts.`,
       `The ${w0}, transferred, burned differently now — less like a lamp and more like a kept promise, which is what lamps secretly are. ${cap(B)} watched it settle into its new keeping and performed the lamplighter's oldest ritual: said nothing, and meant it.`,
+      `What stayed, in the end, was not the event itself but its weather: the particular pressure of the ${w0} against the window, and the way ${A}'s name sounded in ${B}'s mouth afterward — like a word being returned, finally, to the dictionary where it had always been kept.`,
     ]),
     pick([
       `If there is a lesson, it is a small one, small enough to carry in a coat pocket next to the keys and the unanswered letter: every ${w1} is two doors, and the one you open is never the one that changes you — it's the one you finally stop needing to.`,
-      `The house added the evening to its collection of evenings, which is to say it forgot nothing and mentioned nothing. But on certain ${mood.split(" ")[0]} nights, if you stand on the third stair and hold your breath, you can still hear the ${w4} — textured, warm, still deciding.`,
+      `The house added the evening to its collection of evenings, which is to say it forgot nothing and mentioned nothing. But on certain ${mood.split(" ")[0] ?? ""} nights, if you stand on the third stair and hold your breath, you can still hear the ${w4} — textured, warm, still deciding.`,
+      `The moral, if the house keeps one, is filed under miscellaneous: doors are honest only while closed. Open one, and it starts making promises in both directions at once. ${cap(A)} made peace with the ambiguity, which is what adults call courage when no one is watching.`,
     ]),
     pick([
       `${cap(A)} slept before the tea went cold, which the doctors would call impossible and the house called Tuesday. The ${w2} kept its post. The ${w0} kept its post. And somewhere between the two, the story kept its promise — not to explain, but to continue, which is the only promise stories are allowed to make.`,
       `The last thing to happen, as is right and proper, was quiet: the ${w0} dimming to the exact brightness of a memory being made. ${cap(A)} did not watch it happen. ${cap(A)} was too busy being the person it happens to.`,
+      `Centuries from now, when someone tallies the small histories, this evening will not appear. It will have been absorbed — quietly, completely — into the way ${B} thereafter poured tea, and the way ${A} thereafter said goodbye: briefly, and looking back.`,
     ]),
     pick([
       `And that, reader, is how it went — or how it goes, since things like this never quite agree to become past tense. The ${w1} remains. The ${w0} remains. The threshold, as thresholds do, remains exactly where you left it: waiting to be the exact place where the outside agrees to end.`,
+      `If you ask whether it ended well — well. The ${w0} still burns. The ${w1} still opens. Somewhere a ledger keeps a line no clerk can read, and every so often, on windless nights, the whole street leans an ear toward the house, listening for the rest of the sentence.`,
       `So the ledger closes, though it leaves the last line unfinished on purpose. Some books end; this one merely lowers its voice. Listen — the ${w4} is still textured, the ${w0} is still borrowed, and the next chapter is already standing on the third stair, deciding.`,
+      `${cap(B)} locked up at the usual hour and left the unusual thing on its chair, where it sat behaving perfectly, which is how you know a story isn't over. It was only waiting for someone to stop watching it before it became what it had been planning to become all along.`,
     ]),
   ];
   for (let i = 0; i < closingCount; i++) {
@@ -1228,14 +1579,25 @@ export function offlineAnkaaLong(
 export function offlineAnalysis(doc: DocumentRow): DeepAnalysis {
   const text = docText(doc);
   const themes = extractThemes(text, 4);
+  const chars = findCharacters(text, 5);
+  const kw = topKeywords(text, 6);
+  const keyPassage = extractiveSummary(text, 1);
+  const moodHead = moodOf(text).split("·")[0]?.trim() ?? "";
   return {
     summary: extractiveSummary(text, 6),
     themes,
-    characters: findCharacters(text, 5),
+    characters: chars,
     criticism:
-      `"${doc.title}" moves by ${topKeywords(text, 3).join(", ") || "its images"} more than by event. ` +
+      `"${doc.title}" moves by ${kw.slice(0, 3).join(", ") || "its images"} more than by event. ` +
       `The prose is ${doc.warnings.length === 0 ? "clean and well-preserved" : "somewhat degraded — refinement would help close reading"}. ` +
-      `Its recurring vocabulary (${topKeywords(text, 6).slice(0, 4).join(", ")}) gives the piece a ${moodOf(text).split("·")[0]?.trim() ?? ""} register, and the pacing — ${doc.wordCount.toLocaleString()} words across ${doc.chapterCount} chapter${doc.chapterCount === 1 ? "" : "s"} — rewards slow re-reading.`,
+      `Its recurring vocabulary (${kw.slice(0, 4).join(", ")}) gives the piece a ${moodHead} register, and the pacing — ` +
+      `${doc.wordCount.toLocaleString()} words across ${doc.chapterCount} chapter${doc.chapterCount === 1 ? "" : "s"} — rewards slow re-reading.` +
+      // Evidence-grounded observations: name the figure who carries the motif
+      // and quote the passage the ranking actually selected.
+      (chars.length
+        ? ` Watch how ${chars[0]?.name ?? "the central figure"} absorbs every turn of the motif — the book's real argument happens in that character's vicinity.`
+        : "") +
+      (keyPassage ? ` Key evidence: “${truncateWords(keyPassage, 40)}”` : ""),
   };
 }
 
@@ -1303,7 +1665,90 @@ export function buildStudy(
 }
 
 /* ═══════════════════════════════════════════════════
-   15. Helpers
+   15. BM25 passage retrieval
+   ═══════════════════════════════════════════════════ */
+
+export interface RetrievedPassage {
+  text: string;
+  /** index of the passage's first source sentence within `sentences(text)` */
+  index: number;
+  score: number;
+}
+
+/**
+ * Okapi BM25 passage retrieval (Robertson–Zaragoza) over sentence-triplet
+ * windows — the grounded backbone of offline Luma answers. IDF is computed
+ * from the passage collection itself, so rare query terms dominate common
+ * ones, and length normalization (b=0.75, k₁=1.5) stops long passages from
+ * winning on sheer word count. Replaces the naive term-overlap count that
+ * treated "the" and "lantern" as equally informative.
+ */
+export function retrievePassages(
+  text: string,
+  query: string,
+  n = 3,
+): RetrievedPassage[] {
+  const qTerms = [
+    ...new Set(
+      wordList(query)
+        .filter((w) => w.length >= 3 && !isStop(w))
+        .map(stem),
+    ),
+  ];
+  const sents = sentences(text);
+  if (!qTerms.length || sents.length === 0) return [];
+  // Passages = consecutive sentence triplets: enough context to quote
+  // meaningfully, small enough for sharp-grained grounding.
+  const WINDOW = 3;
+  const units: { words: string[]; index: number }[] = [];
+  for (let i = 0; i < sents.length; i += WINDOW) {
+    const slice = sents.slice(i, i + WINDOW);
+    if (slice.length === 0) continue;
+    units.push({
+      words: slice.flatMap((s) => wordList(s).map(stem)),
+      index: i,
+    });
+  }
+  const N = units.length;
+  const df = new Map<string, number>();
+  const tfs = units.map(({ words }) => {
+    const m = new Map<string, number>();
+    for (const w of words) m.set(w, (m.get(w) ?? 0) + 1);
+    for (const t of qTerms) if (m.has(t)) df.set(t, (df.get(t) ?? 0) + 1);
+    return m;
+  });
+  let avgdl = 0;
+  for (const u of units) avgdl += u.words.length;
+  avgdl = avgdl / N || 1;
+  const K1 = 1.5;
+  const B = 0.75;
+  const scored: RetrievedPassage[] = [];
+  units.forEach((u, ui) => {
+    const tfU = tfs[ui];
+    if (!tfU) return;
+    let score = 0;
+    for (const t of qTerms) {
+      const f = tfU.get(t) ?? 0;
+      if (f === 0) continue;
+      const dft = df.get(t) ?? 0;
+      const idf = Math.log(1 + (N - dft + 0.5) / (dft + 0.5));
+      score +=
+        (idf * (f * (K1 + 1))) /
+        (f + K1 * (1 - B + B * (u.words.length / avgdl)));
+    }
+    if (score > 0) {
+      scored.push({
+        text: sents.slice(u.index, u.index + WINDOW).join(" "),
+        index: u.index,
+        score,
+      });
+    }
+  });
+  return scored.sort((a, b) => b.score - a.score || a.index - b.index).slice(0, n);
+}
+
+/* ═══════════════════════════════════════════════════
+   16. Helpers
    ═══════════════════════════════════════════════════ */
 
 export function docText(doc: DocumentRow): string {

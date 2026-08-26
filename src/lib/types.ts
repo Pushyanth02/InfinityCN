@@ -140,6 +140,9 @@ export interface UsageRow {
   latencyMs: number;
   status: "ok" | "error" | "offline";
   createdAt: number;
+  /** Model ID that actually served the call, when known — feeds the
+   *  adaptive health loop in ./modelHealth. Optional for legacy rows. */
+  model?: string;
 }
 
 export interface DeepAnalysis {

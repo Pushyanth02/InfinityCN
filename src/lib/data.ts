@@ -381,6 +381,7 @@ export async function logUsage(
   latencyMs: number,
   status: UsageRow["status"],
   documentId: string | null,
+  model?: string,
 ): Promise<void> {
   const row: UsageRow = {
     id: uid("use"),
@@ -392,6 +393,7 @@ export async function logUsage(
     latencyMs,
     status,
     createdAt: Date.now(),
+    ...(model ? { model } : {}),
   };
   await idbPut("usage", row);
   bump("usage");
